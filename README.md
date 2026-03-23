@@ -51,7 +51,9 @@ Criar banco e tabelas
 python -m database.init_db
 ```
 Executar o sistema
+
 python main.py
+
 Observações
 
 Este projeto foi desenvolvido como parte de um trabalho acadêmico (TCC), com foco em boas práticas de organização, autenticação e persistência de dados.
