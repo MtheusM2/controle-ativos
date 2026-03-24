@@ -21,15 +21,20 @@ CREATE TABLE IF NOT EXISTS ativos (
   tipo VARCHAR(100) NOT NULL,
   marca VARCHAR(100) NOT NULL,
   modelo VARCHAR(100) NOT NULL,
-  usuario VARCHAR(100) NOT NULL,
+  usuario_responsavel VARCHAR(100) NOT NULL,
   departamento VARCHAR(100) NOT NULL,
   status VARCHAR(50) NOT NULL,
+  data_entrada DATE NOT NULL,
+  data_saida DATE NULL,
   criado_por INT NOT NULL,
   criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_ativos_status (status),
   KEY idx_ativos_departamento (departamento),
+  KEY idx_ativos_usuario_responsavel (usuario_responsavel),
+  KEY idx_ativos_data_entrada (data_entrada),
+  KEY idx_ativos_data_saida (data_saida),
   CONSTRAINT fk_ativos_criado_por
     FOREIGN KEY (criado_por) REFERENCES usuarios(id)
     ON UPDATE CASCADE
