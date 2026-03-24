@@ -1,34 +1,46 @@
 from models.usuario import Usuario
 from database.connection import cursor_mysql
 from utils.crypto import gerar_hash, verificar_hash, normalizar_resposta_recuperacao
-from utils.validators import validar_email, validar_senha
+from utils.validators import validar_email, validar_senha, validar_texto_obrigatorio
 
 
 class AuthErro(Exception):
+    """Erro base de autenticação."""
     pass
 
 
 class UsuarioJaExiste(AuthErro):
+    """Erro para usuário duplicado."""
     pass
 
 
 class UsuarioNaoEncontrado(AuthErro):
+    """Erro para usuário inexistente."""
     pass
 
 
 class CredenciaisInvalidas(AuthErro):
+    """Erro para login inválido."""
     pass
 
 
 class RecuperacaoInvalida(AuthErro):
+    """Erro para recuperação inválida."""
     pass
 
 
 def _normalizar_email(email: str) -> str:
+    """
+    Normaliza o e-mail para comparação e armazenamento.
+    """
     return (email or "").strip().lower()
 
 
 class AuthService:
+    """
+    Serviço responsável por cadastro, autenticação e recuperação de senha.
+    """
+
     def registrar_usuario(self, email: str, senha: str, pergunta: str, resposta: str) -> int:
         email_norm = _normalizar_email(email)
 
@@ -39,18 +51,22 @@ class AuthService:
         if not ok:
             raise AuthErro(msg)
 
-        if not (pergunta or "").strip():
-            raise AuthErro("A pergunta de recuperação não pode ficar vazia.")
+        ok, msg = validar_texto_obrigatorio(pergunta, "pergunta de recuperação", 255)
+        if not ok:
+            raise AuthErro(msg)
 
-        if not (resposta or "").strip():
-            raise AuthErro("A resposta de recuperação não pode ficar vazia.")
+        ok, msg = validar_texto_obrigatorio(resposta, "resposta de recuperação", 255)
+        if not ok:
+            raise AuthErro(msg)
 
         senha_hash = gerar_hash(senha)
-        resposta_norm = normalizar_resposta_recuperacao(resposta)
-        resposta_hash = gerar_hash(resposta_norm)
+        resposta_hash = gerar_hash(normalizar_resposta_recuperacao(resposta))
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
-            cur.execute("SELECT id FROM usuarios WHERE email = %s", (email_norm,))
+            cur.execute(
+                "SELECT id FROM usuarios WHERE email = %s",
+                (email_norm,)
+            )
             if cur.fetchone() is not None:
                 raise UsuarioJaExiste("Já existe um usuário cadastrado com este e-mail.")
 
@@ -114,8 +130,6 @@ class AuthService:
         if not ok:
             raise AuthErro(msg)
 
-        resposta_norm = normalizar_resposta_recuperacao(resposta)
-
         with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(
                 "SELECT id, resposta_recuperacao_hash FROM usuarios WHERE email = %s",
@@ -126,7 +140,10 @@ class AuthService:
             if row is None:
                 raise UsuarioNaoEncontrado("Usuário não encontrado.")
 
-            if not verificar_hash(resposta_norm, row["resposta_recuperacao_hash"]):
+            if not verificar_hash(
+                normalizar_resposta_recuperacao(resposta),
+                row["resposta_recuperacao_hash"]
+            ):
                 raise RecuperacaoInvalida("Resposta de recuperação incorreta.")
 
             nova_hash = gerar_hash(nova_senha)

@@ -1,4 +1,39 @@
+# =========================
+# Cache e arquivos do Python
+# =========================
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# =========================
+# Ambientes virtuais
+# =========================
+.venv/
+venv/
+env/
+
+# =========================
+# Variáveis de ambiente e segredos
+# =========================
 .env
+.env.*
+
+# =========================
+# Logs e arquivos temporários
+# =========================
+*.log
+*.tmp
+*.bak
+
+# =========================
+# Configurações de IDE/editor
+# =========================
 .vscode/
+.idea/
+
+# =========================
+# Arquivos do sistema operacional
+# =========================
+.DS_Store
+Thumbs.db
