@@ -1,0 +1,1 @@
+# Arquivo que define a pasta web_app como um pacote Python

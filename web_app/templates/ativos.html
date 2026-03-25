@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Lista de Ativos</title>
+</head>
+<body>
+
+    <h1>Lista de Ativos</h1>
+
+    {% if ativos %}
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tipo</th>
+                    <th>Marca</th>
+                    <th>Modelo</th>
+                    <th>Responsável</th>
+                    <th>Departamento</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ativo in ativos %}
+                <tr>
+                    <td>{{ ativo.id_ativo }}</td>
+                    <td>{{ ativo.tipo }}</td>
+                    <td>{{ ativo.marca }}</td>
+                    <td>{{ ativo.modelo }}</td>
+                    <td>{{ ativo.usuario_responsavel }}</td>
+                    <td>{{ ativo.departamento }}</td>
+                    <td>{{ ativo.status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>Nenhum ativo encontrado.</p>
+    {% endif %}
+
+</body>
+</html>
