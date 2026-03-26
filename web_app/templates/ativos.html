@@ -1,13 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Define a codificação de caracteres -->
+    <meta charset="UTF-8">
+
+    <!-- Ajusta a responsividade da página -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Título exibido na aba do navegador -->
+    <title>Lista de Ativos</title>
+</head>
 <body>
 
+    <!-- Título principal da página -->
     <h1>Lista de Ativos</h1>
 
-   <a href="/ativos/novo" style="display:block; margin-bottom:10px;">
-    Cadastrar novo ativo
-</a>
+    <!-- Exibe o usuário autenticado -->
+    <p>Usuário logado: {{ usuario_email }}</p>
 
+    <!-- Links principais da tela -->
+    <p>
+        <a href="{{ url_for('criar_ativo') }}">Cadastrar novo ativo</a>
+        |
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </p>
+
+    <!-- Exibe erro quando houver falha na listagem -->
+    {% if erro %}
+        <p style="color: red;">{{ erro }}</p>
+    {% endif %}
+
+    <!-- Se existirem ativos, mostra a tabela -->
     {% if ativos %}
-        <table border="1">
+        <table border="1" cellpadding="6">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -17,6 +42,8 @@
                     <th>Responsável</th>
                     <th>Departamento</th>
                     <th>Status</th>
+                    <th>Data Entrada</th>
+                    <th>Data Saída</th>
                 </tr>
             </thead>
             <tbody>
@@ -29,11 +56,14 @@
                     <td>{{ ativo.usuario_responsavel }}</td>
                     <td>{{ ativo.departamento }}</td>
                     <td>{{ ativo.status }}</td>
+                    <td>{{ ativo.data_entrada }}</td>
+                    <td>{{ ativo.data_saida or '' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
+        <!-- Se não existirem ativos, mostra mensagem -->
         <p>Nenhum ativo encontrado.</p>
     {% endif %}
 
