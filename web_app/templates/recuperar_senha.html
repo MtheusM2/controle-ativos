@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Define a codificação de caracteres -->
+    <meta charset="UTF-8">
+
+    <!-- Ajusta a responsividade da página -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Título exibido na aba do navegador -->
+    <title>Recuperar Senha - Sistema de Controle de Ativos</title>
+</head>
+<body>
+
+    <!-- Título principal da página -->
+    <h1>Recuperar Senha</h1>
+
+    <!-- Exibe erro quando houver falha no processo -->
+    {% if erro %}
+        <p style="color: red;">{{ erro }}</p>
+    {% endif %}
+
+    <!-- Exibe sucesso quando houver ação concluída -->
+    {% if sucesso %}
+        <p style="color: green;">{{ sucesso }}</p>
+    {% endif %}
+
+    <!-- Etapa 1: solicitar o e-mail para buscar a pergunta -->
+    {% if not pergunta %}
+        <form method="POST" action="{{ url_for('recuperar_senha') }}">
+
+            <!-- Informa ao backend que esta etapa busca a pergunta -->
+            <input type="hidden" name="acao" value="buscar_pergunta">
+
+            <!-- Campo de e-mail -->
+            <label for="email">E-mail:</label>
+            <input
+                type="email"
+                id="email"
+                name="email"
+                value="{{ dados.get('email', '') if dados else '' }}"
+                required
+            ><br><br>
+
+            <!-- Botão para buscar a pergunta -->
+            <button type="submit">Buscar pergunta</button>
+        </form>
+
+    <!-- Etapa 2: já existe pergunta, então permite redefinir a senha -->
+    {% else %}
+        <form method="POST" action="{{ url_for('recuperar_senha') }}">
+
+            <!-- Informa ao backend que esta etapa redefine a senha -->
+            <input type="hidden" name="acao" value="redefinir_senha">
+
+            <!-- Mantém o e-mail no formulário -->
+            <input
+                type="hidden"
+                name="email"
+                value="{{ dados.get('email', '') if dados else '' }}"
+            >
+
+            <!-- Mostra o e-mail para conferência -->
+            <p>
+                <strong>E-mail:</strong>
+                {{ dados.get('email', '') if dados else '' }}
+            </p>
+
+            <!-- Mostra a pergunta de recuperação -->
+            <p>
+                <strong>Pergunta:</strong>
+                {{ pergunta }}
+            </p>
+
+            <!-- Campo da resposta -->
+            <label for="resposta">Resposta:</label>
+            <input
+                type="text"
+                id="resposta"
+                name="resposta"
+                required
+            ><br><br>
+
+            <!-- Campo da nova senha -->
+            <label for="nova_senha">Nova senha:</label>
+            <input
+                type="password"
+                id="nova_senha"
+                name="nova_senha"
+                required
+            ><br><br>
+
+            <!-- Campo de confirmação da nova senha -->
+            <label for="confirmar_nova_senha">Confirmar nova senha:</label>
+            <input
+                type="password"
+                id="confirmar_nova_senha"
+                name="confirmar_nova_senha"
+                required
+            ><br><br>
+
+            <!-- Botão para redefinir -->
+            <button type="submit">Redefinir senha</button>
+        </form>
+    {% endif %}
+
+    <!-- Link para voltar ao login -->
+    <p>
+        <a href="{{ url_for('login') }}">Voltar para o login</a>
+    </p>
+
+</body>
+</html>

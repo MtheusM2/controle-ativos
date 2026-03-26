@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Define a codificação de caracteres -->
+    <meta charset="UTF-8">
+
+    <!-- Ajusta a responsividade da página -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Título exibido na aba do navegador -->
+    <title>Login - Sistema de Controle de Ativos</title>
+</head>
+<body>
+
+    <!-- Título principal da página -->
+    <h1>Login</h1>
+
+    <!-- Exibe mensagem de erro quando houver falha -->
+    {% if erro %}
+        <p style="color: red;">{{ erro }}</p>
+    {% endif %}
+
+    <!-- Exibe mensagem de sucesso quando houver ação concluída -->
+    {% if sucesso %}
+        <p style="color: green;">{{ sucesso }}</p>
+    {% endif %}
+
+    <!-- Formulário de login -->
+    <form method="POST" action="{{ url_for('login') }}">
+
+        <!-- Campo de e-mail -->
+        <label for="email">E-mail:</label>
+        <input
+            type="email"
+            id="email"
+            name="email"
+            value="{{ dados.get('email', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de senha -->
+        <label for="senha">Senha:</label>
+        <input
+            type="password"
+            id="senha"
+            name="senha"
+            required
+        ><br><br>
+
+        <!-- Botão para enviar o formulário -->
+        <button type="submit">Entrar</button>
+    </form>
+
+    <!-- Links auxiliares -->
+    <p>
+        <a href="{{ url_for('cadastro_usuario') }}">Criar conta</a>
+    </p>
+
+    <p>
+        <a href="{{ url_for('recuperar_senha') }}">Esqueci minha senha</a>
+    </p>
+
+</body>
+</html>

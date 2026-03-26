@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Define a codificação de caracteres -->
+    <meta charset="UTF-8">
+
+    <!-- Ajusta a responsividade da página -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Título exibido na aba do navegador -->
+    <title>Cadastro - Sistema de Controle de Ativos</title>
+</head>
+<body>
+
+    <!-- Título principal da página -->
+    <h1>Cadastrar Usuário</h1>
+
+    <!-- Exibe erro quando houver problema no cadastro -->
+    {% if erro %}
+        <p style="color: red;">{{ erro }}</p>
+    {% endif %}
+
+    <!-- Formulário de cadastro -->
+    <form method="POST" action="{{ url_for('cadastro_usuario') }}">
+
+        <!-- Campo de e-mail -->
+        <label for="email">E-mail:</label>
+        <input
+            type="email"
+            id="email"
+            name="email"
+            value="{{ dados.get('email', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de senha -->
+        <label for="senha">Senha:</label>
+        <input
+            type="password"
+            id="senha"
+            name="senha"
+            required
+        ><br><br>
+
+        <!-- Campo de confirmação de senha -->
+        <label for="senha_confirmacao">Confirmar senha:</label>
+        <input
+            type="password"
+            id="senha_confirmacao"
+            name="senha_confirmacao"
+            required
+        ><br><br>
+
+        <!-- Campo da pergunta de recuperação -->
+        <label for="pergunta">Pergunta de recuperação:</label>
+        <input
+            type="text"
+            id="pergunta"
+            name="pergunta"
+            value="{{ dados.get('pergunta', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo da resposta de recuperação -->
+        <label for="resposta">Resposta de recuperação:</label>
+        <input
+            type="text"
+            id="resposta"
+            name="resposta"
+            required
+        ><br><br>
+
+        <!-- Botão para cadastrar -->
+        <button type="submit">Cadastrar</button>
+    </form>
+
+    <!-- Link para voltar ao login -->
+    <p>
+        <a href="{{ url_for('login') }}">Voltar para o login</a>
+    </p>
+
+</body>
+</html>
