@@ -25,7 +25,7 @@
         <a href="{{ url_for('logout') }}">Logout</a>
     </p>
 
-    <!-- Exibe erro quando houver falha na listagem -->
+    <!-- Exibe erro quando houver falha na listagem ou em outra operação -->
     {% if erro %}
         <p style="color: red;">{{ erro }}</p>
     {% endif %}
@@ -44,6 +44,7 @@
                     <th>Status</th>
                     <th>Data Entrada</th>
                     <th>Data Saída</th>
+                    <th>Ações</th>
                 </tr>
             </thead>
             <tbody>
@@ -58,6 +59,22 @@
                     <td>{{ ativo.status }}</td>
                     <td>{{ ativo.data_entrada }}</td>
                     <td>{{ ativo.data_saida or '' }}</td>
+                    <td>
+                        <!-- Link para editar o ativo -->
+                        <a href="{{ url_for('editar_ativo', id_ativo=ativo.id_ativo) }}">
+                            Editar
+                        </a>
+
+                        <!-- Formulário separado para remoção via POST -->
+                        <form
+                            method="POST"
+                            action="{{ url_for('remover_ativo', id_ativo=ativo.id_ativo) }}"
+                            style="display: inline;"
+                            onsubmit="return confirm('Tem certeza que deseja remover este ativo?');"
+                        >
+                            <button type="submit">Remover</button>
+                        </form>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

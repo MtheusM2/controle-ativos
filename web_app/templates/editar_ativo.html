@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Define a codificação de caracteres -->
+    <meta charset="UTF-8">
+
+    <!-- Ajusta a responsividade da página -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Título exibido na aba do navegador -->
+    <title>Editar Ativo</title>
+</head>
+<body>
+
+    <!-- Título principal da página -->
+    <h1>Editar Ativo</h1>
+
+    <!-- Exibe o usuário autenticado -->
+    <p>Usuário logado: {{ usuario_email }}</p>
+
+    <!-- Links principais da tela -->
+    <p>
+        <a href="{{ url_for('listar_ativos') }}">Voltar para a lista de ativos</a>
+        |
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </p>
+
+    <!-- Exibe erro quando houver falha na edição -->
+    {% if erro %}
+        <p style="color: red;">{{ erro }}</p>
+    {% endif %}
+
+    <!-- Formulário de edição -->
+    <form method="POST" action="{{ url_for('editar_ativo', id_ativo=id_ativo) }}">
+
+        <!-- Campo apenas para exibir o ID do ativo, sem permitir alteração -->
+        <label for="id_exibicao">ID:</label>
+        <input
+            type="text"
+            id="id_exibicao"
+            value="{{ id_ativo }}"
+            readonly
+        ><br><br>
+
+        <!-- Campo de tipo -->
+        <label for="tipo">Tipo:</label>
+        <input
+            type="text"
+            id="tipo"
+            name="tipo"
+            value="{{ dados.get('tipo', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de marca -->
+        <label for="marca">Marca:</label>
+        <input
+            type="text"
+            id="marca"
+            name="marca"
+            value="{{ dados.get('marca', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de modelo -->
+        <label for="modelo">Modelo:</label>
+        <input
+            type="text"
+            id="modelo"
+            name="modelo"
+            value="{{ dados.get('modelo', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de responsável -->
+        <label for="usuario_responsavel">Responsável:</label>
+        <input
+            type="text"
+            id="usuario_responsavel"
+            name="usuario_responsavel"
+            value="{{ dados.get('usuario_responsavel', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de departamento -->
+        <label for="departamento">Departamento:</label>
+        <input
+            type="text"
+            id="departamento"
+            name="departamento"
+            value="{{ dados.get('departamento', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de status -->
+        <label for="status">Status:</label>
+        <input
+            type="text"
+            id="status"
+            name="status"
+            value="{{ dados.get('status', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de data de entrada -->
+        <label for="data_entrada">Data Entrada:</label>
+        <input
+            type="date"
+            id="data_entrada"
+            name="data_entrada"
+            value="{{ dados.get('data_entrada', '') if dados else '' }}"
+            required
+        ><br><br>
+
+        <!-- Campo de data de saída -->
+        <label for="data_saida">Data Saída:</label>
+        <input
+            type="date"
+            id="data_saida"
+            name="data_saida"
+            value="{{ dados.get('data_saida', '') if dados else '' }}"
+        ><br><br>
+
+        <!-- Botão de envio -->
+        <button type="submit">Salvar alterações</button>
+    </form>
+
+</body>
+</html>
