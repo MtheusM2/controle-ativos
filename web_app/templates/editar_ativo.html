@@ -1,31 +1,31 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <!-- Define a codificação de caracteres -->
+    <!-- Define a codificação da página -->
     <meta charset="UTF-8">
 
-    <!-- Ajusta a responsividade da página -->
+    <!-- Ajusta a responsividade -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Título exibido na aba do navegador -->
+    <!-- Título da aba -->
     <title>Editar Ativo</title>
 </head>
 <body>
 
-    <!-- Título principal da página -->
+    <!-- Título principal -->
     <h1>Editar Ativo</h1>
 
     <!-- Exibe o usuário autenticado -->
     <p>Usuário logado: {{ usuario_email }}</p>
 
-    <!-- Links principais da tela -->
+    <!-- Links principais -->
     <p>
         <a href="{{ url_for('listar_ativos') }}">Voltar para a lista de ativos</a>
         |
         <a href="{{ url_for('logout') }}">Logout</a>
     </p>
 
-    <!-- Exibe erro quando houver falha na edição -->
+    <!-- Mensagem de erro -->
     {% if erro %}
         <p style="color: red;">{{ erro }}</p>
     {% endif %}
@@ -33,7 +33,7 @@
     <!-- Formulário de edição -->
     <form method="POST" action="{{ url_for('editar_ativo', id_ativo=id_ativo) }}">
 
-        <!-- Campo apenas para exibir o ID do ativo, sem permitir alteração -->
+        <!-- ID apenas para visualização -->
         <label for="id_exibicao">ID:</label>
         <input
             type="text"
@@ -73,14 +73,16 @@
         ><br><br>
 
         <!-- Campo de responsável -->
+        <!-- Agora é opcional -->
         <label for="usuario_responsavel">Responsável:</label>
         <input
             type="text"
             id="usuario_responsavel"
             name="usuario_responsavel"
             value="{{ dados.get('usuario_responsavel', '') if dados else '' }}"
-            required
-        ><br><br>
+        >
+        <small>Opcional. Obrigatório apenas quando o status for "Em Uso".</small>
+        <br><br>
 
         <!-- Campo de departamento -->
         <label for="departamento">Departamento:</label>
@@ -92,15 +94,20 @@
             required
         ><br><br>
 
-        <!-- Campo de status -->
+        <!-- Campo de status com opções controladas -->
         <label for="status">Status:</label>
-        <input
-            type="text"
-            id="status"
-            name="status"
-            value="{{ dados.get('status', '') if dados else '' }}"
-            required
-        ><br><br>
+        <select id="status" name="status" required>
+            <option value="">Selecione um status</option>
+            {% for status in status_validos %}
+                <option
+                    value="{{ status }}"
+                    {% if dados and dados.get('status') == status %}selected{% endif %}
+                >
+                    {{ status }}
+                </option>
+            {% endfor %}
+        </select>
+        <br><br>
 
         <!-- Campo de data de entrada -->
         <label for="data_entrada">Data Entrada:</label>
@@ -121,7 +128,7 @@
             value="{{ dados.get('data_saida', '') if dados else '' }}"
         ><br><br>
 
-        <!-- Botão de envio -->
+        <!-- Botão de salvar -->
         <button type="submit">Salvar alterações</button>
     </form>
 

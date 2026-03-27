@@ -1,3 +1,12 @@
+# services/ativos_service.py
+
+# Serviço central do domínio de ativos.
+# Esta camada é responsável por:
+# - aplicar regras de negócio
+# - padronizar dados
+# - consultar e persistir no banco
+# - garantir isolamento por usuário autenticado
+
 from models.ativos import Ativo
 from database.connection import cursor_mysql
 from utils.validators import (
@@ -10,22 +19,30 @@ from utils.validators import (
 
 
 class AtivoErro(Exception):
-    """Erro base relacionado a ativos."""
+    """
+    Erro base relacionado a ativos.
+    """
     pass
 
 
 class AtivoJaExiste(AtivoErro):
-    """Erro para ativo duplicado."""
+    """
+    Erro para ativo duplicado.
+    """
     pass
 
 
 class AtivoNaoEncontrado(AtivoErro):
-    """Erro para ativo inexistente."""
+    """
+    Erro para ativo inexistente.
+    """
     pass
 
 
 class PermissaoNegada(AtivoErro):
-    """Erro para acesso não autorizado."""
+    """
+    Erro para acesso não autorizado.
+    """
     pass
 
 
@@ -47,16 +64,32 @@ def _row_para_ativo(row: dict) -> Ativo:
     )
 
 
+def _normalizar_responsavel(usuario_responsavel: str | None) -> str | None:
+    """
+    Normaliza o responsável do ativo.
+
+    Regras:
+    - se vier vazio, retorna None
+    - se vier preenchido, retorna texto padronizado
+    """
+    valor = (usuario_responsavel or "").strip()
+
+    if not valor:
+        return None
+
+    return padronizar_texto(valor, "title")
+
+
 def _padronizar_ativo(ativo: Ativo) -> Ativo:
     """
     Padroniza campos textuais do ativo antes da persistência.
     """
     return Ativo(
-        id_ativo=ativo.id_ativo.strip(),
+        id_ativo=(ativo.id_ativo or "").strip(),
         tipo=padronizar_texto(ativo.tipo, "title"),
         marca=padronizar_texto(ativo.marca, "title"),
         modelo=padronizar_texto(ativo.modelo, "upper"),
-        usuario_responsavel=padronizar_texto(ativo.usuario_responsavel, "title"),
+        usuario_responsavel=_normalizar_responsavel(ativo.usuario_responsavel),
         departamento=padronizar_texto(ativo.departamento, "title"),
         status=padronizar_texto(ativo.status, "title"),
         data_entrada=(ativo.data_entrada or "").strip(),
@@ -71,6 +104,9 @@ class AtivosService:
     """
 
     def criar_ativo(self, ativo: Ativo, user_id: int) -> None:
+        """
+        Cria um novo ativo vinculado ao usuário autenticado.
+        """
         ativo.criado_por = user_id
         ativo_norm = _padronizar_ativo(ativo)
 
@@ -87,8 +123,16 @@ class AtivosService:
             cur.execute(
                 """
                 INSERT INTO ativos (
-                    id, tipo, marca, modelo, usuario_responsavel,
-                    departamento, status, data_entrada, data_saida, criado_por
+                    id,
+                    tipo,
+                    marca,
+                    modelo,
+                    usuario_responsavel,
+                    departamento,
+                    status,
+                    data_entrada,
+                    data_saida,
+                    criado_por
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
@@ -107,6 +151,9 @@ class AtivosService:
             )
 
     def listar_ativos(self, user_id: int) -> list[Ativo]:
+        """
+        Lista todos os ativos pertencentes ao usuário autenticado.
+        """
         with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(
                 """
@@ -123,6 +170,9 @@ class AtivosService:
         return [_row_para_ativo(row) for row in rows]
 
     def buscar_ativo(self, id_ativo: str, user_id: int) -> Ativo:
+        """
+        Busca um ativo pelo ID e garante que ele pertença ao usuário autenticado.
+        """
         ok, msg = validar_id_ativo(id_ativo)
         if not ok:
             raise AtivoErro(msg)
@@ -154,6 +204,9 @@ class AtivosService:
         ordenar_por: str = "id",
         ordem: str = "asc"
     ) -> list[Ativo]:
+        """
+        Filtra ativos do usuário autenticado com ordenação controlada.
+        """
         campos_ordenacao = {
             "id": "id",
             "tipo": "tipo",
@@ -193,7 +246,12 @@ class AtivosService:
             where.append("status = %s")
             params.append(status)
 
-        for campo in ["data_entrada_inicial", "data_entrada_final", "data_saida_inicial", "data_saida_final"]:
+        for campo in [
+            "data_entrada_inicial",
+            "data_entrada_final",
+            "data_saida_inicial",
+            "data_saida_final"
+        ]:
             valor = filtros.get(campo)
             ok, msg = validar_data_iso_opcional(valor)
             if not ok:
@@ -230,6 +288,9 @@ class AtivosService:
         return [_row_para_ativo(row) for row in rows]
 
     def atualizar_ativo(self, id_ativo: str, dados: dict, user_id: int) -> Ativo:
+        """
+        Atualiza um ativo existente pertencente ao usuário autenticado.
+        """
         atual = self.buscar_ativo(id_ativo=id_ativo, user_id=user_id)
 
         novo = Ativo(
@@ -256,15 +317,15 @@ class AtivosService:
             cur.execute(
                 """
                 UPDATE ativos
-                SET tipo=%s,
-                    marca=%s,
-                    modelo=%s,
-                    usuario_responsavel=%s,
-                    departamento=%s,
-                    status=%s,
-                    data_entrada=%s,
-                    data_saida=%s
-                WHERE id=%s AND criado_por=%s
+                SET tipo = %s,
+                    marca = %s,
+                    modelo = %s,
+                    usuario_responsavel = %s,
+                    departamento = %s,
+                    status = %s,
+                    data_entrada = %s,
+                    data_saida = %s
+                WHERE id = %s AND criado_por = %s
                 """,
                 (
                     novo_norm.tipo,
@@ -286,6 +347,9 @@ class AtivosService:
         return novo_norm
 
     def remover_ativo(self, id_ativo: str, user_id: int) -> None:
+        """
+        Remove um ativo do usuário autenticado.
+        """
         ok, msg = validar_id_ativo(id_ativo)
         if not ok:
             raise AtivoErro(msg)

@@ -1,6 +1,13 @@
+# utils/validators.py
+
+# Módulo central de validações do projeto.
+# Aqui ficam regras de formato, consistência e regras de negócio
+# compartilhadas entre CLI, web e services.
+
 import re
 from datetime import datetime
 
+# Lista de status permitidos pelo domínio.
 STATUS_VALIDOS = [
     "Disponível",
     "Em Uso",
@@ -9,6 +16,7 @@ STATUS_VALIDOS = [
     "Baixado"
 ]
 
+# Expressão regular simples para validação básica de e-mail.
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -70,7 +78,11 @@ def validar_status(status: str) -> tuple[bool, str]:
     return True, ""
 
 
-def validar_texto_obrigatorio(valor: str, nome_campo: str, tamanho_maximo: int = 100) -> tuple[bool, str]:
+def validar_texto_obrigatorio(
+    valor: str,
+    nome_campo: str,
+    tamanho_maximo: int = 100
+) -> tuple[bool, str]:
     """
     Valida campos textuais obrigatórios.
     """
@@ -85,7 +97,30 @@ def validar_texto_obrigatorio(valor: str, nome_campo: str, tamanho_maximo: int =
     return True, ""
 
 
-def padronizar_texto(valor: str, modo: str = "title") -> str:
+def validar_texto_opcional(
+    valor: str | None,
+    nome_campo: str,
+    tamanho_maximo: int = 100
+) -> tuple[bool, str]:
+    """
+    Valida campos textuais opcionais.
+
+    Regras:
+    - vazio é permitido
+    - se vier preenchido, precisa respeitar o tamanho máximo
+    """
+    valor = (valor or "").strip()
+
+    if not valor:
+        return True, ""
+
+    if len(valor) > tamanho_maximo:
+        return False, f"O campo {nome_campo} deve ter no máximo {tamanho_maximo} caracteres."
+
+    return True, ""
+
+
+def padronizar_texto(valor: str | None, modo: str = "title") -> str:
     """
     Padroniza texto de acordo com o modo informado.
     """
@@ -119,7 +154,7 @@ def validar_data_iso(data_str: str) -> tuple[bool, str]:
         return False, "Data inválida. Use o formato YYYY-MM-DD."
 
 
-def validar_data_iso_opcional(data_str: str) -> tuple[bool, str]:
+def validar_data_iso_opcional(data_str: str | None) -> tuple[bool, str]:
     """
     Valida data opcional no formato YYYY-MM-DD.
     """
@@ -131,7 +166,7 @@ def validar_data_iso_opcional(data_str: str) -> tuple[bool, str]:
     return validar_data_iso(data_str)
 
 
-def comparar_datas(data_inicial: str, data_final: str) -> tuple[bool, str]:
+def comparar_datas(data_inicial: str, data_final: str | None) -> tuple[bool, str]:
     """
     Garante que a data final não seja anterior à data inicial.
     """
@@ -149,12 +184,21 @@ def comparar_datas(data_inicial: str, data_final: str) -> tuple[bool, str]:
 
 def validar_regras_ativo(
     status: str,
-    usuario_responsavel: str,
+    usuario_responsavel: str | None,
     data_entrada: str,
     data_saida: str | None
 ) -> tuple[bool, str]:
     """
     Valida regras de negócio do ativo.
+
+    Regras explícitas:
+    - data_entrada é obrigatória e precisa ser válida
+    - data_saida é opcional, mas se vier precisa ser válida
+    - data_saida não pode ser anterior à data_entrada
+    - status 'Baixado' exige data de saída
+    - status 'Disponível' não deve ter data de saída
+    - status 'Em Uso' exige responsável
+    - responsável fora de 'Em Uso' é opcional
     """
     status_fmt = (status or "").strip().title()
     usuario_fmt = (usuario_responsavel or "").strip()
@@ -187,21 +231,33 @@ def validar_regras_ativo(
 def validar_ativo(ativo) -> None:
     """
     Valida o objeto Ativo completo.
+
+    Regras de obrigatoriedade:
+    - obrigatórios: id_ativo, tipo, marca, modelo, departamento, status, data_entrada
+    - opcionais: usuario_responsavel, data_saida
     """
     ok, msg = validar_id_ativo(ativo.id_ativo)
     if not ok:
         raise ValueError(msg)
 
+    # Campos realmente obrigatórios do domínio.
     for valor, nome in [
         (ativo.tipo, "tipo"),
         (ativo.marca, "marca"),
         (ativo.modelo, "modelo"),
-        (ativo.usuario_responsavel, "usuario_responsavel"),
         (ativo.departamento, "departamento"),
     ]:
         ok, msg = validar_texto_obrigatorio(valor, nome)
         if not ok:
             raise ValueError(msg)
+
+    # Campo opcional, mas com limite de tamanho quando preenchido.
+    ok, msg = validar_texto_opcional(
+        ativo.usuario_responsavel,
+        "usuario_responsavel"
+    )
+    if not ok:
+        raise ValueError(msg)
 
     ok, msg = validar_status(ativo.status)
     if not ok:
