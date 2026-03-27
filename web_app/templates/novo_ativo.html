@@ -1,36 +1,36 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <!-- Define a codificação de caracteres -->
+    <!-- Define a codificação da página -->
     <meta charset="UTF-8">
 
-    <!-- Ajusta a responsividade da página -->
+    <!-- Ajusta a responsividade em dispositivos menores -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Título exibido na aba do navegador -->
+    <!-- Título da aba do navegador -->
     <title>Cadastrar Novo Ativo</title>
 </head>
 <body>
 
-    <!-- Título principal da página -->
+    <!-- Título principal -->
     <h1>Cadastrar Novo Ativo</h1>
 
     <!-- Exibe o usuário autenticado -->
     <p>Usuário logado: {{ usuario_email }}</p>
 
-    <!-- Links principais da tela -->
+    <!-- Links principais -->
     <p>
         <a href="{{ url_for('listar_ativos') }}">Voltar para a lista de ativos</a>
         |
         <a href="{{ url_for('logout') }}">Logout</a>
     </p>
 
-    <!-- Exibe erro quando houver falha no cadastro -->
+    <!-- Mensagem de erro -->
     {% if erro %}
         <p style="color: red;">{{ erro }}</p>
     {% endif %}
 
-    <!-- Formulário de cadastro do ativo -->
+    <!-- Formulário de cadastro -->
     <form method="POST" action="{{ url_for('criar_ativo') }}">
 
         <!-- Campo de ID -->
@@ -74,14 +74,16 @@
         ><br><br>
 
         <!-- Campo de responsável -->
+        <!-- Agora é opcional, conforme a nova regra do domínio -->
         <label for="usuario_responsavel">Responsável:</label>
         <input
             type="text"
             id="usuario_responsavel"
             name="usuario_responsavel"
             value="{{ dados.get('usuario_responsavel', '') if dados else '' }}"
-            required
-        ><br><br>
+        >
+        <small>Opcional. Obrigatório apenas quando o status for "Em Uso".</small>
+        <br><br>
 
         <!-- Campo de departamento -->
         <label for="departamento">Departamento:</label>
@@ -94,14 +96,20 @@
         ><br><br>
 
         <!-- Campo de status -->
+        <!-- Troca de input livre para select controlado -->
         <label for="status">Status:</label>
-        <input
-            type="text"
-            id="status"
-            name="status"
-            value="{{ dados.get('status', '') if dados else '' }}"
-            required
-        ><br><br>
+        <select id="status" name="status" required>
+            <option value="">Selecione um status</option>
+            {% for status in status_validos %}
+                <option
+                    value="{{ status }}"
+                    {% if dados and dados.get('status') == status %}selected{% endif %}
+                >
+                    {{ status }}
+                </option>
+            {% endfor %}
+        </select>
+        <br><br>
 
         <!-- Campo de data de entrada -->
         <label for="data_entrada">Data Entrada:</label>

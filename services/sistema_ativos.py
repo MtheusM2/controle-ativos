@@ -1,3 +1,10 @@
+# services/sistema_ativos.py
+
+# Interface de linha de comando (CLI) do módulo de ativos.
+# Apesar de o nome atual estar em "services", este arquivo se comporta
+# como camada de interface. Em uma refatoração futura, o ideal é mover
+# isso para uma pasta própria de CLI.
+
 from models.ativos import Ativo
 from services.ativos_service import (
     AtivosService,
@@ -16,13 +23,22 @@ class SistemaAtivos:
     """
 
     def __init__(self, ativos_service: AtivosService, user_id: int):
+        # Service de domínio dos ativos.
         self.ativos_service = ativos_service
+
+        # ID do usuário autenticado.
         self.user_id = user_id
 
     def _mensagem_cancelar(self):
+        """
+        Exibe instrução padrão de cancelamento.
+        """
         print("Digite 0 para cancelar e voltar ao menu.")
 
     def _input_obrigatorio(self, mensagem, nome):
+        """
+        Solicita um campo obrigatório ao usuário.
+        """
         while True:
             valor = input(mensagem).strip()
 
@@ -36,6 +52,9 @@ class SistemaAtivos:
             return valor
 
     def _input_opcional(self, mensagem):
+        """
+        Solicita um campo opcional ao usuário.
+        """
         valor = input(mensagem).strip()
 
         if valor == "0":
@@ -44,6 +63,9 @@ class SistemaAtivos:
         return valor
 
     def _input_status(self, permitir_vazio=False):
+        """
+        Solicita o status do ativo exibindo as opções válidas.
+        """
         while True:
             print("\nStatus disponíveis:")
             for s in STATUS_VALIDOS:
@@ -64,6 +86,9 @@ class SistemaAtivos:
             return valor
 
     def _confirmar(self, mensagem):
+        """
+        Solicita confirmação simples ao usuário.
+        """
         while True:
             r = input(mensagem).strip().lower()
 
@@ -73,18 +98,24 @@ class SistemaAtivos:
             print("Digite s, n ou 0.")
 
     def _exibir_ativo(self, ativo: Ativo):
+        """
+        Exibe os dados de um ativo no terminal.
+        """
         print("\n--- ATIVO ---")
         print(f"ID: {ativo.id_ativo}")
         print(f"Tipo: {ativo.tipo}")
         print(f"Marca: {ativo.marca}")
         print(f"Modelo: {ativo.modelo}")
-        print(f"Responsável: {ativo.usuario_responsavel}")
+        print(f"Responsável: {ativo.usuario_responsavel or '-'}")
         print(f"Departamento: {ativo.departamento}")
         print(f"Status: {ativo.status}")
         print(f"Entrada: {ativo.data_entrada}")
         print(f"Saída: {ativo.data_saida or '-'}")
 
     def cadastrar_ativo(self):
+        """
+        Fluxo CLI de cadastro de ativo.
+        """
         while True:
             print("\n=== CADASTRO DE ATIVO ===")
             self._mensagem_cancelar()
@@ -109,7 +140,11 @@ class SistemaAtivos:
                 print("Cadastro cancelado.")
                 return
 
-            usuario_responsavel = self._input_obrigatorio("Responsável: ", "responsável")
+            # Responsável agora é opcional.
+            # Só será exigido pela regra de negócio quando o status for "Em Uso".
+            usuario_responsavel = self._input_opcional(
+                "Responsável (opcional; obrigatório para status 'Em Uso'): "
+            )
             if usuario_responsavel is None:
                 print("Cadastro cancelado.")
                 return
@@ -124,12 +159,17 @@ class SistemaAtivos:
                 print("Cadastro cancelado.")
                 return
 
-            data_entrada = self._input_obrigatorio("Data entrada (YYYY-MM-DD): ", "data_entrada")
+            data_entrada = self._input_obrigatorio(
+                "Data entrada (YYYY-MM-DD): ",
+                "data_entrada"
+            )
             if data_entrada is None:
                 print("Cadastro cancelado.")
                 return
 
-            data_saida = self._input_opcional("Data saída (YYYY-MM-DD) ou Enter para vazio: ")
+            data_saida = self._input_opcional(
+                "Data saída (YYYY-MM-DD) ou Enter para vazio: "
+            )
             if data_saida is None:
                 print("Cadastro cancelado.")
                 return
@@ -139,7 +179,7 @@ class SistemaAtivos:
                 tipo=tipo,
                 marca=marca,
                 modelo=modelo,
-                usuario_responsavel=usuario_responsavel,
+                usuario_responsavel=usuario_responsavel or None,
                 departamento=departamento,
                 status=status,
                 data_entrada=data_entrada,
@@ -167,6 +207,9 @@ class SistemaAtivos:
                 print(f"Erro: {erro}")
 
     def listar_ativos(self):
+        """
+        Lista os ativos do usuário autenticado.
+        """
         print("\n=== LISTAGEM DE ATIVOS ===")
 
         try:
@@ -183,6 +226,9 @@ class SistemaAtivos:
             self._exibir_ativo(ativo)
 
     def buscar_ativo(self):
+        """
+        Busca um ativo por ID.
+        """
         print("\n=== BUSCA POR ID ===")
         self._mensagem_cancelar()
 
@@ -197,6 +243,9 @@ class SistemaAtivos:
             print(f"Erro: {erro}")
 
     def filtrar_ativos(self):
+        """
+        Filtra ativos com base em critérios informados pelo usuário.
+        """
         print("\n=== FILTRAR ATIVOS ===")
         print("Deixe vazio para ignorar um filtro.")
         self._mensagem_cancelar()
@@ -269,6 +318,9 @@ class SistemaAtivos:
             self._exibir_ativo(ativo)
 
     def editar_ativo(self):
+        """
+        Fluxo CLI de edição de ativo.
+        """
         print("\n=== EDITAR ATIVO ===")
         self._mensagem_cancelar()
 
@@ -297,7 +349,10 @@ class SistemaAtivos:
             if novo_modelo is None:
                 return
 
-            novo_usuario = self._input_opcional(f"Responsável atual ({atual.usuario_responsavel}): ")
+            valor_responsavel = atual.usuario_responsavel or "-"
+            novo_usuario = self._input_opcional(
+                f"Responsável atual ({valor_responsavel}) [opcional]: "
+            )
             if novo_usuario is None:
                 return
 
@@ -320,20 +375,28 @@ class SistemaAtivos:
                 return
 
             dados = {}
+
             if novo_tipo != "":
                 dados["tipo"] = novo_tipo
+
             if nova_marca != "":
                 dados["marca"] = nova_marca
+
             if novo_modelo != "":
                 dados["modelo"] = novo_modelo
+
             if novo_usuario != "":
                 dados["usuario_responsavel"] = novo_usuario
+
             if novo_departamento != "":
                 dados["departamento"] = novo_departamento
+
             if novo_status != "":
                 dados["status"] = novo_status
+
             if nova_data_entrada != "":
                 dados["data_entrada"] = nova_data_entrada
+
             if nova_data_saida != "":
                 dados["data_saida"] = nova_data_saida
 
@@ -375,6 +438,9 @@ class SistemaAtivos:
                 print(f"Erro: {erro}")
 
     def remover_ativo(self):
+        """
+        Fluxo CLI de remoção de ativo.
+        """
         print("\n=== REMOVER ATIVO ===")
         self._mensagem_cancelar()
 
