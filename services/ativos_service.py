@@ -1,11 +1,10 @@
 # services/ativos_service.py
 
-# Serviço central do domínio de ativos.
-# Esta camada é responsável por:
-# - aplicar regras de negócio
-# - padronizar dados
-# - consultar e persistir no banco
-# - garantir isolamento por usuário autenticado
+# Serviço de ativos com regra corporativa de escopo.
+# Nesta etapa:
+# - usuario comum vê somente ativos da própria empresa
+# - adm vê ativos de todas as empresas
+# - criado_por deixa de ser regra de acesso e passa a ser campo de auditoria
 
 from models.ativos import Ativo
 from database.connection import cursor_mysql
@@ -67,10 +66,6 @@ def _row_para_ativo(row: dict) -> Ativo:
 def _normalizar_responsavel(usuario_responsavel: str | None) -> str | None:
     """
     Normaliza o responsável do ativo.
-
-    Regras:
-    - se vier vazio, retorna None
-    - se vier preenchido, retorna texto padronizado
     """
     valor = (usuario_responsavel or "").strip()
 
@@ -103,10 +98,41 @@ class AtivosService:
     Serviço responsável pelas regras de negócio e persistência dos ativos.
     """
 
+    def _obter_contexto_acesso(self, user_id: int) -> dict:
+        """
+        Busca o perfil e a empresa do usuário autenticado.
+        """
+        with cursor_mysql(dictionary=True) as (_conn, cur):
+            cur.execute(
+                """
+                SELECT u.id, u.perfil, u.empresa_id, e.nome AS empresa_nome
+                FROM usuarios u
+                INNER JOIN empresas e
+                    ON e.id = u.empresa_id
+                WHERE u.id = %s
+                  AND e.ativa = 1
+                """,
+                (user_id,)
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PermissaoNegada("Usuário inválido ou sem empresa ativa.")
+
+        return row
+
+    def _usuario_eh_admin(self, contexto: dict) -> bool:
+        """
+        Indica se o usuário possui perfil administrativo.
+        """
+        return (contexto.get("perfil") or "").strip().lower() == "adm"
+
     def criar_ativo(self, ativo: Ativo, user_id: int) -> None:
         """
-        Cria um novo ativo vinculado ao usuário autenticado.
+        Cria um novo ativo vinculado à empresa do usuário logado.
         """
+        contexto = self._obter_contexto_acesso(user_id)
+
         ativo.criado_por = user_id
         ativo_norm = _padronizar_ativo(ativo)
 
@@ -116,6 +142,7 @@ class AtivosService:
             raise AtivoErro(str(erro))
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            # Nesta fase, o ID continua globalmente único entre todas as empresas.
             cur.execute("SELECT id FROM ativos WHERE id = %s", (ativo_norm.id_ativo,))
             if cur.fetchone() is not None:
                 raise AtivoJaExiste("Já existe um ativo cadastrado com este ID.")
@@ -132,9 +159,10 @@ class AtivosService:
                     status,
                     data_entrada,
                     data_saida,
-                    criado_por
+                    criado_por,
+                    empresa_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     ativo_norm.id_ativo,
@@ -146,42 +174,61 @@ class AtivosService:
                     ativo_norm.status,
                     ativo_norm.data_entrada,
                     ativo_norm.data_saida,
-                    user_id
+                    user_id,
+                    int(contexto["empresa_id"])
                 )
             )
 
     def listar_ativos(self, user_id: int) -> list[Ativo]:
         """
-        Lista todos os ativos pertencentes ao usuário autenticado.
+        Lista ativos conforme o escopo do usuário:
+        - usuario: apenas da própria empresa
+        - adm: todos
         """
+        contexto = self._obter_contexto_acesso(user_id)
+
         with cursor_mysql(dictionary=True) as (_conn, cur):
-            cur.execute(
-                """
-                SELECT id, tipo, marca, modelo, usuario_responsavel,
-                       departamento, status, data_entrada, data_saida, criado_por
-                FROM ativos
-                WHERE criado_por = %s
-                ORDER BY id
-                """,
-                (user_id,)
-            )
+            if self._usuario_eh_admin(contexto):
+                cur.execute(
+                    """
+                    SELECT id, tipo, marca, modelo, usuario_responsavel,
+                           departamento, status, data_entrada, data_saida, criado_por
+                    FROM ativos
+                    ORDER BY id
+                    """
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, tipo, marca, modelo, usuario_responsavel,
+                           departamento, status, data_entrada, data_saida, criado_por
+                    FROM ativos
+                    WHERE empresa_id = %s
+                    ORDER BY id
+                    """,
+                    (int(contexto["empresa_id"]),)
+                )
+
             rows = cur.fetchall()
 
         return [_row_para_ativo(row) for row in rows]
 
     def buscar_ativo(self, id_ativo: str, user_id: int) -> Ativo:
         """
-        Busca um ativo pelo ID e garante que ele pertença ao usuário autenticado.
+        Busca um ativo respeitando o escopo do usuário.
         """
         ok, msg = validar_id_ativo(id_ativo)
         if not ok:
             raise AtivoErro(msg)
 
+        contexto = self._obter_contexto_acesso(user_id)
+
         with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(
                 """
                 SELECT id, tipo, marca, modelo, usuario_responsavel,
-                       departamento, status, data_entrada, data_saida, criado_por
+                       departamento, status, data_entrada, data_saida,
+                       criado_por, empresa_id
                 FROM ativos
                 WHERE id = %s
                 """,
@@ -192,8 +239,9 @@ class AtivosService:
         if row is None:
             raise AtivoNaoEncontrado("Ativo não encontrado.")
 
-        if int(row["criado_por"]) != int(user_id):
-            raise PermissaoNegada("Você não tem permissão para acessar este ativo.")
+        if not self._usuario_eh_admin(contexto):
+            if int(row["empresa_id"]) != int(contexto["empresa_id"]):
+                raise PermissaoNegada("Você não tem permissão para acessar este ativo.")
 
         return _row_para_ativo(row)
 
@@ -205,8 +253,10 @@ class AtivosService:
         ordem: str = "asc"
     ) -> list[Ativo]:
         """
-        Filtra ativos do usuário autenticado com ordenação controlada.
+        Filtra ativos respeitando o escopo organizacional do usuário.
         """
+        contexto = self._obter_contexto_acesso(user_id)
+
         campos_ordenacao = {
             "id": "id",
             "tipo": "tipo",
@@ -224,8 +274,13 @@ class AtivosService:
 
         ordem_sql = "ASC" if ordem.lower() == "asc" else "DESC"
 
-        where = ["criado_por = %s"]
-        params = [user_id]
+        where = ["1 = 1"]
+        params = []
+
+        # Se não for admin, restringe à empresa do usuário.
+        if not self._usuario_eh_admin(contexto):
+            where.append("empresa_id = %s")
+            params.append(int(contexto["empresa_id"]))
 
         if filtros.get("id_ativo"):
             where.append("id = %s")
@@ -289,7 +344,7 @@ class AtivosService:
 
     def atualizar_ativo(self, id_ativo: str, dados: dict, user_id: int) -> Ativo:
         """
-        Atualiza um ativo existente pertencente ao usuário autenticado.
+        Atualiza um ativo existente dentro do escopo permitido.
         """
         atual = self.buscar_ativo(id_ativo=id_ativo, user_id=user_id)
 
@@ -313,33 +368,63 @@ class AtivosService:
         except ValueError as erro:
             raise AtivoErro(str(erro))
 
+        contexto = self._obter_contexto_acesso(user_id)
+
         with cursor_mysql(dictionary=True) as (_conn, cur):
-            cur.execute(
-                """
-                UPDATE ativos
-                SET tipo = %s,
-                    marca = %s,
-                    modelo = %s,
-                    usuario_responsavel = %s,
-                    departamento = %s,
-                    status = %s,
-                    data_entrada = %s,
-                    data_saida = %s
-                WHERE id = %s AND criado_por = %s
-                """,
-                (
-                    novo_norm.tipo,
-                    novo_norm.marca,
-                    novo_norm.modelo,
-                    novo_norm.usuario_responsavel,
-                    novo_norm.departamento,
-                    novo_norm.status,
-                    novo_norm.data_entrada,
-                    novo_norm.data_saida,
-                    novo_norm.id_ativo,
-                    user_id
+            if self._usuario_eh_admin(contexto):
+                cur.execute(
+                    """
+                    UPDATE ativos
+                    SET tipo = %s,
+                        marca = %s,
+                        modelo = %s,
+                        usuario_responsavel = %s,
+                        departamento = %s,
+                        status = %s,
+                        data_entrada = %s,
+                        data_saida = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        novo_norm.tipo,
+                        novo_norm.marca,
+                        novo_norm.modelo,
+                        novo_norm.usuario_responsavel,
+                        novo_norm.departamento,
+                        novo_norm.status,
+                        novo_norm.data_entrada,
+                        novo_norm.data_saida,
+                        novo_norm.id_ativo
+                    )
                 )
-            )
+            else:
+                cur.execute(
+                    """
+                    UPDATE ativos
+                    SET tipo = %s,
+                        marca = %s,
+                        modelo = %s,
+                        usuario_responsavel = %s,
+                        departamento = %s,
+                        status = %s,
+                        data_entrada = %s,
+                        data_saida = %s
+                    WHERE id = %s
+                      AND empresa_id = %s
+                    """,
+                    (
+                        novo_norm.tipo,
+                        novo_norm.marca,
+                        novo_norm.modelo,
+                        novo_norm.usuario_responsavel,
+                        novo_norm.departamento,
+                        novo_norm.status,
+                        novo_norm.data_entrada,
+                        novo_norm.data_saida,
+                        novo_norm.id_ativo,
+                        int(contexto["empresa_id"])
+                    )
+                )
 
             if cur.rowcount == 0:
                 raise AtivoNaoEncontrado("Não foi possível atualizar o ativo.")
@@ -348,17 +433,25 @@ class AtivosService:
 
     def remover_ativo(self, id_ativo: str, user_id: int) -> None:
         """
-        Remove um ativo do usuário autenticado.
+        Remove um ativo conforme o escopo do usuário autenticado.
         """
         ok, msg = validar_id_ativo(id_ativo)
         if not ok:
             raise AtivoErro(msg)
 
+        contexto = self._obter_contexto_acesso(user_id)
+
         with cursor_mysql(dictionary=True) as (_conn, cur):
-            cur.execute(
-                "DELETE FROM ativos WHERE id = %s AND criado_por = %s",
-                (id_ativo.strip(), user_id)
-            )
+            if self._usuario_eh_admin(contexto):
+                cur.execute(
+                    "DELETE FROM ativos WHERE id = %s",
+                    (id_ativo.strip(),)
+                )
+            else:
+                cur.execute(
+                    "DELETE FROM ativos WHERE id = %s AND empresa_id = %s",
+                    (id_ativo.strip(), int(contexto["empresa_id"]))
+                )
 
             if cur.rowcount == 0:
                 raise AtivoNaoEncontrado("Não foi possível remover o ativo.")

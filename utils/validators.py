@@ -1,13 +1,16 @@
 # utils/validators.py
 
-# Módulo central de validações do projeto.
-# Aqui ficam regras de formato, consistência e regras de negócio
-# compartilhadas entre CLI, web e services.
+# Módulo central de validações do sistema.
+# Aqui ficam regras compartilhadas por:
+# - autenticação
+# - ativos
+# - CLI
+# - web
 
 import re
 from datetime import datetime
 
-# Lista de status permitidos pelo domínio.
+# Status válidos do domínio de ativos.
 STATUS_VALIDOS = [
     "Disponível",
     "Em Uso",
@@ -16,7 +19,13 @@ STATUS_VALIDOS = [
     "Baixado"
 ]
 
-# Expressão regular simples para validação básica de e-mail.
+# Perfis válidos do sistema.
+PERFIS_VALIDOS = [
+    "usuario",
+    "adm"
+]
+
+# Expressão regular básica para e-mail.
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -38,6 +47,33 @@ def validar_senha(senha: str) -> tuple[bool, str]:
 
     if len(senha) > 128:
         return False, "A senha deve ter no máximo 128 caracteres."
+
+    return True, ""
+
+
+def validar_perfil(perfil: str) -> tuple[bool, str]:
+    """
+    Valida o perfil de acesso do usuário.
+    """
+    perfil = (perfil or "").strip().lower()
+
+    if perfil not in PERFIS_VALIDOS:
+        return False, f"Perfil inválido. Use um destes: {', '.join(PERFIS_VALIDOS)}."
+
+    return True, ""
+
+
+def validar_id_inteiro_positivo(valor, nome_campo: str) -> tuple[bool, str]:
+    """
+    Valida se um valor representa um inteiro positivo.
+    """
+    try:
+        valor_int = int(valor)
+    except (TypeError, ValueError):
+        return False, f"O campo {nome_campo} deve ser um número inteiro válido."
+
+    if valor_int <= 0:
+        return False, f"O campo {nome_campo} deve ser maior que zero."
 
     return True, ""
 
@@ -104,10 +140,6 @@ def validar_texto_opcional(
 ) -> tuple[bool, str]:
     """
     Valida campos textuais opcionais.
-
-    Regras:
-    - vazio é permitido
-    - se vier preenchido, precisa respeitar o tamanho máximo
     """
     valor = (valor or "").strip()
 
@@ -122,7 +154,7 @@ def validar_texto_opcional(
 
 def padronizar_texto(valor: str | None, modo: str = "title") -> str:
     """
-    Padroniza texto de acordo com o modo informado.
+    Padroniza texto conforme o modo solicitado.
     """
     valor = (valor or "").strip()
 
@@ -190,15 +222,6 @@ def validar_regras_ativo(
 ) -> tuple[bool, str]:
     """
     Valida regras de negócio do ativo.
-
-    Regras explícitas:
-    - data_entrada é obrigatória e precisa ser válida
-    - data_saida é opcional, mas se vier precisa ser válida
-    - data_saida não pode ser anterior à data_entrada
-    - status 'Baixado' exige data de saída
-    - status 'Disponível' não deve ter data de saída
-    - status 'Em Uso' exige responsável
-    - responsável fora de 'Em Uso' é opcional
     """
     status_fmt = (status or "").strip().title()
     usuario_fmt = (usuario_responsavel or "").strip()
@@ -231,16 +254,11 @@ def validar_regras_ativo(
 def validar_ativo(ativo) -> None:
     """
     Valida o objeto Ativo completo.
-
-    Regras de obrigatoriedade:
-    - obrigatórios: id_ativo, tipo, marca, modelo, departamento, status, data_entrada
-    - opcionais: usuario_responsavel, data_saida
     """
     ok, msg = validar_id_ativo(ativo.id_ativo)
     if not ok:
         raise ValueError(msg)
 
-    # Campos realmente obrigatórios do domínio.
     for valor, nome in [
         (ativo.tipo, "tipo"),
         (ativo.marca, "marca"),
@@ -251,7 +269,6 @@ def validar_ativo(ativo) -> None:
         if not ok:
             raise ValueError(msg)
 
-    # Campo opcional, mas com limite de tamanho quando preenchido.
     ok, msg = validar_texto_opcional(
         ativo.usuario_responsavel,
         "usuario_responsavel"

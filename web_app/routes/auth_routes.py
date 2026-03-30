@@ -1,18 +1,14 @@
-# Arquivo responsável pelas rotas web de autenticação:
-# - login
-# - cadastro
-# - recuperação de senha
-# - logout
+# web_app/routes/auth_routes.py
 
-# Importa funções do Flask para:
-# - renderizar páginas HTML
-# - capturar dados enviados pelo formulário
-# - redirecionar o usuário
-# - montar URLs com segurança
-# - manipular sessão do usuário
+# Rotas web de autenticação.
+# Nesta etapa, a sessão passa a carregar:
+# - perfil do usuário
+# - empresa do usuário
+# - nome da empresa
+# Isso prepara o sistema para governança e escopo corporativo.
+
 from flask import render_template, request, redirect, url_for, session
 
-# Importa o service responsável pelas regras de autenticação
 from services.auth_service import (
     AuthService,
     AuthErro,
@@ -21,23 +17,20 @@ from services.auth_service import (
     CredenciaisInvalidas,
     RecuperacaoInvalida
 )
+from services.empresa_service import EmpresaService
 
 
 def registrar_rotas_auth(app):
     """
     Registra as rotas web relacionadas à autenticação.
     """
-
-    # Instancia o service de autenticação
     auth_service = AuthService()
+    empresa_service = EmpresaService()
 
     @app.route("/")
     def home():
         """
         Rota inicial do sistema.
-
-        Se o usuário já estiver autenticado, redireciona para a listagem de ativos.
-        Caso contrário, redireciona para a tela de login.
         """
         if session.get("user_id"):
             return redirect(url_for("listar_ativos"))
@@ -48,39 +41,29 @@ def registrar_rotas_auth(app):
     def login():
         """
         Rota responsável pelo login do usuário.
-        - GET: exibe o formulário
-        - POST: autentica o usuário
         """
-
-        # Se o usuário já estiver autenticado, evita novo login desnecessário
         if session.get("user_id"):
             return redirect(url_for("listar_ativos"))
 
-        # Processa envio do formulário
         if request.method == "POST":
-            # Converte os dados do formulário em dicionário comum
             dados = request.form.to_dict()
 
-            # Extrai os campos principais
             email = dados.get("email", "")
             senha = dados.get("senha", "")
 
             try:
-                # Autentica o usuário no backend
                 usuario = auth_service.autenticar(email, senha)
 
-                # Limpa qualquer sessão anterior
                 session.clear()
-
-                # Armazena os dados básicos do usuário autenticado na sessão
                 session["user_id"] = int(usuario.id)
                 session["user_email"] = usuario.email
+                session["user_perfil"] = usuario.perfil
+                session["user_empresa_id"] = int(usuario.empresa_id)
+                session["user_empresa_nome"] = usuario.empresa_nome
 
-                # Redireciona para a tela principal do sistema autenticado
                 return redirect(url_for("listar_ativos"))
 
             except (UsuarioNaoEncontrado, CredenciaisInvalidas, AuthErro) as erro:
-                # Em caso de erro, mantém o e-mail preenchido e exibe a mensagem
                 return render_template(
                     "login.html",
                     erro=str(erro),
@@ -88,7 +71,6 @@ def registrar_rotas_auth(app):
                     dados=dados
                 )
 
-        # Exibe o formulário vazio no primeiro acesso
         return render_template(
             "login.html",
             erro=None,
@@ -100,82 +82,76 @@ def registrar_rotas_auth(app):
     def cadastro_usuario():
         """
         Rota responsável pelo cadastro de um novo usuário.
-        - GET: exibe o formulário
-        - POST: valida e cadastra o usuário
         """
-
-        # Se já estiver logado, não faz sentido abrir a tela de cadastro
         if session.get("user_id"):
             return redirect(url_for("listar_ativos"))
 
-        # Processa envio do formulário
+        empresas = empresa_service.listar_empresas_ativas()
+
         if request.method == "POST":
-            # Converte os dados do formulário em dicionário comum
             dados = request.form.to_dict()
 
-            # Extrai os campos informados
             email = dados.get("email", "")
             senha = dados.get("senha", "")
             senha_confirmacao = dados.get("senha_confirmacao", "")
             pergunta = dados.get("pergunta", "")
             resposta = dados.get("resposta", "")
+            empresa_id = dados.get("empresa_id", "")
 
-            # Valida confirmação de senha antes de chamar o service
             if senha != senha_confirmacao:
                 return render_template(
                     "cadastro.html",
                     erro="As senhas não coincidem.",
-                    dados=dados
+                    dados=dados,
+                    empresas=empresas
                 )
 
             try:
-                # Registra o novo usuário no backend
                 user_id = auth_service.registrar_usuario(
                     email=email,
                     senha=senha,
                     pergunta=pergunta,
-                    resposta=resposta
+                    resposta=resposta,
+                    empresa_id=empresa_id,
+                    perfil="usuario"
                 )
 
-                # Faz login automático após o cadastro
+                # Faz login automático após cadastro.
+                # Para isso, autentica novamente e obtém o contexto completo.
+                usuario = auth_service.autenticar(email, senha)
+
                 session.clear()
                 session["user_id"] = int(user_id)
-                session["user_email"] = email.strip().lower()
+                session["user_email"] = usuario.email
+                session["user_perfil"] = usuario.perfil
+                session["user_empresa_id"] = int(usuario.empresa_id)
+                session["user_empresa_nome"] = usuario.empresa_nome
 
-                # Redireciona para a listagem de ativos
                 return redirect(url_for("listar_ativos"))
 
             except (UsuarioJaExiste, AuthErro) as erro:
-                # Em caso de erro, mantém os campos não sensíveis preenchidos
                 return render_template(
                     "cadastro.html",
                     erro=str(erro),
-                    dados=dados
+                    dados=dados,
+                    empresas=empresas
                 )
 
-        # Exibe o formulário vazio no primeiro acesso
         return render_template(
             "cadastro.html",
             erro=None,
-            dados=None
+            dados=None,
+            empresas=empresas
         )
 
     @app.route("/recuperar-senha", methods=["GET", "POST"])
     def recuperar_senha():
         """
         Rota responsável pela recuperação de senha.
-
-        Fluxo:
-        1. Usuário informa o e-mail e busca a pergunta
-        2. Sistema exibe a pergunta de recuperação
-        3. Usuário responde e informa a nova senha
         """
-
-        # Se o usuário já estiver logado, redireciona para a área autenticada
         if session.get("user_id"):
             return redirect(url_for("listar_ativos"))
 
-        # Exibe o formulário vazio
         if request.method == "GET":
             return render_template(
                 "recuperar_senha.html",
@@ -185,22 +161,14 @@ def registrar_rotas_auth(app):
                 dados=None
             )
 
-        # Converte os dados do formulário em dicionário comum
         dados = request.form.to_dict()
-
-        # Identifica a ação do formulário
         acao = dados.get("acao", "buscar_pergunta")
-
-        # Extrai o e-mail informado
         email = dados.get("email", "")
 
-        # Etapa 1: buscar a pergunta de recuperação
         if acao == "buscar_pergunta":
             try:
-                # Busca a pergunta associada ao e-mail
                 pergunta = auth_service.obter_pergunta_recuperacao(email)
 
-                # Renderiza a mesma página agora com a pergunta disponível
                 return render_template(
                     "recuperar_senha.html",
                     erro=None,
@@ -218,9 +186,7 @@ def registrar_rotas_auth(app):
                     dados=dados
                 )
 
-        # Etapa 2: validar resposta e redefinir a senha
         try:
-            # Busca novamente a pergunta para manter a tela consistente
             pergunta = auth_service.obter_pergunta_recuperacao(email)
         except (UsuarioNaoEncontrado, AuthErro) as erro:
             return render_template(
@@ -231,12 +197,10 @@ def registrar_rotas_auth(app):
                 dados=dados
             )
 
-        # Extrai os campos da redefinição
         resposta = dados.get("resposta", "")
         nova_senha = dados.get("nova_senha", "")
         confirmar_nova_senha = dados.get("confirmar_nova_senha", "")
 
-        # Valida confirmação da nova senha
         if nova_senha != confirmar_nova_senha:
             return render_template(
                 "recuperar_senha.html",
@@ -247,14 +211,12 @@ def registrar_rotas_auth(app):
             )
 
         try:
-            # Chama o backend para redefinir a senha
             auth_service.redefinir_senha(
                 email=email,
                 resposta=resposta,
                 nova_senha=nova_senha
             )
 
-            # Após sucesso, volta para a tela de login com mensagem positiva
             return render_template(
                 "login.html",
                 erro=None,
@@ -276,9 +238,5 @@ def registrar_rotas_auth(app):
         """
         Rota responsável por encerrar a sessão do usuário.
         """
-
-        # Remove todos os dados da sessão
         session.clear()
-
-        # Redireciona para a tela de login
         return redirect(url_for("login"))

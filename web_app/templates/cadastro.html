@@ -1,21 +1,21 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <!-- Define a codificação de caracteres -->
+    <!-- Define a codificação da página -->
     <meta charset="UTF-8">
 
-    <!-- Ajusta a responsividade da página -->
+    <!-- Ajusta responsividade -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Título exibido na aba do navegador -->
+    <!-- Título da aba -->
     <title>Cadastro - Sistema de Controle de Ativos</title>
 </head>
 <body>
 
-    <!-- Título principal da página -->
+    <!-- Título principal -->
     <h1>Cadastrar Usuário</h1>
 
-    <!-- Exibe erro quando houver problema no cadastro -->
+    <!-- Mensagem de erro -->
     {% if erro %}
         <p style="color: red;">{{ erro }}</p>
     {% endif %}
@@ -23,7 +23,7 @@
     <!-- Formulário de cadastro -->
     <form method="POST" action="{{ url_for('cadastro_usuario') }}">
 
-        <!-- Campo de e-mail -->
+        <!-- E-mail -->
         <label for="email">E-mail:</label>
         <input
             type="email"
@@ -33,7 +33,22 @@
             required
         ><br><br>
 
-        <!-- Campo de senha -->
+        <!-- Empresa -->
+        <label for="empresa_id">Empresa:</label>
+        <select id="empresa_id" name="empresa_id" required>
+            <option value="">Selecione a empresa</option>
+            {% for empresa in empresas %}
+                <option
+                    value="{{ empresa.id }}"
+                    {% if dados and dados.get('empresa_id') == (empresa.id | string) %}selected{% endif %}
+                >
+                    {{ empresa.nome }}
+                </option>
+            {% endfor %}
+        </select>
+        <br><br>
+
+        <!-- Senha -->
         <label for="senha">Senha:</label>
         <input
             type="password"
@@ -42,7 +57,7 @@
             required
         ><br><br>
 
-        <!-- Campo de confirmação de senha -->
+        <!-- Confirmação de senha -->
         <label for="senha_confirmacao">Confirmar senha:</label>
         <input
             type="password"
@@ -51,7 +66,7 @@
             required
         ><br><br>
 
-        <!-- Campo da pergunta de recuperação -->
+        <!-- Pergunta de recuperação -->
         <label for="pergunta">Pergunta de recuperação:</label>
         <input
             type="text"
@@ -61,7 +76,7 @@
             required
         ><br><br>
 
-        <!-- Campo da resposta de recuperação -->
+        <!-- Resposta de recuperação -->
         <label for="resposta">Resposta de recuperação:</label>
         <input
             type="text"
@@ -70,11 +85,11 @@
             required
         ><br><br>
 
-        <!-- Botão para cadastrar -->
+        <!-- Botão de cadastro -->
         <button type="submit">Cadastrar</button>
     </form>
 
-    <!-- Link para voltar ao login -->
+    <!-- Link de volta -->
     <p>
         <a href="{{ url_for('login') }}">Voltar para o login</a>
     </p>

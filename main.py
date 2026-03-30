@@ -1,3 +1,10 @@
+# main.py
+
+# Ponto de entrada da interface CLI do sistema.
+# Nesta etapa, o cadastro via terminal passa a exigir a escolha
+# da empresa do usuário, alinhando CLI e web com o novo modelo
+# corporativo de acesso.
+
 from services.auth_service import (
     AuthService,
     AuthErro,
@@ -8,9 +15,13 @@ from services.auth_service import (
 )
 from services.ativos_service import AtivosService
 from services.sistema_ativos import SistemaAtivos
+from services.empresa_service import EmpresaService
 
 
 def _input_cancelavel(mensagem: str) -> str | None:
+    """
+    Lê um valor do terminal e permite cancelamento com 0.
+    """
     valor = input(mensagem).strip()
 
     if valor == "0":
@@ -19,7 +30,36 @@ def _input_cancelavel(mensagem: str) -> str | None:
     return valor
 
 
+def _selecionar_empresa_cli(empresa_service: EmpresaService) -> int | None:
+    """
+    Exibe as empresas disponíveis e solicita ao usuário
+    o ID da empresa desejada.
+    """
+    empresas = empresa_service.listar_empresas_ativas()
+
+    if not empresas:
+        print("Nenhuma empresa ativa cadastrada no sistema.")
+        return None
+
+    print("\nEmpresas disponíveis:")
+    for empresa in empresas:
+        print(f"{empresa['id']} - {empresa['nome']} ({empresa['codigo']})")
+
+    empresa_id = _input_cancelavel("ID da empresa: ")
+    if empresa_id is None:
+        return None
+
+    try:
+        return int(empresa_id)
+    except ValueError:
+        print("ID de empresa inválido.")
+        return None
+
+
 def menu_auth():
+    """
+    Exibe o menu principal de autenticação.
+    """
     print("\n=== AUTENTICAÇÃO ===")
     print("1 - Login")
     print("2 - Cadastro")
@@ -29,6 +69,9 @@ def menu_auth():
 
 
 def menu_ativos():
+    """
+    Exibe o menu do módulo de ativos.
+    """
     print("\n=== SISTEMA DE CONTROLE DE ATIVOS ===")
     print("1 - Cadastrar")
     print("2 - Listar")
@@ -41,8 +84,12 @@ def menu_ativos():
 
 
 def executar():
+    """
+    Loop principal do sistema CLI.
+    """
     auth = AuthService()
     ativos_service = AtivosService()
+    empresa_service = EmpresaService()
     usuario = None
 
     while True:
@@ -63,7 +110,12 @@ def executar():
 
                 try:
                     usuario = auth.autenticar(email, senha)
-                    print(f"Login realizado com sucesso. Bem-vindo(a), {usuario.email}.")
+                    print(
+                        "Login realizado com sucesso. "
+                        f"Bem-vindo(a), {usuario.email}. "
+                        f"Perfil: {usuario.perfil}. "
+                        f"Empresa: {usuario.empresa_nome}."
+                    )
                 except (UsuarioNaoEncontrado, CredenciaisInvalidas) as erro:
                     print(f"Erro: {erro}")
                 except AuthErro as erro:
@@ -75,6 +127,10 @@ def executar():
 
                 email = _input_cancelavel("Email: ")
                 if email is None:
+                    continue
+
+                empresa_id = _selecionar_empresa_cli(empresa_service)
+                if empresa_id is None:
                     continue
 
                 senha = _input_cancelavel("Senha: ")
@@ -98,7 +154,14 @@ def executar():
                     continue
 
                 try:
-                    user_id = auth.registrar_usuario(email, senha, pergunta, resposta)
+                    user_id = auth.registrar_usuario(
+                        email=email,
+                        senha=senha,
+                        pergunta=pergunta,
+                        resposta=resposta,
+                        empresa_id=empresa_id,
+                        perfil="usuario"
+                    )
                     print(f"Usuário cadastrado com sucesso. ID: {user_id}")
                 except UsuarioJaExiste as erro:
                     print(f"Erro: {erro}")
