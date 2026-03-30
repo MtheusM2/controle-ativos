@@ -203,13 +203,21 @@ class AuthService:
 
     def obter_pergunta_recuperacao(self, email: str) -> str:
         """
-        Obtém a pergunta de recuperação do usuário.
+        Obtém a pergunta de recuperação apenas de usuários
+        vinculados a empresas ativas.
         """
         email_norm = _normalizar_email(email)
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(
-                "SELECT pergunta_recuperacao FROM usuarios WHERE email = %s",
+                """
+                SELECT u.pergunta_recuperacao
+                FROM usuarios u
+                INNER JOIN empresas e
+                    ON e.id = u.empresa_id
+                WHERE u.email = %s
+                AND e.ativa = 1
+                """,
                 (email_norm,)
             )
             row = cur.fetchone()
@@ -221,7 +229,8 @@ class AuthService:
 
     def redefinir_senha(self, email: str, resposta: str, nova_senha: str) -> None:
         """
-        Redefine a senha após validação da resposta de recuperação.
+        Redefine a senha após validação da resposta de recuperação,
+        considerando apenas usuários de empresas ativas.
         """
         email_norm = _normalizar_email(email)
 
@@ -231,7 +240,14 @@ class AuthService:
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(
-                "SELECT id, resposta_recuperacao_hash FROM usuarios WHERE email = %s",
+                """
+                SELECT u.id, u.resposta_recuperacao_hash
+                FROM usuarios u
+                INNER JOIN empresas e
+                    ON e.id = u.empresa_id
+                WHERE u.email = %s
+                AND e.ativa = 1
+                """,
                 (email_norm,)
             )
             row = cur.fetchone()
@@ -251,3 +267,4 @@ class AuthService:
                 "UPDATE usuarios SET senha_hash = %s WHERE id = %s",
                 (nova_hash, row["id"])
             )
+            
