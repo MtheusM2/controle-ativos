@@ -18,6 +18,8 @@ class Ativo:
         modelo,
         usuario_responsavel=None,
         departamento=None,
+        nota_fiscal=None,
+        seguro=None,
         status=None,
         data_entrada=None,
         data_saida=None,
@@ -36,11 +38,16 @@ class Ativo:
         self.modelo = modelo
 
         # Responsável pelo ativo.
-        # Agora este campo pode ser opcional, dependendo do status.
         self.usuario_responsavel = usuario_responsavel
 
         # Departamento relacionado ao ativo.
         self.departamento = departamento
+
+        # Número/referência da nota fiscal.
+        self.nota_fiscal = nota_fiscal
+
+        # Número/referência do seguro/apólice.
+        self.seguro = seguro
 
         # Status atual do ativo.
         self.status = status
@@ -57,10 +64,6 @@ class Ativo:
     def to_dict(self):
         """
         Converte o objeto em dicionário.
-
-        Observação:
-        - campos opcionais são normalizados para string vazia
-          quando necessário para facilitar renderização em templates HTML.
         """
         return {
             "id_ativo": self.id_ativo,
@@ -69,6 +72,8 @@ class Ativo:
             "modelo": self.modelo,
             "usuario_responsavel": self.usuario_responsavel or "",
             "departamento": self.departamento,
+            "nota_fiscal": self.nota_fiscal or "",
+            "seguro": self.seguro or "",
             "status": self.status,
             "data_entrada": self.data_entrada,
             "data_saida": self.data_saida or "",

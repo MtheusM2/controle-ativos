@@ -108,6 +108,8 @@ class SistemaAtivos:
         print(f"Modelo: {ativo.modelo}")
         print(f"Responsável: {ativo.usuario_responsavel or '-'}")
         print(f"Departamento: {ativo.departamento}")
+        print(f"Nota fiscal: {ativo.nota_fiscal or '-'}")
+        print(f"Seguro: {ativo.seguro or '-'}")
         print(f"Status: {ativo.status}")
         print(f"Entrada: {ativo.data_entrada}")
         print(f"Saída: {ativo.data_saida or '-'}")
@@ -140,8 +142,6 @@ class SistemaAtivos:
                 print("Cadastro cancelado.")
                 return
 
-            # Responsável agora é opcional.
-            # Só será exigido pela regra de negócio quando o status for "Em Uso".
             usuario_responsavel = self._input_opcional(
                 "Responsável (opcional; obrigatório para status 'Em Uso'): "
             )
@@ -151,6 +151,20 @@ class SistemaAtivos:
 
             departamento = self._input_obrigatorio("Departamento: ", "departamento")
             if departamento is None:
+                print("Cadastro cancelado.")
+                return
+
+            nota_fiscal = self._input_opcional(
+                "Nota fiscal (opcional, mas NF ou seguro deve existir): "
+            )
+            if nota_fiscal is None:
+                print("Cadastro cancelado.")
+                return
+
+            seguro = self._input_opcional(
+                "Seguro (opcional, mas NF ou seguro deve existir): "
+            )
+            if seguro is None:
                 print("Cadastro cancelado.")
                 return
 
@@ -181,6 +195,8 @@ class SistemaAtivos:
                 modelo=modelo,
                 usuario_responsavel=usuario_responsavel or None,
                 departamento=departamento,
+                nota_fiscal=nota_fiscal or None,
+                seguro=seguro or None,
                 status=status,
                 data_entrada=data_entrada,
                 data_saida=data_saida or None,
@@ -262,6 +278,14 @@ class SistemaAtivos:
         if departamento is None:
             return
 
+        nota_fiscal = self._input_opcional("Filtrar por nota fiscal: ")
+        if nota_fiscal is None:
+            return
+
+        seguro = self._input_opcional("Filtrar por seguro: ")
+        if seguro is None:
+            return
+
         status = self._input_opcional("Filtrar por status: ")
         if status is None:
             return
@@ -283,7 +307,7 @@ class SistemaAtivos:
             return
 
         print("\nOrdenação disponível:")
-        print("id, tipo, marca, modelo, usuario_responsavel, departamento, status, data_entrada, data_saida")
+        print("id, tipo, marca, modelo, usuario_responsavel, departamento, nota_fiscal, seguro, status, data_entrada, data_saida")
 
         ordenar_por = input("Ordenar por (Enter para id): ").strip() or "id"
         ordem = input("Ordem (asc/desc, Enter para asc): ").strip().lower() or "asc"
@@ -292,6 +316,8 @@ class SistemaAtivos:
             "id_ativo": id_ativo or None,
             "usuario_responsavel": usuario_responsavel or None,
             "departamento": departamento or None,
+            "nota_fiscal": nota_fiscal or None,
+            "seguro": seguro or None,
             "status": status or None,
             "data_entrada_inicial": data_entrada_inicial or None,
             "data_entrada_final": data_entrada_final or None,
@@ -360,6 +386,16 @@ class SistemaAtivos:
             if novo_departamento is None:
                 return
 
+            valor_nf = atual.nota_fiscal or "-"
+            nova_nota_fiscal = self._input_opcional(f"Nota fiscal atual ({valor_nf}): ")
+            if nova_nota_fiscal is None:
+                return
+
+            valor_seguro = atual.seguro or "-"
+            novo_seguro = self._input_opcional(f"Seguro atual ({valor_seguro}): ")
+            if novo_seguro is None:
+                return
+
             print(f"\nStatus atual: {atual.status}")
             novo_status = self._input_status(True)
             if novo_status is None:
@@ -391,6 +427,12 @@ class SistemaAtivos:
             if novo_departamento != "":
                 dados["departamento"] = novo_departamento
 
+            if nova_nota_fiscal != "":
+                dados["nota_fiscal"] = nova_nota_fiscal
+
+            if novo_seguro != "":
+                dados["seguro"] = novo_seguro
+
             if novo_status != "":
                 dados["status"] = novo_status
 
@@ -407,6 +449,8 @@ class SistemaAtivos:
                 modelo=dados.get("modelo", atual.modelo),
                 usuario_responsavel=dados.get("usuario_responsavel", atual.usuario_responsavel),
                 departamento=dados.get("departamento", atual.departamento),
+                nota_fiscal=dados.get("nota_fiscal", atual.nota_fiscal),
+                seguro=dados.get("seguro", atual.seguro),
                 status=dados.get("status", atual.status),
                 data_entrada=dados.get("data_entrada", atual.data_entrada),
                 data_saida=dados.get("data_saida", atual.data_saida),

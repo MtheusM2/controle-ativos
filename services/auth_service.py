@@ -159,6 +159,7 @@ class AuthService:
     def autenticar(self, email: str, senha: str) -> Usuario:
         """
         Autentica o usuário e retorna o contexto completo de acesso.
+        Também atualiza o timestamp do último login bem-sucedido.
         """
         email_norm = _normalizar_email(email)
 
@@ -178,17 +179,27 @@ class AuthService:
                 INNER JOIN empresas e
                     ON e.id = u.empresa_id
                 WHERE u.email = %s
-                  AND e.ativa = 1
+                AND e.ativa = 1
                 """,
                 (email_norm,)
             )
             row = cur.fetchone()
 
-        if row is None:
-            raise UsuarioNaoEncontrado("Usuário não encontrado.")
+            if row is None:
+                raise UsuarioNaoEncontrado("Usuário não encontrado.")
 
-        if not verificar_hash(senha, row["senha_hash"]):
-            raise CredenciaisInvalidas("E-mail ou senha inválidos.")
+            if not verificar_hash(senha, row["senha_hash"]):
+                raise CredenciaisInvalidas("E-mail ou senha inválidos.")
+
+            # Atualiza o registro de último login bem-sucedido.
+            cur.execute(
+                """
+                UPDATE usuarios
+                SET ultimo_login_em = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
+                (row["id"],)
+            )
 
         return Usuario(
             id=row["id"],
@@ -264,7 +275,12 @@ class AuthService:
             nova_hash = gerar_hash(nova_senha)
 
             cur.execute(
-                "UPDATE usuarios SET senha_hash = %s WHERE id = %s",
+                """
+                UPDATE usuarios
+                SET senha_hash = %s,
+                    senha_alterada_em = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
                 (nova_hash, row["id"])
             )
             

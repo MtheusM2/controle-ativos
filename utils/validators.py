@@ -288,3 +288,39 @@ def validar_ativo(ativo) -> None:
     )
     if not ok:
         raise ValueError(msg)
+    ok, msg = validar_texto_opcional(
+        ativo.nota_fiscal,
+        "nota_fiscal"
+    )
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(
+        ativo.seguro,
+        "seguro"
+    )
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_documentacao_ativo(
+        ativo.nota_fiscal,
+        ativo.seguro
+    )
+    if not ok:
+        raise ValueError(msg)
+    
+def validar_documentacao_ativo(
+    nota_fiscal: str | None,
+    seguro: str | None
+) -> tuple[bool, str]:
+    """
+    Garante que pelo menos um dos campos
+    nota_fiscal ou seguro esteja preenchido.
+    """
+    nota_fiscal_fmt = (nota_fiscal or "").strip()
+    seguro_fmt = (seguro or "").strip()
+
+    if not nota_fiscal_fmt and not seguro_fmt:
+        return False, "É obrigatório informar pelo menos a nota fiscal ou o seguro do produto."
+
+    return True, ""

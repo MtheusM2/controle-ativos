@@ -109,6 +109,25 @@
         </select>
         <br><br>
 
+        <label for="nota_fiscal">Nota Fiscal:</label>
+        <input
+            type="text"
+            id="nota_fiscal"
+            name="nota_fiscal"
+            value="{{ dados.get('nota_fiscal', '') if dados else '' }}"
+        >
+        <br><br>
+
+        <label for="seguro">Seguro:</label>
+        <input
+            type="text"
+            id="seguro"
+            name="seguro"
+            value="{{ dados.get('seguro', '') if dados else '' }}"
+        >
+        <small>Preencha pelo menos um entre Nota Fiscal e Seguro.</small>
+        <br><br>
+
         <!-- Campo de data de entrada -->
         <label for="data_entrada">Data Entrada:</label>
         <input

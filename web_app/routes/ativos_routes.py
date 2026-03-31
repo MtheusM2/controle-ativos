@@ -72,9 +72,12 @@ def registrar_rotas_ativos(app):
             return redirect(url_for("login"))
 
         if request.method == "POST":
+            # Lê todos os campos enviados pelo formulário.
             dados = request.form.to_dict()
 
             try:
+                # Monta o objeto Ativo com TODOS os campos do formulário.
+                # Aqui estava o problema: nota_fiscal e seguro não estavam sendo repassados.
                 ativo = Ativo(
                     id_ativo=dados.get("id", ""),
                     tipo=dados.get("tipo", ""),
@@ -82,11 +85,14 @@ def registrar_rotas_ativos(app):
                     modelo=dados.get("modelo", ""),
                     usuario_responsavel=dados.get("usuario_responsavel", "") or None,
                     departamento=dados.get("departamento", ""),
+                    nota_fiscal=dados.get("nota_fiscal", "") or None,
+                    seguro=dados.get("seguro", "") or None,
                     status=dados.get("status", ""),
                     data_entrada=dados.get("data_entrada", ""),
                     data_saida=dados.get("data_saida", "") or None
                 )
 
+                # Envia o objeto ao service para validação e persistência.
                 service.criar_ativo(ativo, user_id)
 
                 return redirect(url_for("listar_ativos"))
@@ -134,6 +140,13 @@ def registrar_rotas_ativos(app):
                 # Se o campo vier vazio na web, tratamos como None.
                 if "usuario_responsavel" in dados and not dados["usuario_responsavel"].strip():
                     dados["usuario_responsavel"] = None
+
+                # Faz o mesmo tratamento para os novos campos opcionais.
+                if "nota_fiscal" in dados and not dados["nota_fiscal"].strip():
+                    dados["nota_fiscal"] = None
+
+                if "seguro" in dados and not dados["seguro"].strip():
+                    dados["seguro"] = None
 
                 if "data_saida" in dados and not dados["data_saida"].strip():
                     dados["data_saida"] = None

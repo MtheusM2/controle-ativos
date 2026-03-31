@@ -56,6 +56,8 @@ def _row_para_ativo(row: dict) -> Ativo:
         modelo=row["modelo"],
         usuario_responsavel=row["usuario_responsavel"],
         departamento=row["departamento"],
+        nota_fiscal=row.get("nota_fiscal"),
+        seguro=row.get("seguro"),
         status=row["status"],
         data_entrada=str(row["data_entrada"]),
         data_saida=str(row["data_saida"]) if row["data_saida"] else None,
@@ -75,6 +77,19 @@ def _normalizar_responsavel(usuario_responsavel: str | None) -> str | None:
     return padronizar_texto(valor, "title")
 
 
+def _normalizar_documento(valor: str | None) -> str | None:
+    """
+    Normaliza campos documentais como nota fiscal e seguro.
+    Mantém o conteúdo sem forçar title/upper para não deformar códigos.
+    """
+    valor = (valor or "").strip()
+
+    if not valor:
+        return None
+
+    return valor
+
+
 def _padronizar_ativo(ativo: Ativo) -> Ativo:
     """
     Padroniza campos textuais do ativo antes da persistência.
@@ -86,6 +101,8 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         modelo=padronizar_texto(ativo.modelo, "upper"),
         usuario_responsavel=_normalizar_responsavel(ativo.usuario_responsavel),
         departamento=padronizar_texto(ativo.departamento, "title"),
+        nota_fiscal=_normalizar_documento(ativo.nota_fiscal),
+        seguro=_normalizar_documento(ativo.seguro),
         status=padronizar_texto(ativo.status, "title"),
         data_entrada=(ativo.data_entrada or "").strip(),
         data_saida=(ativo.data_saida or "").strip() or None,
@@ -156,13 +173,15 @@ class AtivosService:
                     modelo,
                     usuario_responsavel,
                     departamento,
+                    nota_fiscal,
+                    seguro,
                     status,
                     data_entrada,
                     data_saida,
                     criado_por,
                     empresa_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     ativo_norm.id_ativo,
@@ -171,6 +190,8 @@ class AtivosService:
                     ativo_norm.modelo,
                     ativo_norm.usuario_responsavel,
                     ativo_norm.departamento,
+                    ativo_norm.nota_fiscal,
+                    ativo_norm.seguro,
                     ativo_norm.status,
                     ativo_norm.data_entrada,
                     ativo_norm.data_saida,
@@ -192,7 +213,8 @@ class AtivosService:
                 cur.execute(
                     """
                     SELECT id, tipo, marca, modelo, usuario_responsavel,
-                           departamento, status, data_entrada, data_saida, criado_por
+                           departamento, nota_fiscal, seguro, status,
+                           data_entrada, data_saida, criado_por
                     FROM ativos
                     ORDER BY id
                     """
@@ -201,7 +223,8 @@ class AtivosService:
                 cur.execute(
                     """
                     SELECT id, tipo, marca, modelo, usuario_responsavel,
-                           departamento, status, data_entrada, data_saida, criado_por
+                           departamento, nota_fiscal, seguro, status,
+                           data_entrada, data_saida, criado_por
                     FROM ativos
                     WHERE empresa_id = %s
                     ORDER BY id
@@ -227,8 +250,8 @@ class AtivosService:
             cur.execute(
                 """
                 SELECT id, tipo, marca, modelo, usuario_responsavel,
-                       departamento, status, data_entrada, data_saida,
-                       criado_por, empresa_id
+                       departamento, nota_fiscal, seguro, status,
+                       data_entrada, data_saida, criado_por, empresa_id
                 FROM ativos
                 WHERE id = %s
                 """,
@@ -264,6 +287,8 @@ class AtivosService:
             "modelo": "modelo",
             "usuario_responsavel": "usuario_responsavel",
             "departamento": "departamento",
+            "nota_fiscal": "nota_fiscal",
+            "seguro": "seguro",
             "status": "status",
             "data_entrada": "data_entrada",
             "data_saida": "data_saida"
@@ -293,6 +318,14 @@ class AtivosService:
         if filtros.get("departamento"):
             where.append("departamento LIKE %s")
             params.append(f"%{filtros['departamento'].strip()}%")
+
+        if filtros.get("nota_fiscal"):
+            where.append("nota_fiscal LIKE %s")
+            params.append(f"%{filtros['nota_fiscal'].strip()}%")
+
+        if filtros.get("seguro"):
+            where.append("seguro LIKE %s")
+            params.append(f"%{filtros['seguro'].strip()}%")
 
         if filtros.get("status"):
             status = filtros["status"].strip().title()
@@ -330,7 +363,8 @@ class AtivosService:
 
         sql = f"""
             SELECT id, tipo, marca, modelo, usuario_responsavel,
-                   departamento, status, data_entrada, data_saida, criado_por
+                   departamento, nota_fiscal, seguro, status,
+                   data_entrada, data_saida, criado_por
             FROM ativos
             WHERE {" AND ".join(where)}
             ORDER BY {campos_ordenacao[ordenar_por]} {ordem_sql}
@@ -355,6 +389,8 @@ class AtivosService:
             modelo=dados.get("modelo", atual.modelo),
             usuario_responsavel=dados.get("usuario_responsavel", atual.usuario_responsavel),
             departamento=dados.get("departamento", atual.departamento),
+            nota_fiscal=dados.get("nota_fiscal", atual.nota_fiscal),
+            seguro=dados.get("seguro", atual.seguro),
             status=dados.get("status", atual.status),
             data_entrada=dados.get("data_entrada", atual.data_entrada),
             data_saida=dados.get("data_saida", atual.data_saida),
@@ -380,6 +416,8 @@ class AtivosService:
                         modelo = %s,
                         usuario_responsavel = %s,
                         departamento = %s,
+                        nota_fiscal = %s,
+                        seguro = %s,
                         status = %s,
                         data_entrada = %s,
                         data_saida = %s
@@ -391,6 +429,8 @@ class AtivosService:
                         novo_norm.modelo,
                         novo_norm.usuario_responsavel,
                         novo_norm.departamento,
+                        novo_norm.nota_fiscal,
+                        novo_norm.seguro,
                         novo_norm.status,
                         novo_norm.data_entrada,
                         novo_norm.data_saida,
@@ -406,6 +446,8 @@ class AtivosService:
                         modelo = %s,
                         usuario_responsavel = %s,
                         departamento = %s,
+                        nota_fiscal = %s,
+                        seguro = %s,
                         status = %s,
                         data_entrada = %s,
                         data_saida = %s
@@ -418,6 +460,8 @@ class AtivosService:
                         novo_norm.modelo,
                         novo_norm.usuario_responsavel,
                         novo_norm.departamento,
+                        novo_norm.nota_fiscal,
+                        novo_norm.seguro,
                         novo_norm.status,
                         novo_norm.data_entrada,
                         novo_norm.data_saida,
