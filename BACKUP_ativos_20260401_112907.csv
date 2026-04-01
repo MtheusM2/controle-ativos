@@ -1,0 +1,9 @@
+id,tipo,marca,modelo,usuario_responsavel,departamento,nota_fiscal,seguro,status,data_entrada,data_saida,criado_por,criado_em,atualizado_em,empresa_id
+001,Notebook,Dell,INTEL I5,Matheus,Ti,,,Em Uso,2026-03-24,,2,2026-03-24 16:15:11,2026-03-27 15:51:10,1
+01,Notebook,Hp,INTEL,Flavio,Ti,,,Em Uso,2026-03-24,,2,2026-03-24 17:13:52,2026-03-27 15:51:10,1
+02,Notebook,Hp,INTEL I5,Matheus,T.I,,,Em Uso,2026-03-25,,1,2026-03-25 16:48:15,2026-03-27 15:51:10,1
+A1,Mouse,Samsug,MOUSE,Matheus,T.I,,,Em Uso,2026-03-27,,3,2026-03-27 15:09:48,2026-03-30 17:05:23,1
+A2,Notebook,Intel,KEYBOARD,Matheus,T.I,,,Em Uso,2026-03-27,,3,2026-03-27 15:10:23,2026-03-27 15:51:10,1
+A3,Monitor,Samsug,HD,Flavio,T.I,,,Em Uso,2026-03-27,,3,2026-03-27 15:11:15,2026-03-27 15:51:10,1
+A4,Notebook,Samsug,INTEL I5,,T.I,,,Disponível,2026-03-30,,3,2026-03-30 11:46:39,2026-03-30 11:46:39,1
+A6,Mouse,Samsug,MAUSE,Matheus,T.I,,0202020,Disponível,2026-03-31,,3,2026-03-31 17:01:45,2026-03-31 17:02:06,1

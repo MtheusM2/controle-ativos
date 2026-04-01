@@ -57,7 +57,8 @@ def _row_para_ativo(row: dict) -> Ativo:
         usuario_responsavel=row["usuario_responsavel"],
         departamento=row["departamento"],
         nota_fiscal=row.get("nota_fiscal"),
-        seguro=row.get("seguro"),
+        # Faz o mapeamento da coluna documental renomeada para o domínio.
+        garantia=row.get("garantia"),
         status=row["status"],
         data_entrada=str(row["data_entrada"]),
         data_saida=str(row["data_saida"]) if row["data_saida"] else None,
@@ -79,8 +80,8 @@ def _normalizar_responsavel(usuario_responsavel: str | None) -> str | None:
 
 def _normalizar_documento(valor: str | None) -> str | None:
     """
-    Normaliza campos documentais como nota fiscal e seguro.
-    Mantém o conteúdo sem forçar title/upper para não deformar códigos.
+    Normaliza campos documentais como nota fiscal e garantia.
+    Não força title/upper para evitar deformar códigos e números.
     """
     valor = (valor or "").strip()
 
@@ -102,7 +103,8 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         usuario_responsavel=_normalizar_responsavel(ativo.usuario_responsavel),
         departamento=padronizar_texto(ativo.departamento, "title"),
         nota_fiscal=_normalizar_documento(ativo.nota_fiscal),
-        seguro=_normalizar_documento(ativo.seguro),
+        # Preserva a normalização documental para a garantia.
+        garantia=_normalizar_documento(ativo.garantia),
         status=padronizar_texto(ativo.status, "title"),
         data_entrada=(ativo.data_entrada or "").strip(),
         data_saida=(ativo.data_saida or "").strip() or None,
@@ -174,7 +176,7 @@ class AtivosService:
                     usuario_responsavel,
                     departamento,
                     nota_fiscal,
-                    seguro,
+                    garantia,
                     status,
                     data_entrada,
                     data_saida,
@@ -191,7 +193,7 @@ class AtivosService:
                     ativo_norm.usuario_responsavel,
                     ativo_norm.departamento,
                     ativo_norm.nota_fiscal,
-                    ativo_norm.seguro,
+                    ativo_norm.garantia,
                     ativo_norm.status,
                     ativo_norm.data_entrada,
                     ativo_norm.data_saida,
@@ -213,7 +215,7 @@ class AtivosService:
                 cur.execute(
                     """
                     SELECT id, tipo, marca, modelo, usuario_responsavel,
-                           departamento, nota_fiscal, seguro, status,
+                              departamento, nota_fiscal, garantia, status,
                            data_entrada, data_saida, criado_por
                     FROM ativos
                     ORDER BY id
@@ -223,7 +225,7 @@ class AtivosService:
                 cur.execute(
                     """
                     SELECT id, tipo, marca, modelo, usuario_responsavel,
-                           departamento, nota_fiscal, seguro, status,
+                              departamento, nota_fiscal, garantia, status,
                            data_entrada, data_saida, criado_por
                     FROM ativos
                     WHERE empresa_id = %s
@@ -250,7 +252,7 @@ class AtivosService:
             cur.execute(
                 """
                 SELECT id, tipo, marca, modelo, usuario_responsavel,
-                       departamento, nota_fiscal, seguro, status,
+                      departamento, nota_fiscal, garantia, status,
                        data_entrada, data_saida, criado_por, empresa_id
                 FROM ativos
                 WHERE id = %s
@@ -288,7 +290,8 @@ class AtivosService:
             "usuario_responsavel": "usuario_responsavel",
             "departamento": "departamento",
             "nota_fiscal": "nota_fiscal",
-            "seguro": "seguro",
+            # Permite ordenação pelo campo renomeado garantia.
+            "garantia": "garantia",
             "status": "status",
             "data_entrada": "data_entrada",
             "data_saida": "data_saida"
@@ -302,7 +305,6 @@ class AtivosService:
         where = ["1 = 1"]
         params = []
 
-        # Se não for admin, restringe à empresa do usuário.
         if not self._usuario_eh_admin(contexto):
             where.append("empresa_id = %s")
             params.append(int(contexto["empresa_id"]))
@@ -323,9 +325,9 @@ class AtivosService:
             where.append("nota_fiscal LIKE %s")
             params.append(f"%{filtros['nota_fiscal'].strip()}%")
 
-        if filtros.get("seguro"):
-            where.append("seguro LIKE %s")
-            params.append(f"%{filtros['seguro'].strip()}%")
+        if filtros.get("garantia"):
+            where.append("garantia LIKE %s")
+            params.append(f"%{filtros['garantia'].strip()}%")
 
         if filtros.get("status"):
             status = filtros["status"].strip().title()
@@ -363,7 +365,7 @@ class AtivosService:
 
         sql = f"""
             SELECT id, tipo, marca, modelo, usuario_responsavel,
-                   departamento, nota_fiscal, seguro, status,
+                     departamento, nota_fiscal, garantia, status,
                    data_entrada, data_saida, criado_por
             FROM ativos
             WHERE {" AND ".join(where)}
@@ -390,7 +392,8 @@ class AtivosService:
             usuario_responsavel=dados.get("usuario_responsavel", atual.usuario_responsavel),
             departamento=dados.get("departamento", atual.departamento),
             nota_fiscal=dados.get("nota_fiscal", atual.nota_fiscal),
-            seguro=dados.get("seguro", atual.seguro),
+            # Atualiza com o campo documental renomeado garantia.
+            garantia=dados.get("garantia", atual.garantia),
             status=dados.get("status", atual.status),
             data_entrada=dados.get("data_entrada", atual.data_entrada),
             data_saida=dados.get("data_saida", atual.data_saida),
@@ -417,7 +420,7 @@ class AtivosService:
                         usuario_responsavel = %s,
                         departamento = %s,
                         nota_fiscal = %s,
-                        seguro = %s,
+                        garantia = %s,
                         status = %s,
                         data_entrada = %s,
                         data_saida = %s
@@ -430,7 +433,7 @@ class AtivosService:
                         novo_norm.usuario_responsavel,
                         novo_norm.departamento,
                         novo_norm.nota_fiscal,
-                        novo_norm.seguro,
+                        novo_norm.garantia,
                         novo_norm.status,
                         novo_norm.data_entrada,
                         novo_norm.data_saida,
@@ -447,7 +450,7 @@ class AtivosService:
                         usuario_responsavel = %s,
                         departamento = %s,
                         nota_fiscal = %s,
-                        seguro = %s,
+                        garantia = %s,
                         status = %s,
                         data_entrada = %s,
                         data_saida = %s
@@ -461,7 +464,7 @@ class AtivosService:
                         novo_norm.usuario_responsavel,
                         novo_norm.departamento,
                         novo_norm.nota_fiscal,
-                        novo_norm.seguro,
+                        novo_norm.garantia,
                         novo_norm.status,
                         novo_norm.data_entrada,
                         novo_norm.data_saida,

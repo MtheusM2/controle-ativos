@@ -77,7 +77,7 @@ def registrar_rotas_ativos(app):
 
             try:
                 # Monta o objeto Ativo com TODOS os campos do formulário.
-                # Aqui estava o problema: nota_fiscal e seguro não estavam sendo repassados.
+                # Aqui estava o problema: nota_fiscal e garantia não estavam sendo repassados.
                 ativo = Ativo(
                     id_ativo=dados.get("id", ""),
                     tipo=dados.get("tipo", ""),
@@ -86,7 +86,8 @@ def registrar_rotas_ativos(app):
                     usuario_responsavel=dados.get("usuario_responsavel", "") or None,
                     departamento=dados.get("departamento", ""),
                     nota_fiscal=dados.get("nota_fiscal", "") or None,
-                    seguro=dados.get("seguro", "") or None,
+                    # Repassa garantia para o domínio mantendo a regra documental.
+                    garantia=dados.get("garantia", "") or None,
                     status=dados.get("status", ""),
                     data_entrada=dados.get("data_entrada", ""),
                     data_saida=dados.get("data_saida", "") or None
@@ -145,8 +146,9 @@ def registrar_rotas_ativos(app):
                 if "nota_fiscal" in dados and not dados["nota_fiscal"].strip():
                     dados["nota_fiscal"] = None
 
-                if "seguro" in dados and not dados["seguro"].strip():
-                    dados["seguro"] = None
+                # Mantém tratamento de vazio para None também na garantia.
+                if "garantia" in dados and not dados["garantia"].strip():
+                    dados["garantia"] = None
 
                 if "data_saida" in dados and not dados["data_saida"].strip():
                     dados["data_saida"] = None

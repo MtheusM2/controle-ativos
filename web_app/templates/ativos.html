@@ -30,7 +30,6 @@
         <p style="color: red;">{{ erro }}</p>
     {% endif %}
 
-    <!-- Se existirem ativos, mostra a tabela -->
     {% if ativos %}
         <table border="1" cellpadding="6">
             <thead>
@@ -41,6 +40,9 @@
                     <th>Modelo</th>
                     <th>Responsável</th>
                     <th>Departamento</th>
+                    <th>Nota Fiscal</th>
+                    <!-- Exibe a coluna documental com o novo nome de domínio -->
+                    <th>Garantia</th>
                     <th>Status</th>
                     <th>Data Entrada</th>
                     <th>Data Saída</th>
@@ -54,18 +56,18 @@
                     <td>{{ ativo.tipo }}</td>
                     <td>{{ ativo.marca }}</td>
                     <td>{{ ativo.modelo }}</td>
-                    <td>{{ ativo.usuario_responsavel }}</td>
+                    <td>{{ ativo.usuario_responsavel or '' }}</td>
                     <td>{{ ativo.departamento }}</td>
+                    <td>{{ ativo.nota_fiscal or '' }}</td>
+                    <td>{{ ativo.garantia or '' }}</td>
                     <td>{{ ativo.status }}</td>
                     <td>{{ ativo.data_entrada }}</td>
                     <td>{{ ativo.data_saida or '' }}</td>
                     <td>
-                        <!-- Link para editar o ativo -->
                         <a href="{{ url_for('editar_ativo', id_ativo=ativo.id_ativo) }}">
                             Editar
                         </a>
 
-                        <!-- Formulário separado para remoção via POST -->
                         <form
                             method="POST"
                             action="{{ url_for('remover_ativo', id_ativo=ativo.id_ativo) }}"
@@ -80,7 +82,6 @@
             </tbody>
         </table>
     {% else %}
-        <!-- Se não existirem ativos, mostra mensagem -->
         <p>Nenhum ativo encontrado.</p>
     {% endif %}
 

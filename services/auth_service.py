@@ -109,7 +109,6 @@ class AuthService:
         resposta_hash = gerar_hash(normalizar_resposta_recuperacao(resposta))
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
-            # Verifica empresa ativa.
             cur.execute(
                 """
                 SELECT id
@@ -123,7 +122,6 @@ class AuthService:
             if empresa is None:
                 raise AuthErro("Empresa inválida ou inativa.")
 
-            # Verifica duplicidade de e-mail.
             cur.execute(
                 "SELECT id FROM usuarios WHERE email = %s",
                 (email_norm,)
@@ -131,7 +129,6 @@ class AuthService:
             if cur.fetchone() is not None:
                 raise UsuarioJaExiste("Já existe um usuário cadastrado com este e-mail.")
 
-            # Insere o novo usuário.
             cur.execute(
                 """
                 INSERT INTO usuarios (
@@ -179,7 +176,7 @@ class AuthService:
                 INNER JOIN empresas e
                     ON e.id = u.empresa_id
                 WHERE u.email = %s
-                AND e.ativa = 1
+                  AND e.ativa = 1
                 """,
                 (email_norm,)
             )
@@ -191,7 +188,6 @@ class AuthService:
             if not verificar_hash(senha, row["senha_hash"]):
                 raise CredenciaisInvalidas("E-mail ou senha inválidos.")
 
-            # Atualiza o registro de último login bem-sucedido.
             cur.execute(
                 """
                 UPDATE usuarios
@@ -227,7 +223,7 @@ class AuthService:
                 INNER JOIN empresas e
                     ON e.id = u.empresa_id
                 WHERE u.email = %s
-                AND e.ativa = 1
+                  AND e.ativa = 1
                 """,
                 (email_norm,)
             )
@@ -257,7 +253,7 @@ class AuthService:
                 INNER JOIN empresas e
                     ON e.id = u.empresa_id
                 WHERE u.email = %s
-                AND e.ativa = 1
+                  AND e.ativa = 1
                 """,
                 (email_norm,)
             )
@@ -283,4 +279,3 @@ class AuthService:
                 """,
                 (nova_hash, row["id"])
             )
-            

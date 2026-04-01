@@ -23,10 +23,7 @@ class SistemaAtivos:
     """
 
     def __init__(self, ativos_service: AtivosService, user_id: int):
-        # Service de domínio dos ativos.
         self.ativos_service = ativos_service
-
-        # ID do usuário autenticado.
         self.user_id = user_id
 
     def _mensagem_cancelar(self):
@@ -109,7 +106,8 @@ class SistemaAtivos:
         print(f"Responsável: {ativo.usuario_responsavel or '-'}")
         print(f"Departamento: {ativo.departamento}")
         print(f"Nota fiscal: {ativo.nota_fiscal or '-'}")
-        print(f"Seguro: {ativo.seguro or '-'}")
+        # Exibe o campo documental renomeado para garantia no terminal.
+        print(f"Garantia: {ativo.garantia or '-'}")
         print(f"Status: {ativo.status}")
         print(f"Entrada: {ativo.data_entrada}")
         print(f"Saída: {ativo.data_saida or '-'}")
@@ -155,16 +153,17 @@ class SistemaAtivos:
                 return
 
             nota_fiscal = self._input_opcional(
-                "Nota fiscal (opcional, mas NF ou seguro deve existir): "
+                "Nota fiscal (opcional, mas NF ou garantia deve existir): "
             )
             if nota_fiscal is None:
                 print("Cadastro cancelado.")
                 return
 
-            seguro = self._input_opcional(
-                "Seguro (opcional, mas NF ou seguro deve existir): "
+            # Solicita garantia mantendo a mesma regra documental (NF ou garantia).
+            garantia = self._input_opcional(
+                "Garantia (opcional, mas NF ou garantia deve existir): "
             )
-            if seguro is None:
+            if garantia is None:
                 print("Cadastro cancelado.")
                 return
 
@@ -196,7 +195,7 @@ class SistemaAtivos:
                 usuario_responsavel=usuario_responsavel or None,
                 departamento=departamento,
                 nota_fiscal=nota_fiscal or None,
-                seguro=seguro or None,
+                garantia=garantia or None,
                 status=status,
                 data_entrada=data_entrada,
                 data_saida=data_saida or None,
@@ -282,8 +281,8 @@ class SistemaAtivos:
         if nota_fiscal is None:
             return
 
-        seguro = self._input_opcional("Filtrar por seguro: ")
-        if seguro is None:
+        garantia = self._input_opcional("Filtrar por garantia: ")
+        if garantia is None:
             return
 
         status = self._input_opcional("Filtrar por status: ")
@@ -307,7 +306,8 @@ class SistemaAtivos:
             return
 
         print("\nOrdenação disponível:")
-        print("id, tipo, marca, modelo, usuario_responsavel, departamento, nota_fiscal, seguro, status, data_entrada, data_saida")
+        # Lista as opções de ordenação com o novo campo garantia.
+        print("id, tipo, marca, modelo, usuario_responsavel, departamento, nota_fiscal, garantia, status, data_entrada, data_saida")
 
         ordenar_por = input("Ordenar por (Enter para id): ").strip() or "id"
         ordem = input("Ordem (asc/desc, Enter para asc): ").strip().lower() or "asc"
@@ -317,7 +317,7 @@ class SistemaAtivos:
             "usuario_responsavel": usuario_responsavel or None,
             "departamento": departamento or None,
             "nota_fiscal": nota_fiscal or None,
-            "seguro": seguro or None,
+            "garantia": garantia or None,
             "status": status or None,
             "data_entrada_inicial": data_entrada_inicial or None,
             "data_entrada_final": data_entrada_final or None,
@@ -391,9 +391,9 @@ class SistemaAtivos:
             if nova_nota_fiscal is None:
                 return
 
-            valor_seguro = atual.seguro or "-"
-            novo_seguro = self._input_opcional(f"Seguro atual ({valor_seguro}): ")
-            if novo_seguro is None:
+            valor_garantia = atual.garantia or "-"
+            novo_garantia = self._input_opcional(f"Garantia atual ({valor_garantia}): ")
+            if novo_garantia is None:
                 return
 
             print(f"\nStatus atual: {atual.status}")
@@ -430,8 +430,8 @@ class SistemaAtivos:
             if nova_nota_fiscal != "":
                 dados["nota_fiscal"] = nova_nota_fiscal
 
-            if novo_seguro != "":
-                dados["seguro"] = novo_seguro
+            if novo_garantia != "":
+                dados["garantia"] = novo_garantia
 
             if novo_status != "":
                 dados["status"] = novo_status
@@ -450,7 +450,8 @@ class SistemaAtivos:
                 usuario_responsavel=dados.get("usuario_responsavel", atual.usuario_responsavel),
                 departamento=dados.get("departamento", atual.departamento),
                 nota_fiscal=dados.get("nota_fiscal", atual.nota_fiscal),
-                seguro=dados.get("seguro", atual.seguro),
+                # Prepara o preview já com o campo documental renomeado.
+                garantia=dados.get("garantia", atual.garantia),
                 status=dados.get("status", atual.status),
                 data_entrada=dados.get("data_entrada", atual.data_entrada),
                 data_saida=dados.get("data_saida", atual.data_saida),

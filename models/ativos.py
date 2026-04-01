@@ -19,7 +19,7 @@ class Ativo:
         usuario_responsavel=None,
         departamento=None,
         nota_fiscal=None,
-        seguro=None,
+        garantia=None,
         status=None,
         data_entrada=None,
         data_saida=None,
@@ -46,8 +46,8 @@ class Ativo:
         # Número/referência da nota fiscal.
         self.nota_fiscal = nota_fiscal
 
-        # Número/referência do seguro/apólice.
-        self.seguro = seguro
+        # Número/referência da garantia do ativo.
+        self.garantia = garantia
 
         # Status atual do ativo.
         self.status = status
@@ -73,7 +73,8 @@ class Ativo:
             "usuario_responsavel": self.usuario_responsavel or "",
             "departamento": self.departamento,
             "nota_fiscal": self.nota_fiscal or "",
-            "seguro": self.seguro or "",
+            # Mantém o campo documental nomeado como garantia no domínio.
+            "garantia": self.garantia or "",
             "status": self.status,
             "data_entrada": self.data_entrada,
             "data_saida": self.data_saida or "",

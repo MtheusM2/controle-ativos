@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS ativos (
     usuario_responsavel VARCHAR(100) NULL,
     departamento VARCHAR(100) NOT NULL,
     nota_fiscal VARCHAR(100) NULL,
-    seguro VARCHAR(100) NULL,
+    garantia VARCHAR(100) NULL,
     status VARCHAR(50) NOT NULL,
     data_entrada DATE NOT NULL,
     data_saida DATE NULL,

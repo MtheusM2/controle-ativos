@@ -10,7 +10,6 @@
 import re
 from datetime import datetime
 
-# Status válidos do domínio de ativos.
 STATUS_VALIDOS = [
     "Disponível",
     "Em Uso",
@@ -19,13 +18,11 @@ STATUS_VALIDOS = [
     "Baixado"
 ]
 
-# Perfis válidos do sistema.
 PERFIS_VALIDOS = [
     "usuario",
     "adm"
 ]
 
-# Expressão regular básica para e-mail.
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -214,6 +211,24 @@ def comparar_datas(data_inicial: str, data_final: str | None) -> tuple[bool, str
     return True, ""
 
 
+def validar_documentacao_ativo(
+    nota_fiscal: str | None,
+    garantia: str | None
+) -> tuple[bool, str]:
+    """
+    Garante que pelo menos um dos campos
+    nota_fiscal ou garantia esteja preenchido.
+    """
+    nota_fiscal_fmt = (nota_fiscal or "").strip()
+    garantia_fmt = (garantia or "").strip()
+
+    if not nota_fiscal_fmt and not garantia_fmt:
+        # Mantém a regra documental: ao menos um entre nota fiscal e garantia.
+        return False, "É obrigatório informar pelo menos a nota fiscal ou a garantia do produto."
+
+    return True, ""
+
+
 def validar_regras_ativo(
     status: str,
     usuario_responsavel: str | None,
@@ -269,10 +284,20 @@ def validar_ativo(ativo) -> None:
         if not ok:
             raise ValueError(msg)
 
-    ok, msg = validar_texto_opcional(
-        ativo.usuario_responsavel,
-        "usuario_responsavel"
-    )
+    ok, msg = validar_texto_opcional(ativo.usuario_responsavel, "usuario_responsavel")
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(ativo.nota_fiscal, "nota_fiscal")
+    if not ok:
+        raise ValueError(msg)
+
+    # Valida o campo opcional de garantia mantendo o mesmo limite textual.
+    ok, msg = validar_texto_opcional(ativo.garantia, "garantia")
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_documentacao_ativo(ativo.nota_fiscal, ativo.garantia)
     if not ok:
         raise ValueError(msg)
 
@@ -287,40 +312,5 @@ def validar_ativo(ativo) -> None:
         ativo.data_saida
     )
     if not ok:
-        raise ValueError(msg)
-    ok, msg = validar_texto_opcional(
-        ativo.nota_fiscal,
-        "nota_fiscal"
-    )
-    if not ok:
-        raise ValueError(msg)
-
-    ok, msg = validar_texto_opcional(
-        ativo.seguro,
-        "seguro"
-    )
-    if not ok:
-        raise ValueError(msg)
-
-    ok, msg = validar_documentacao_ativo(
-        ativo.nota_fiscal,
-        ativo.seguro
-    )
-    if not ok:
-        raise ValueError(msg)
-    
-def validar_documentacao_ativo(
-    nota_fiscal: str | None,
-    seguro: str | None
-) -> tuple[bool, str]:
-    """
-    Garante que pelo menos um dos campos
-    nota_fiscal ou seguro esteja preenchido.
-    """
-    nota_fiscal_fmt = (nota_fiscal or "").strip()
-    seguro_fmt = (seguro or "").strip()
-
-    if not nota_fiscal_fmt and not seguro_fmt:
-        return False, "É obrigatório informar pelo menos a nota fiscal ou o seguro do produto."
-
-    return True, ""
+        raise ValueError(msg)     
+              
