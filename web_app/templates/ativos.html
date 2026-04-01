@@ -18,17 +18,136 @@
     <!-- Exibe o usuário autenticado -->
     <p>Usuário logado: {{ usuario_email }}</p>
 
-    <!-- Links principais da tela -->
+    <!-- Links principais -->
     <p>
         <a href="{{ url_for('criar_ativo') }}">Cadastrar novo ativo</a>
         |
         <a href="{{ url_for('logout') }}">Logout</a>
     </p>
 
-    <!-- Exibe erro quando houver falha na listagem ou em outra operação -->
+    <!-- Mensagem de erro -->
     {% if erro %}
         <p style="color: red;">{{ erro }}</p>
     {% endif %}
+
+    <h2>Filtros</h2>
+
+    <!-- Formulário de filtro via GET -->
+    <form method="GET" action="{{ url_for('listar_ativos') }}">
+        <label for="id_ativo">ID:</label>
+        <input
+            type="text"
+            id="id_ativo"
+            name="id_ativo"
+            value="{{ filtros.get('id_ativo', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="usuario_responsavel">Responsável:</label>
+        <input
+            type="text"
+            id="usuario_responsavel"
+            name="usuario_responsavel"
+            value="{{ filtros.get('usuario_responsavel', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="departamento">Departamento:</label>
+        <input
+            type="text"
+            id="departamento"
+            name="departamento"
+            value="{{ filtros.get('departamento', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="nota_fiscal">Nota Fiscal:</label>
+        <input
+            type="text"
+            id="nota_fiscal"
+            name="nota_fiscal"
+            value="{{ filtros.get('nota_fiscal', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="garantia">Garantia:</label>
+        <input
+            type="text"
+            id="garantia"
+            name="garantia"
+            value="{{ filtros.get('garantia', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="status">Status:</label>
+        <select id="status" name="status">
+            <option value="">Todos</option>
+            {% for status in status_validos %}
+                <option
+                    value="{{ status }}"
+                    {% if filtros and filtros.get('status') == status %}selected{% endif %}
+                >
+                    {{ status }}
+                </option>
+            {% endfor %}
+        </select>
+        <br><br>
+
+        <label for="data_entrada_inicial">Data Entrada Inicial:</label>
+        <input
+            type="date"
+            id="data_entrada_inicial"
+            name="data_entrada_inicial"
+            value="{{ filtros.get('data_entrada_inicial', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="data_entrada_final">Data Entrada Final:</label>
+        <input
+            type="date"
+            id="data_entrada_final"
+            name="data_entrada_final"
+            value="{{ filtros.get('data_entrada_final', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="data_saida_inicial">Data Saída Inicial:</label>
+        <input
+            type="date"
+            id="data_saida_inicial"
+            name="data_saida_inicial"
+            value="{{ filtros.get('data_saida_inicial', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="data_saida_final">Data Saída Final:</label>
+        <input
+            type="date"
+            id="data_saida_final"
+            name="data_saida_final"
+            value="{{ filtros.get('data_saida_final', '') if filtros else '' }}"
+        ><br><br>
+
+        <label for="ordenar_por">Ordenar por:</label>
+        <select id="ordenar_por" name="ordenar_por">
+            <option value="id" {% if ordenar_por == 'id' %}selected{% endif %}>ID</option>
+            <option value="tipo" {% if ordenar_por == 'tipo' %}selected{% endif %}>Tipo</option>
+            <option value="marca" {% if ordenar_por == 'marca' %}selected{% endif %}>Marca</option>
+            <option value="modelo" {% if ordenar_por == 'modelo' %}selected{% endif %}>Modelo</option>
+            <option value="usuario_responsavel" {% if ordenar_por == 'usuario_responsavel' %}selected{% endif %}>Responsável</option>
+            <option value="departamento" {% if ordenar_por == 'departamento' %}selected{% endif %}>Departamento</option>
+            <option value="nota_fiscal" {% if ordenar_por == 'nota_fiscal' %}selected{% endif %}>Nota Fiscal</option>
+            <option value="garantia" {% if ordenar_por == 'garantia' %}selected{% endif %}>Garantia</option>
+            <option value="status" {% if ordenar_por == 'status' %}selected{% endif %}>Status</option>
+            <option value="data_entrada" {% if ordenar_por == 'data_entrada' %}selected{% endif %}>Data Entrada</option>
+            <option value="data_saida" {% if ordenar_por == 'data_saida' %}selected{% endif %}>Data Saída</option>
+        </select>
+        <br><br>
+
+        <label for="ordem">Ordem:</label>
+        <select id="ordem" name="ordem">
+            <option value="asc" {% if ordem == 'asc' %}selected{% endif %}>Crescente</option>
+            <option value="desc" {% if ordem == 'desc' %}selected{% endif %}>Decrescente</option>
+        </select>
+        <br><br>
+
+        <button type="submit">Filtrar</button>
+        <a href="{{ url_for('listar_ativos') }}">Limpar filtros</a>
+    </form>
+
+    <hr>
 
     {% if ativos %}
         <table border="1" cellpadding="6">
@@ -41,11 +160,11 @@
                     <th>Responsável</th>
                     <th>Departamento</th>
                     <th>Nota Fiscal</th>
-                    <!-- Exibe a coluna documental com o novo nome de domínio -->
                     <th>Garantia</th>
                     <th>Status</th>
                     <th>Data Entrada</th>
                     <th>Data Saída</th>
+                    <th>Anexos</th>
                     <th>Ações</th>
                 </tr>
             </thead>
@@ -63,9 +182,10 @@
                     <td>{{ ativo.status }}</td>
                     <td>{{ ativo.data_entrada }}</td>
                     <td>{{ ativo.data_saida or '' }}</td>
+                    <td>{{ ativo.total_anexos or 0 }}</td>
                     <td>
                         <a href="{{ url_for('editar_ativo', id_ativo=ativo.id_ativo) }}">
-                            Editar
+                            Editar / Anexos
                         </a>
 
                         <form

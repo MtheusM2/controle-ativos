@@ -30,19 +30,13 @@
         <p style="color: red;">{{ erro }}</p>
     {% endif %}
 
-    <!-- Formulário de edição -->
+    <!-- Formulário principal de edição -->
     <form method="POST" action="{{ url_for('editar_ativo', id_ativo=id_ativo) }}">
 
-        <!-- ID apenas para visualização -->
         <label for="id_exibicao">ID:</label>
-        <input
-            type="text"
-            id="id_exibicao"
-            value="{{ id_ativo }}"
-            readonly
-        ><br><br>
+        <input type="text" id="id_exibicao" value="{{ id_ativo }}" readonly>
+        <br><br>
 
-        <!-- Campo de tipo -->
         <label for="tipo">Tipo:</label>
         <input
             type="text"
@@ -52,7 +46,6 @@
             required
         ><br><br>
 
-        <!-- Campo de marca -->
         <label for="marca">Marca:</label>
         <input
             type="text"
@@ -62,7 +55,6 @@
             required
         ><br><br>
 
-        <!-- Campo de modelo -->
         <label for="modelo">Modelo:</label>
         <input
             type="text"
@@ -72,8 +64,6 @@
             required
         ><br><br>
 
-        <!-- Campo de responsável -->
-        <!-- Agora é opcional -->
         <label for="usuario_responsavel">Responsável:</label>
         <input
             type="text"
@@ -84,7 +74,6 @@
         <small>Opcional. Obrigatório apenas quando o status for "Em Uso".</small>
         <br><br>
 
-        <!-- Campo de departamento -->
         <label for="departamento">Departamento:</label>
         <input
             type="text"
@@ -94,7 +83,6 @@
             required
         ><br><br>
 
-        <!-- Campo de status com opções controladas -->
         <label for="status">Status:</label>
         <select id="status" name="status" required>
             <option value="">Selecione um status</option>
@@ -118,7 +106,6 @@
         >
         <br><br>
 
-        <!-- Campo documental de garantia -->
         <label for="garantia">Garantia:</label>
         <input
             type="text"
@@ -129,7 +116,6 @@
         <small>Preencha pelo menos um entre Nota Fiscal e Garantia.</small>
         <br><br>
 
-        <!-- Campo de data de entrada -->
         <label for="data_entrada">Data Entrada:</label>
         <input
             type="date"
@@ -139,7 +125,6 @@
             required
         ><br><br>
 
-        <!-- Campo de data de saída -->
         <label for="data_saida">Data Saída:</label>
         <input
             type="date"
@@ -148,9 +133,97 @@
             value="{{ dados.get('data_saida', '') if dados else '' }}"
         ><br><br>
 
-        <!-- Botão de salvar -->
         <button type="submit">Salvar alterações</button>
     </form>
+
+    <hr>
+
+    <h2>Anexos do Ativo</h2>
+
+    <!-- Upload de Nota Fiscal -->
+    <form
+        method="POST"
+        action="{{ url_for('upload_arquivo_ativo', id_ativo=id_ativo) }}"
+        enctype="multipart/form-data"
+    >
+        <input type="hidden" name="tipo_documento" value="nota_fiscal">
+
+        <label for="arquivo_nf">Arquivo da Nota Fiscal:</label>
+        <input
+            type="file"
+            id="arquivo_nf"
+            name="arquivo"
+            accept=".pdf,.png,.jpg,.jpeg,.webp"
+            required
+        >
+        <button type="submit">Enviar Nota Fiscal</button>
+    </form>
+
+    <br>
+
+    <!-- Upload de Garantia -->
+    <form
+        method="POST"
+        action="{{ url_for('upload_arquivo_ativo', id_ativo=id_ativo) }}"
+        enctype="multipart/form-data"
+    >
+        <input type="hidden" name="tipo_documento" value="garantia">
+
+        <label for="arquivo_garantia">Arquivo da Garantia:</label>
+        <input
+            type="file"
+            id="arquivo_garantia"
+            name="arquivo"
+            accept=".pdf,.png,.jpg,.jpeg,.webp"
+            required
+        >
+        <button type="submit">Enviar Garantia</button>
+    </form>
+
+    <p>
+        Formatos aceitos: PDF, PNG, JPG, JPEG, WEBP.
+        Tamanho máximo: 10 MB.
+    </p>
+
+    {% if arquivos %}
+        <table border="1" cellpadding="6">
+            <thead>
+                <tr>
+                    <th>Tipo</th>
+                    <th>Nome original</th>
+                    <th>Tamanho (bytes)</th>
+                    <th>Enviado em</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for arquivo in arquivos %}
+                <tr>
+                    <td>{{ arquivo.tipo_documento }}</td>
+                    <td>{{ arquivo.nome_original }}</td>
+                    <td>{{ arquivo.tamanho_bytes }}</td>
+                    <td>{{ arquivo.criado_em }}</td>
+                    <td>
+                        <a href="{{ url_for('download_arquivo_ativo', arquivo_id=arquivo.id) }}">
+                            Baixar
+                        </a>
+
+                        <form
+                            method="POST"
+                            action="{{ url_for('remover_arquivo_ativo', arquivo_id=arquivo.id) }}"
+                            style="display: inline;"
+                            onsubmit="return confirm('Tem certeza que deseja remover este anexo?');"
+                        >
+                            <button type="submit">Remover</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>Este ativo ainda não possui anexos.</p>
+    {% endif %}
 
 </body>
 </html>

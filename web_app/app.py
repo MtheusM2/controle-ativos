@@ -1,40 +1,45 @@
-# Arquivo principal da aplicação web
-# Responsável por criar a aplicação Flask e registrar as rotas do sistema
 
-# Importa utilitário para leitura de variáveis de ambiente
+# Arquivo principal da aplicação web.
+# Responsável por criar a aplicação Flask,
+# definir configurações básicas e registrar rotas.
+
 import os
+from pathlib import Path
 
-# Importa a classe principal do Flask
 from flask import Flask
 
-# Importa o registrador das rotas de autenticação
 from web_app.routes.auth_routes import registrar_rotas_auth
-
-# Importa o registrador das rotas de ativos
 from web_app.routes.ativos_routes import registrar_rotas_ativos
 
 
-# Cria a instância principal da aplicação Flask
+# Define a pasta base da aplicação web.
+BASE_DIR = Path(__file__).resolve().parent
+
+# Cria a aplicação Flask.
 app = Flask(__name__)
 
-# Define a chave secreta usada pelo Flask para sessão.
-# Em produção, o ideal é mover isso para o arquivo .env.
+# Chave secreta usada pela sessão do Flask.
 app.config["SECRET_KEY"] = os.getenv(
     "FLASK_SECRET_KEY",
     "dev-secret-key-controle-ativos"
 )
 
-# Define flags básicas de segurança da sessão.
+# Flags básicas de segurança da sessão.
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-# Registra as rotas de autenticação
-registrar_rotas_auth(app)
+# Configura pasta de uploads.
+app.config["UPLOAD_FOLDER"] = str(BASE_DIR / "static" / "uploads")
 
-# Registra as rotas de ativos
+# Limite máximo de upload: 10 MB.
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+
+# Garante que a pasta física exista.
+Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
+
+# Registra as rotas do sistema.
+registrar_rotas_auth(app)
 registrar_rotas_ativos(app)
 
-# Garante que o servidor só será iniciado se este arquivo for executado diretamente
 if __name__ == "__main__":
-    # Inicia a aplicação em modo de depuração
     app.run(debug=True)
