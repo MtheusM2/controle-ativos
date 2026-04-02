@@ -1,30 +1,46 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <!-- Define a codificação de caracteres -->
-    <meta charset="UTF-8">
+{% extends 'base.html' %}
 
-    <!-- Ajusta a responsividade da página -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block title %}Sistema de Controle de Ativos{% endblock %}
 
-    <!-- Título exibido na aba do navegador -->
-    <title>Sistema de Controle de Ativos</title>
-</head>
-<body>
-    <!-- Título principal da página -->
+{% block content %}
+<div class="page-intro">
     <h1>Sistema de Controle de Ativos</h1>
+    <p class="intro-text">Bem-vindo ao sistema de gerenciamento de ativos</p>
+</div>
 
-    <!-- Texto de apoio para validar a estrutura inicial -->
-    <p>A camada web foi padronizada com sucesso.</p>
+<div class="content-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-top: 2rem;">
+    <!-- Card: Ver Ativos -->
+    <div class="panel">
+        <div class="panel-header">
+            <i class="bi bi-list-check" style="font-size: 1.5rem; color: var(--wine-2);"></i>
+            <h3>Ativos Cadastrados</h3>
+        </div>
+        <div class="panel-body">
+            <p style="color: var(--text-1); margin-bottom: 1.5rem;">
+                Visualize, filtre e gerencie todos os ativos cadastrados no sistema.
+            </p>
+            <a href="{{ url_for('listar_ativos') }}" class="btn -primary" style="width: 100%;">
+                <i class="bi bi-eye"></i>
+                Ver Ativos
+            </a>
+        </div>
+    </div>
 
-    <!-- Link para acessar a listagem de ativos -->
-    <a href="/ativos" style="display: block; margin-top: 10px;">
-        Ver ativos cadastrados
-    </a>
-
-    <!-- Link para acessar o formulário de cadastro -->
-    <a href="/ativos/novo" style="display: block; margin-top: 10px;">
-        Cadastrar novo ativo
-    </a>
-</body>
-</html>
+    <!-- Card: Cadastrar Novo Ativo -->
+    <div class="panel">
+        <div class="panel-header">
+            <i class="bi bi-plus-circle" style="font-size: 1.5rem; color: var(--wine-2);"></i>
+            <h3>Cadastrar Novo Ativo</h3>
+        </div>
+        <div class="panel-body">
+            <p style="color: var(--text-1); margin-bottom: 1.5rem;">
+                Crie um novo registro de ativo com informações completas.
+            </p>
+            <a href="{{ url_for('criar_ativo') }}" class="btn -primary" style="width: 100%;">
+                <i class="bi bi-plus"></i>
+                Cadastrar
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

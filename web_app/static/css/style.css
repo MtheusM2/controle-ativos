@@ -287,13 +287,66 @@ body.app-body {
     transition: all 0.2s ease;
 }
 
+/* Padrao premium para select nativo com seta customizada e tema escuro */
+.select-control {
+    /* Remove setas padrao para permitir icone vetorial consistente */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    color-scheme: dark;
+    padding-right: 38px;
+    background-image:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23c4c8d2' d='M3.1 5.6a1 1 0 0 1 1.4 0L8 9.1l3.5-3.5a1 1 0 1 1 1.4 1.4l-4.2 4.2a1 1 0 0 1-1.4 0L3.1 7a1 1 0 0 1 0-1.4z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat, no-repeat;
+    background-position: 0 0, right 12px center;
+    background-size: auto, 14px 14px;
+}
+
+/* Melhora contraste do estado vazio em selects obrigatorios */
+.select-control:required:invalid {
+    color: var(--text-2);
+}
+
+/* Placeholder de opcao vazia e opcoes com fundo escuro */
+.select-control option[value=""] {
+    color: var(--text-2);
+}
+
+.select-control option {
+    color: var(--text-0);
+    background: #141820;
+}
+
+/* Estados de interacao dedicados para selects */
+.select-control:hover {
+    border-color: rgba(168, 25, 54, 0.4);
+    box-shadow: 0 0 0 1px rgba(168, 25, 54, 0.14);
+}
+
+.select-control:focus,
+.select-control:focus-visible {
+    outline: none;
+    border-color: var(--wine-2);
+    box-shadow: 0 0 0 3px rgba(168, 25, 54, 0.22);
+}
+
+.select-control:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    color: var(--text-2);
+    border-color: var(--line-soft);
+    background-image:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%238e95a7' d='M3.1 5.6a1 1 0 0 1 1.4 0L8 9.1l3.5-3.5a1 1 0 1 1 1.4 1.4l-4.2 4.2a1 1 0 0 1-1.4 0L3.1 7a1 1 0 0 1 0-1.4z'/%3E%3C/svg%3E");
+}
+
 .textarea-control {
     min-height: 100px;
     resize: vertical;
 }
 
 .input-control:focus,
-.select-control:focus,
 .textarea-control:focus {
     outline: none;
     border-color: var(--wine-2);
@@ -447,15 +500,66 @@ body.app-body {
 
 .auth-card {
     width: 100%;
+    border-radius: 14px;
+    border: 1px solid var(--line-soft);
+    background: linear-gradient(165deg, rgba(28, 31, 40, 0.92), rgba(18, 20, 28, 0.96));
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), var(--shadow-inner);
+    backdrop-filter: blur(10px);
+    overflow: hidden;
 }
 
-.auth-header p {
-    margin: 6px 0 0;
+.auth-card-header {
+    padding: 28px 24px;
+    border-bottom: 1px solid var(--line-soft);
+    background: linear-gradient(135deg, rgba(168, 25, 54, 0.06), rgba(168, 25, 54, 0.02));
+}
+
+.auth-title {
+    margin: 0;
+    font-size: 1.1rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--text-0);
+}
+
+.auth-subtitle {
+    margin: 8px 0 0;
+    font-size: 0.84rem;
+    color: var(--text-2);
+    line-height: 1.4;
+}
+
+.auth-card-body {
+    padding: 24px;
 }
 
 .auth-form {
     display: grid;
-    gap: 12px;
+    gap: 14px;
+}
+
+.auth-card-footer {
+    padding: 18px 24px;
+    border-top: 1px solid var(--line-soft);
+    background: rgba(255, 255, 255, 0.01);
+    font-size: 0.82rem;
+}
+
+.auth-link {
+    color: var(--wine-2);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+
+.auth-link:hover {
+    color: var(--wine-1);
+    text-decoration: underline;
+}
+
+.auth-header p {
+    margin: 6px 0 0;
 }
 
 .auth-submit {
@@ -550,6 +654,19 @@ body.app-body {
     font-size: 0.84rem;
 }
 
+.intro-text {
+    margin: 0;
+    color: var(--text-1);
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.content-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
 .page-actions {
     display: flex;
     align-items: center;
@@ -579,6 +696,16 @@ body.app-body {
     font-weight: 700;
 }
 
+.field-display {
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--line-soft);
+    color: var(--text-0);
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
 .filter-actions {
     grid-column: 1 / -1;
     display: flex;
@@ -592,6 +719,25 @@ body.app-body {
 
 .table-wrapper {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Scrollbar styling para dark theme */
+}
+
+.table-wrapper::-webkit-scrollbar {
+    height: 6px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(168, 25, 54, 0.4);
+    border-radius: 3px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(168, 25, 54, 0.6);
 }
 
 .table-premium {
@@ -742,5 +888,218 @@ body.app-body {
 
     .filter-actions {
         flex-wrap: wrap;
+    }
+}
+
+/* Otimizacao para smartphones */
+@media (max-width: 480px) {
+    :root {
+        --sidebar-width: 100%;
+    }
+
+    body.app-body {
+        font-size: 14px;
+    }
+
+    .sidebar-panel {
+        padding: 16px 12px;
+    }
+
+    .sidebar-nav {
+        gap: 6px;
+        margin-top: 14px;
+    }
+
+    .nav-item {
+        padding: 8px 10px;
+        font-size: 0.78rem;
+        gap: 8px;
+    }
+
+    .topbar-panel {
+        padding: 12px 12px !important;
+        gap: 8px;
+    }
+
+    .topbar-title {
+        font-size: 0.9rem;
+    }
+
+    .topbar-user {
+        gap: 6px;
+        font-size: 0.72rem;
+    }
+
+    .content-area {
+        padding: 12px 8px 18px !important;
+    }
+
+    .page-intro {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .page-title {
+        font-size: 0.9rem;
+    }
+
+    .page-actions {
+        width: 100%;
+    }
+
+    .page-actions .btn {
+        font-size: 0.72rem;
+        padding: 8px 12px;
+    }
+
+    .panel {
+        border-radius: 8px;
+    }
+
+    .panel-header {
+        padding: 14px 12px;
+    }
+
+    .panel-body {
+        padding: 12px;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .field-group {
+        gap: 4px;
+    }
+
+    .field-label {
+        font-size: 0.7rem;
+    }
+
+    .field-input,
+    .select-control,
+    .field-display {
+        padding: 8px 10px;
+        font-size: 0.82rem;
+    }
+
+    .btn {
+        font-size: 0.74rem;
+        padding: 8px 12px;
+        gap: 6px;
+    }
+
+    .btn i {
+        font-size: 0.9rem;
+    }
+
+    .badge {
+        font-size: 0.68rem;
+        padding: 4px 8px;
+    }
+
+    .flash-message {
+        padding: 10px 12px;
+        font-size: 0.78rem;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    /* Auth screens */
+    .auth-content-area {
+        padding: 12px;
+    }
+
+    .auth-card {
+        border-radius: 12px;
+    }
+
+    .auth-card-header {
+        padding: 16px 12px;
+    }
+
+    .auth-title {
+        font-size: 1rem;
+    }
+
+    .auth-subtitle {
+        font-size: 0.82rem;
+    }
+
+    .auth-card-body {
+        padding: 14px 12px;
+    }
+
+    .auth-form {
+        gap: 10px;
+    }
+
+    .auth-card-footer {
+        padding: 12px;
+    }
+
+    .auth-link {
+        font-size: 0.78rem;
+    }
+
+    /* Tables */
+    .table-wrapper {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .table-premium {
+        font-size: 0.78rem;
+    }
+
+    .table-premium th,
+    .table-premium td {
+        padding: 8px 10px;
+    }
+
+    .upload-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .upload-card {
+        padding: 12px;
+    }
+
+    .filter-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    /* Icones menores em mobile */
+    .brand-mark {
+        width: 32px;
+        height: 32px;
+    }
+
+    .brand-title {
+        font-size: 0.82rem;
+    }
+
+    .brand-subtitle {
+        font-size: 0.68rem;
+    }
+
+    /* Content grid para home */
+    .content-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+    }
+
+    .intro-text {
+        font-size: 0.88rem;
+    }
+
+    /* Select com arrow ajustado para mobile */
+    .select-control {
+        padding-right: 32px;
+        background-size: auto, 12px 12px;
     }
 }

@@ -1,0 +1,39 @@
+{# 
+   NOTA: Este arquivo é um placeholder.
+   
+   A redefinição de senha é atualmente tratada como um fluxo de dois passos
+   dentro do template "recuperar_senha.html" com ações condicionais (buscar_pergunta → redefinir_senha).
+   
+   Não existe uma rota Flask independente para '/redefinir-senha' que renderize este template.
+   Se no futuro um endpoint separado for criado, este arquivo pode ser atualizado.
+   
+   Routes de autenticação:
+   - /login            → login.html
+   - /cadastro         → cadastro.html  
+   - /recuperar-senha  → recuperar_senha.html (inclui fluxo de redefinição)
+   - /logout           → Sem template (redirect)
+#}
+
+{% extends 'base.html' %}
+
+{% block title %}Redefinir Senha - Sistema de Controle de Ativos{% endblock %}
+
+{% block content %}
+<div class="auth-content-area">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <h1 class="auth-title">Redefinir Senha</h1>
+            <p class="auth-subtitle">Este endpoint atualmente não é usado</p>
+        </div>
+        <div class="auth-card-body">
+            <p style="color: var(--text-1);">
+                A redefinição de senha é realizada através de 
+                <a href="{{ url_for('recuperar_senha') }}" class="auth-link">Recuperar Senha</a>.
+            </p>
+        </div>
+        <div class="auth-card-footer">
+            <p><a href="{{ url_for('login') }}" class="auth-link">Voltar para o login</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

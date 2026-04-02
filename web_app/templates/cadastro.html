@@ -1,98 +1,119 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <!-- Define a codificação da página -->
-    <meta charset="UTF-8">
+{% extends 'base.html' %}
 
-    <!-- Ajusta responsividade -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block title %}Cadastro - Sistema de Controle de Ativos{% endblock %}
 
-    <!-- Título da aba -->
-    <title>Cadastro - Sistema de Controle de Ativos</title>
-</head>
-<body>
+{% block content %}
+<div class="auth-content-area">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <h1 class="auth-title">Cadastrar Usuário</h1>
+            <p class="auth-subtitle">Crie sua conta para acessar o sistema</p>
+        </div>
 
-    <!-- Título principal -->
-    <h1>Cadastrar Usuário</h1>
+        <div class="auth-card-body">
+            <!-- Mensagem de erro -->
+            {% if erro %}
+                <div class="flash-message -danger">
+                    <i class="bi bi-exclamation-circle"></i>
+                    {{ erro }}
+                </div>
+            {% endif %}
 
-    <!-- Mensagem de erro -->
-    {% if erro %}
-        <p style="color: red;">{{ erro }}</p>
-    {% endif %}
+            <!-- Formulário de cadastro -->
+            <form method="POST" action="{{ url_for('cadastro_usuario') }}" class="auth-form">
 
-    <!-- Formulário de cadastro -->
-    <form method="POST" action="{{ url_for('cadastro_usuario') }}">
+                <!-- E-mail -->
+                <div class="field-group">
+                    <label for="email" class="field-label">E-mail</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        class="field-input"
+                        value="{{ dados.get('email', '') if dados else '' }}"
+                        required
+                    >
+                </div>
 
-        <!-- E-mail -->
-        <label for="email">E-mail:</label>
-        <input
-            type="email"
-            id="email"
-            name="email"
-            value="{{ dados.get('email', '') if dados else '' }}"
-            required
-        ><br><br>
+                <!-- Empresa -->
+                <div class="field-group">
+                    <label for="empresa_id" class="field-label">Empresa</label>
+                    <select id="empresa_id" name="empresa_id" class="select-control" required>
+                        <option value="">Selecione a empresa</option>
+                        {% for empresa in empresas %}
+                            <option
+                                value="{{ empresa.id }}"
+                                {% if dados and dados.get('empresa_id') == (empresa.id | string) %}selected{% endif %}
+                            >
+                                {{ empresa.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-        <!-- Empresa -->
-        <label for="empresa_id">Empresa:</label>
-        <select id="empresa_id" name="empresa_id" required>
-            <option value="">Selecione a empresa</option>
-            {% for empresa in empresas %}
-                <option
-                    value="{{ empresa.id }}"
-                    {% if dados and dados.get('empresa_id') == (empresa.id | string) %}selected{% endif %}
-                >
-                    {{ empresa.nome }}
-                </option>
-            {% endfor %}
-        </select>
-        <br><br>
+                <!-- Senha -->
+                <div class="field-group">
+                    <label for="senha" class="field-label">Senha</label>
+                    <input
+                        type="password"
+                        id="senha"
+                        name="senha"
+                        class="field-input"
+                        required
+                    >
+                </div>
 
-        <!-- Senha -->
-        <label for="senha">Senha:</label>
-        <input
-            type="password"
-            id="senha"
-            name="senha"
-            required
-        ><br><br>
+                <!-- Confirmação de senha -->
+                <div class="field-group">
+                    <label for="senha_confirmacao" class="field-label">Confirmar Senha</label>
+                    <input
+                        type="password"
+                        id="senha_confirmacao"
+                        name="senha_confirmacao"
+                        class="field-input"
+                        required
+                    >
+                </div>
 
-        <!-- Confirmação de senha -->
-        <label for="senha_confirmacao">Confirmar senha:</label>
-        <input
-            type="password"
-            id="senha_confirmacao"
-            name="senha_confirmacao"
-            required
-        ><br><br>
+                <!-- Pergunta de recuperação -->
+                <div class="field-group">
+                    <label for="pergunta" class="field-label">Pergunta de Recuperação</label>
+                    <input
+                        type="text"
+                        id="pergunta"
+                        name="pergunta"
+                        class="field-input"
+                        placeholder="Ex: Qual é o nome do seu primeiro animal?"
+                        value="{{ dados.get('pergunta', '') if dados else '' }}"
+                        required
+                    >
+                </div>
 
-        <!-- Pergunta de recuperação -->
-        <label for="pergunta">Pergunta de recuperação:</label>
-        <input
-            type="text"
-            id="pergunta"
-            name="pergunta"
-            value="{{ dados.get('pergunta', '') if dados else '' }}"
-            required
-        ><br><br>
+                <!-- Resposta de recuperação -->
+                <div class="field-group">
+                    <label for="resposta" class="field-label">Resposta de Recuperação</label>
+                    <input
+                        type="text"
+                        id="resposta"
+                        name="resposta"
+                        class="field-input"
+                        placeholder="Digite a resposta para sua pergunta"
+                        required
+                    >
+                </div>
 
-        <!-- Resposta de recuperação -->
-        <label for="resposta">Resposta de recuperação:</label>
-        <input
-            type="text"
-            id="resposta"
-            name="resposta"
-            required
-        ><br><br>
+                <!-- Botão de cadastro -->
+                <button type="submit" class="btn -primary" style="width: 100%;">
+                    <i class="bi bi-check-circle"></i>
+                    Cadastrar
+                </button>
+            </form>
+        </div>
 
-        <!-- Botão de cadastro -->
-        <button type="submit">Cadastrar</button>
-    </form>
-
-    <!-- Link de volta -->
-    <p>
-        <a href="{{ url_for('login') }}">Voltar para o login</a>
-    </p>
-
-</body>
-</html>
+        <!-- Link de volta para login -->
+        <div class="auth-card-footer">
+            <p>Já possui uma conta? <a href="{{ url_for('login') }}" class="auth-link">Faça login aqui</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
