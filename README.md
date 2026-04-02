@@ -184,7 +184,7 @@ opus-assets/
 
 ### Implemented Protections
 
-- **Password Hashing**: PBKDF2-SHA256 with salt and application pepper
+- **Password Hashing**: PBKDF2-SHA256 
 - **Recovery Hash**: Security question answers are hashed, never stored in plain text
 - **Session Management**: HTTP-only cookies with SameSite protection
 - **Environment Isolation**: Sensitive configuration in `.env` (not committed to repository)
@@ -256,23 +256,6 @@ For internal team updates:
 
 This software is proprietary and confidential. All rights reserved.
 
----
-
-## 📞 Support
-
-For issues or questions, contact the development team.
-
----
-
-## 🔍 What Changed from Academic Project
-
-- Removed COBIT framework and academic documentation
-- Removed TCC-specific artifacts and evaluations
-- Simplified README to focus on technical implementation
-- Changed naming from "controle_ativos" to "Opus Assets"
-- Added deployment-ready structure
-- Removed sensitive internal migration scripts
-- Focused documentation on operational concerns
 
 ---
 
