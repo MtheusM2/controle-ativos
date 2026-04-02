@@ -116,7 +116,7 @@ git push origin main --force-with-lease
 A senha do banco de dados está **EXPOSTA** no repositório.
 
 ```
-.env contém: DB_PASSWORD=etectcc@2026  ← EU VI ISSO
+.env contém: DB_PASSWORD=<EXPOSTA_ANTERIORMENTE>  ← DADO SENSÍVEL HISTÓRICO
 ```
 
 **Você PRECISA:**

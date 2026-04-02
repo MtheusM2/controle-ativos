@@ -29,11 +29,11 @@ Amanhã:
 
 ```bash
 # Conectar ao MySQL
-mysql -u root -p etectcc@2026
-# (Usar senha atual: etectcc@2026)
+mysql -u root -p
+# (Informar a senha atual quando solicitado)
 
 # Dentro do MySQL:
-ALTER USER 'root'@'localhost' IDENTIFIED BY 'N3w_Secure_P@ss_2024_ChangeMe!';
+ALTER USER 'root'@'localhost' IDENTIFIED BY '<NOVA_SENHA_FORTE>'; 
 FLUSH PRIVILEGES;
 EXIT;
 ```
@@ -62,7 +62,7 @@ code .env
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
-DB_PASSWORD=N3w_Secure_P@ss_2024_ChangeMe!          ← Nova senha aqui
+DB_PASSWORD=<NOVA_SENHA_FORTE>                      ← Nova senha aqui
 DB_NAME=controle_ativos
 FLASK_SECRET_KEY=<novo_secret_gerado_acima>        ← Cola aqui
 APP_PEPPER=<novo_pepper_gerado_acima>              ← Cola aqui

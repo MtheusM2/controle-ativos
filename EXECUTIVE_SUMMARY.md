@@ -22,7 +22,7 @@
 ## 🚨 3 Problemas Críticos
 
 ### 1. SEGURANÇA — Credenciais Expostas
-- `.env` commitado com senha real do banco: `DB_PASSWORD=etectcc@2026`
+- `.env` commitado com senha real do banco: `DB_PASSWORD=<EXPOSTA_ANTERIORMENTE>`
 - **Risco:** Qualquer pessoa com acesso ao repo tem senha do banco
 - **Ação:** Rotacionar credenciais + remover do histórico git
 

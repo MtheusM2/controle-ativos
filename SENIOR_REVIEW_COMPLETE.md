@@ -37,9 +37,9 @@
 **Problema:**
 - `.env` está commitado no repositório com credenciais reais:
   ```
-  DB_PASSWORD=etectcc@2026     ← Exposto
-  FLASK_SECRET_KEY=troque_esta_chave  ← Exposto
-  APP_PEPPER=troque_este_pepper       ← Exposto
+   DB_PASSWORD=<EXPOSTA_ANTERIORMENTE>     ← Exposto
+   FLASK_SECRET_KEY=<EXPOSTA_ANTERIORMENTE>  ← Exposto
+   APP_PEPPER=<EXPOSTO_ANTERIORMENTE>       ← Exposto
   ```
 
 **Impacto:**

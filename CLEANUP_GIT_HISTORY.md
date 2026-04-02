@@ -3,9 +3,9 @@
 ## ⚠️ CRÍTICO: `.env` Foi Commitado com Credenciais
 
 O arquivo `.env` contém:
-- `DB_PASSWORD=etectcc@2026` ← EXPOSTO
-- `FLASK_SECRET_KEY` defaut ← EXPOSTO
-- `APP_PEPPER` ← EXPOSTO
+- `DB_PASSWORD=<EXPOSTA_ANTERIORMENTE>` ← EXPOSTO
+- `FLASK_SECRET_KEY=<EXPOSTA_ANTERIORMENTE>` ← EXPOSTO
+- `APP_PEPPER=<EXPOSTO_ANTERIORMENTE>` ← EXPOSTO
 
 **Qualquer pessoa com acesso ao repositório tem acessado à senha do banco de dados.**
 
