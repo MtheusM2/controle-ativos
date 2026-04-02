@@ -40,6 +40,70 @@ def _obter_user_id_logado() -> int | None:
     return int(user_id)
 
 
+def _coletar_filtros_listagem(args) -> tuple[dict, str, str]:
+    """
+    Normaliza os filtros e a ordenação recebidos pela URL.
+
+    Esta função mantém a rota enxuta e garante que o template receba sempre
+    os mesmos nomes de campos, preservando os valores digitados pelo usuário.
+    """
+    filtros = {
+        "id_ativo": args.get("id_ativo", "").strip() or None,
+        "usuario_responsavel": args.get("usuario_responsavel", "").strip() or None,
+        "departamento": args.get("departamento", "").strip() or None,
+        "nota_fiscal": args.get("nota_fiscal", "").strip() or None,
+        "garantia": args.get("garantia", "").strip() or None,
+        "status": args.get("status", "").strip() or None,
+        "data_entrada_inicial": args.get("data_entrada_inicial", "").strip() or None,
+        "data_entrada_final": args.get("data_entrada_final", "").strip() or None,
+        "data_saida_inicial": args.get("data_saida_inicial", "").strip() or None,
+        "data_saida_final": args.get("data_saida_final", "").strip() or None,
+    }
+
+    ordenar_por = args.get("ordenar_por", "id").strip() or "id"
+    ordem = args.get("ordem", "asc").strip().lower() or "asc"
+
+    return filtros, ordenar_por, ordem
+
+
+def _renderizar_lista_ativos(
+    ativos: list[Ativo],
+    user_id: int,
+    *,
+    arquivo_service_factory,
+    erro: str | None,
+    filtros: dict,
+    ordenar_por: str,
+    ordem: str,
+):
+    """
+    Constrói o contexto visual da listagem de ativos.
+
+    A montagem da contagem de anexos fica aqui para evitar repetição entre
+    a renderização normal e os caminhos de erro.
+    """
+    ativos_dict = [ativo.to_dict() for ativo in ativos]
+
+    if ativos_dict:
+        # Busca a contagem de anexos apenas quando houver ativos para exibir.
+        ativo_ids = [ativo["id_ativo"] for ativo in ativos_dict]
+        contagem_anexos = arquivo_service_factory().contar_por_ativo(ativo_ids, user_id)
+
+        for ativo in ativos_dict:
+            ativo["total_anexos"] = contagem_anexos.get(ativo["id_ativo"], 0)
+
+    return render_template(
+        "ativos.html",
+        ativos=ativos_dict,
+        erro=erro,
+        usuario_email=session.get("user_email"),
+        status_validos=STATUS_VALIDOS,
+        filtros=filtros,
+        ordenar_por=ordenar_por,
+        ordem=ordem,
+    )
+
+
 def registrar_rotas_ativos(app):
     """
     Registra as rotas web relacionadas aos ativos.
@@ -63,22 +127,7 @@ def registrar_rotas_ativos(app):
             return redirect(url_for("login"))
 
         try:
-            # Captura filtros da URL.
-            filtros = {
-                "id_ativo": request.args.get("id_ativo", "").strip() or None,
-                "usuario_responsavel": request.args.get("usuario_responsavel", "").strip() or None,
-                "departamento": request.args.get("departamento", "").strip() or None,
-                "nota_fiscal": request.args.get("nota_fiscal", "").strip() or None,
-                "garantia": request.args.get("garantia", "").strip() or None,
-                "status": request.args.get("status", "").strip() or None,
-                "data_entrada_inicial": request.args.get("data_entrada_inicial", "").strip() or None,
-                "data_entrada_final": request.args.get("data_entrada_final", "").strip() or None,
-                "data_saida_inicial": request.args.get("data_saida_inicial", "").strip() or None,
-                "data_saida_final": request.args.get("data_saida_final", "").strip() or None,
-            }
-
-            ordenar_por = request.args.get("ordenar_por", "id").strip() or "id"
-            ordem = request.args.get("ordem", "asc").strip().lower() or "asc"
+            filtros, ordenar_por, ordem = _coletar_filtros_listagem(request.args)
 
             # Detecta se algum filtro foi realmente enviado.
             ha_filtro = any(valor for valor in filtros.values()) or ordenar_por != "id" or ordem != "asc"
@@ -93,36 +142,38 @@ def registrar_rotas_ativos(app):
             else:
                 ativos = service.listar_ativos(user_id)
 
-            ativos_dict = [ativo.to_dict() for ativo in ativos]
-
-            # Conta anexos por ativo para exibir na listagem.
-            ativo_ids = [ativo["id_ativo"] for ativo in ativos_dict]
-            contagem_anexos = _arquivo_service().contar_por_ativo(ativo_ids, user_id)
-
-            for ativo in ativos_dict:
-                ativo["total_anexos"] = contagem_anexos.get(ativo["id_ativo"], 0)
-
-            return render_template(
-                "ativos.html",
-                ativos=ativos_dict,
+            return _renderizar_lista_ativos(
+                ativos,
+                user_id,
+                arquivo_service_factory=_arquivo_service,
                 erro=None,
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros=request.args,
+                filtros=filtros,
                 ordenar_por=ordenar_por,
-                ordem=ordem
+                ordem=ordem,
             )
 
-        except Exception as erro:
-            return render_template(
-                "ativos.html",
-                ativos=[],
-                erro=f"Erro ao listar ativos: {erro}",
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros=request.args,
-                ordenar_por=request.args.get("ordenar_por", "id"),
-                ordem=request.args.get("ordem", "asc")
+        except AtivoErro as erro:
+            filtros, ordenar_por, ordem = _coletar_filtros_listagem(request.args)
+            return _renderizar_lista_ativos(
+                [],
+                user_id,
+                arquivo_service_factory=_arquivo_service,
+                erro=str(erro),
+                filtros=filtros,
+                ordenar_por=ordenar_por,
+                ordem=ordem,
+            )
+
+        except (ValueError, KeyError, TypeError) as erro:
+            filtros, ordenar_por, ordem = _coletar_filtros_listagem(request.args)
+            return _renderizar_lista_ativos(
+                [],
+                user_id,
+                arquivo_service_factory=_arquivo_service,
+                erro=f"Erro inesperado ao listar ativos: {erro}",
+                filtros=filtros,
+                ordenar_por=ordenar_por,
+                ordem=ordem,
             )
 
     @app.route("/ativos/novo", methods=["GET", "POST"])
@@ -166,7 +217,7 @@ def registrar_rotas_ativos(app):
                     usuario_email=session.get("user_email")
                 )
 
-            except Exception as erro:
+            except (ValueError, KeyError, TypeError) as erro:
                 return render_template(
                     "novo_ativo.html",
                     erro=f"Erro inesperado ao cadastrar ativo: {erro}",
@@ -230,7 +281,7 @@ def registrar_rotas_ativos(app):
                     usuario_email=session.get("user_email")
                 )
 
-            except Exception as erro:
+            except (ValueError, KeyError, TypeError) as erro:
                 arquivos = _arquivo_service().listar_arquivos(id_ativo, user_id)
 
                 return render_template(
@@ -273,7 +324,7 @@ def registrar_rotas_ativos(app):
                 ordem="asc"
             )
 
-        except Exception as erro:
+        except (ValueError, KeyError, TypeError) as erro:
             ativos = service.listar_ativos(user_id)
             ativos_dict = [ativo.to_dict() for ativo in ativos]
 
@@ -315,7 +366,7 @@ def registrar_rotas_ativos(app):
                 ativo = service.buscar_ativo(id_ativo, user_id)
                 dados = ativo.to_dict()
                 arquivos = _arquivo_service().listar_arquivos(id_ativo, user_id)
-            except Exception:
+            except (AtivoErro, AtivoArquivoErro, ValueError, KeyError, TypeError):
                 dados = {}
                 arquivos = []
 
@@ -349,7 +400,7 @@ def registrar_rotas_ativos(app):
                 download_name=arquivo["nome_original"]
             )
 
-        except (AtivoArquivoErro, AtivoErro) as erro:
+        except (AtivoArquivoErro, AtivoErro, FileNotFoundError, OSError, ValueError, KeyError, TypeError) as erro:
             ativos = service.listar_ativos(user_id)
             ativos_dict = [ativo.to_dict() for ativo in ativos]
 
@@ -427,7 +478,7 @@ def registrar_rotas_ativos(app):
                 ordem="asc"
             )
 
-        except Exception as erro:
+        except (ValueError, KeyError, TypeError) as erro:
             ativos = service.listar_ativos(user_id)
             ativos_dict = [ativo.to_dict() for ativo in ativos]
 
