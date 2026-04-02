@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Metadados principais da base do sistema -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema de Controle de Ativos{% endblock %}</title>
+
+    <!-- Bootstrap Icons para padronizar iconografia técnica e corporativa -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    >
+
+    <!-- Folha de estilo global reutilizável da interface Flask/Jinja -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <!-- Bloco opcional para estilos adicionais por template -->
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="app-body">
+    <!-- Define se o layout completo sera exibido sem exigir alteracao nas rotas -->
+    {% set exibir_chrome = show_chrome if show_chrome is defined else (request.endpoint not in ['login', 'cadastro_usuario', 'recuperar_senha', 'redefinir_senha']) %}
+
+    <!-- Camada de textura para o tema premium dark com efeito tecnológico -->
+    <div class="bg-pixel-layer" aria-hidden="true"></div>
+
+    <!-- Container principal da aplicação -->
+    <div class="app-shell {% if not exibir_chrome %}app-shell-auth{% endif %}">
+        {% if exibir_chrome %}
+            <!-- Sidebar fixa para navegação principal do sistema -->
+            {% include 'partials/sidebar.html' %}
+        {% endif %}
+
+        <!-- Área principal com ou sem chrome, mantendo apenas um block content global -->
+        <main class="{% if exibir_chrome %}app-main{% else %}auth-main{% endif %}" role="main">
+            {% if exibir_chrome %}
+                {% include 'partials/topbar.html' %}
+            {% endif %}
+
+            <section class="{% if exibir_chrome %}content-area{% else %}auth-content-area{% endif %}">
+                <!-- Mensagens globais de feedback da aplicação -->
+                {% include 'partials/flash_messages.html' %}
+
+                <!-- Conteúdo específico de cada tela -->
+                {% block content %}{% endblock %}
+            </section>
+        </main>
+    </div>
+
+    <!-- Bloco opcional para scripts específicos de cada template -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

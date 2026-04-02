@@ -1,64 +1,58 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <!-- Define a codificação de caracteres -->
-    <meta charset="UTF-8">
+{% extends 'base.html' %}
 
-    <!-- Ajusta a responsividade da página -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block title %}Login - Sistema de Controle de Ativos{% endblock %}
 
-    <!-- Título exibido na aba do navegador -->
-    <title>Login - Sistema de Controle de Ativos</title>
-</head>
-<body>
+{% block content %}
+    <!-- Card de autenticacao com layout compatível com o fluxo atual de login -->
+    <section class="auth-card panel">
+        <div class="panel-header auth-header">
+            <h2 class="title-section">Acesso Seguro</h2>
+            <p class="text-muted">Autentique-se para acessar o ambiente corporativo de ativos.</p>
+        </div>
 
-    <!-- Título principal da página -->
-    <h1>Login</h1>
+        <div class="panel-body">
+            <form method="POST" action="{{ url_for('login') }}" class="auth-form">
+                <div class="field-group">
+                    <label for="email">E-mail</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        class="input-control"
+                        value="{{ dados.get('email', '') if dados else '' }}"
+                        required
+                    >
+                </div>
 
-    <!-- Exibe mensagem de erro quando houver falha -->
-    {% if erro %}
-        <p style="color: red;">{{ erro }}</p>
-    {% endif %}
+                <div class="field-group">
+                    <label for="senha">Senha</label>
+                    <input
+                        type="password"
+                        id="senha"
+                        name="senha"
+                        class="input-control"
+                        required
+                    >
+                </div>
 
-    <!-- Exibe mensagem de sucesso quando houver ação concluída -->
-    {% if sucesso %}
-        <p style="color: green;">{{ sucesso }}</p>
-    {% endif %}
+                <button type="submit" class="btn btn-primary auth-submit">
+                    <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
+                    <span>Entrar</span>
+                </button>
+            </form>
 
-    <!-- Formulário de login -->
-    <form method="POST" action="{{ url_for('login') }}">
+            <!-- Links auxiliares mantendo os endpoints atuais -->
+            <div class="auth-links">
+                <a href="{{ url_for('cadastro_usuario') }}" class="btn btn-secondary">
+                    <i class="bi bi-person-plus" aria-hidden="true"></i>
+                    <span>Criar conta</span>
+                </a>
 
-        <!-- Campo de e-mail -->
-        <label for="email">E-mail:</label>
-        <input
-            type="email"
-            id="email"
-            name="email"
-            value="{{ dados.get('email', '') if dados else '' }}"
-            required
-        ><br><br>
-
-        <!-- Campo de senha -->
-        <label for="senha">Senha:</label>
-        <input
-            type="password"
-            id="senha"
-            name="senha"
-            required
-        ><br><br>
-
-        <!-- Botão para enviar o formulário -->
-        <button type="submit">Entrar</button>
-    </form>
-
-    <!-- Links auxiliares -->
-    <p>
-        <a href="{{ url_for('cadastro_usuario') }}">Criar conta</a>
-    </p>
-
-    <p>
-        <a href="{{ url_for('recuperar_senha') }}">Esqueci minha senha</a>
-    </p>
-
-</body>
-</html>
+                <a href="{{ url_for('recuperar_senha') }}" class="btn btn-secondary">
+                    <i class="bi bi-key" aria-hidden="true"></i>
+                    <span>Esqueci minha senha</span>
+                </a>
+            </div>
+        </div>
+    </section>
+{% endblock %}

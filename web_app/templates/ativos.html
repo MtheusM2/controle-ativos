@@ -1,209 +1,284 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <!-- Define a codificação de caracteres -->
-    <meta charset="UTF-8">
+{% extends 'base.html' %}
 
-    <!-- Ajusta a responsividade da página -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block title %}Lista de Ativos{% endblock %}
 
-    <!-- Título exibido na aba do navegador -->
-    <title>Lista de Ativos</title>
-</head>
-<body>
+{% block content %}
+    <!-- Cabecalho funcional da tela de ativos com acoes principais -->
+    <section class="page-intro">
+        <div>
+            <h2 class="page-title">Inventário Global de Ativos</h2>
+            <p class="page-subtitle">Gestão técnica de equipamentos, documentação e rastreabilidade operacional.</p>
+        </div>
 
-    <!-- Título principal da página -->
-    <h1>Lista de Ativos</h1>
+        <div class="page-actions">
+            <a href="{{ url_for('criar_ativo') }}" class="btn btn-primary">
+                <i class="bi bi-plus-square" aria-hidden="true"></i>
+                <span>Cadastrar ativo</span>
+            </a>
+        </div>
+    </section>
 
-    <!-- Exibe o usuário autenticado -->
-    <p>Usuário logado: {{ usuario_email }}</p>
+    <!-- Painel de filtros mantendo o mesmo formulario GET e os mesmos campos existentes -->
+    <section class="panel list-panel">
+        <div class="panel-header">
+            <h3 class="title-section">
+                <i class="bi bi-funnel-fill" aria-hidden="true"></i>
+                Filtros e ordenação
+            </h3>
+        </div>
 
-    <!-- Links principais -->
-    <p>
-        <a href="{{ url_for('criar_ativo') }}">Cadastrar novo ativo</a>
-        |
-        <a href="{{ url_for('logout') }}">Logout</a>
-    </p>
+        <div class="panel-body">
+            <form method="GET" action="{{ url_for('listar_ativos') }}" class="filter-grid">
+                <div class="field-group">
+                    <label for="id_ativo">ID</label>
+                    <input
+                        type="text"
+                        id="id_ativo"
+                        name="id_ativo"
+                        class="input-control"
+                        value="{{ filtros.get('id_ativo', '') if filtros else '' }}"
+                    >
+                </div>
 
-    <!-- Mensagem de erro -->
-    {% if erro %}
-        <p style="color: red;">{{ erro }}</p>
-    {% endif %}
+                <div class="field-group">
+                    <label for="usuario_responsavel">Responsável</label>
+                    <input
+                        type="text"
+                        id="usuario_responsavel"
+                        name="usuario_responsavel"
+                        class="input-control"
+                        value="{{ filtros.get('usuario_responsavel', '') if filtros else '' }}"
+                    >
+                </div>
 
-    <h2>Filtros</h2>
+                <div class="field-group">
+                    <label for="departamento">Departamento</label>
+                    <input
+                        type="text"
+                        id="departamento"
+                        name="departamento"
+                        class="input-control"
+                        value="{{ filtros.get('departamento', '') if filtros else '' }}"
+                    >
+                </div>
 
-    <!-- Formulário de filtro via GET -->
-    <form method="GET" action="{{ url_for('listar_ativos') }}">
-        <label for="id_ativo">ID:</label>
-        <input
-            type="text"
-            id="id_ativo"
-            name="id_ativo"
-            value="{{ filtros.get('id_ativo', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="nota_fiscal">Nota Fiscal</label>
+                    <input
+                        type="text"
+                        id="nota_fiscal"
+                        name="nota_fiscal"
+                        class="input-control"
+                        value="{{ filtros.get('nota_fiscal', '') if filtros else '' }}"
+                    >
+                </div>
 
-        <label for="usuario_responsavel">Responsável:</label>
-        <input
-            type="text"
-            id="usuario_responsavel"
-            name="usuario_responsavel"
-            value="{{ filtros.get('usuario_responsavel', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="garantia">Garantia</label>
+                    <input
+                        type="text"
+                        id="garantia"
+                        name="garantia"
+                        class="input-control"
+                        value="{{ filtros.get('garantia', '') if filtros else '' }}"
+                    >
+                </div>
 
-        <label for="departamento">Departamento:</label>
-        <input
-            type="text"
-            id="departamento"
-            name="departamento"
-            value="{{ filtros.get('departamento', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="status">Status</label>
+                    <select id="status" name="status" class="select-control">
+                        <option value="">Todos</option>
+                        {% for status in status_validos %}
+                            <option
+                                value="{{ status }}"
+                                {% if filtros and filtros.get('status') == status %}selected{% endif %}
+                            >
+                                {{ status }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-        <label for="nota_fiscal">Nota Fiscal:</label>
-        <input
-            type="text"
-            id="nota_fiscal"
-            name="nota_fiscal"
-            value="{{ filtros.get('nota_fiscal', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="data_entrada_inicial">Data Entrada Inicial</label>
+                    <input
+                        type="date"
+                        id="data_entrada_inicial"
+                        name="data_entrada_inicial"
+                        class="input-control"
+                        value="{{ filtros.get('data_entrada_inicial', '') if filtros else '' }}"
+                    >
+                </div>
 
-        <label for="garantia">Garantia:</label>
-        <input
-            type="text"
-            id="garantia"
-            name="garantia"
-            value="{{ filtros.get('garantia', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="data_entrada_final">Data Entrada Final</label>
+                    <input
+                        type="date"
+                        id="data_entrada_final"
+                        name="data_entrada_final"
+                        class="input-control"
+                        value="{{ filtros.get('data_entrada_final', '') if filtros else '' }}"
+                    >
+                </div>
 
-        <label for="status">Status:</label>
-        <select id="status" name="status">
-            <option value="">Todos</option>
-            {% for status in status_validos %}
-                <option
-                    value="{{ status }}"
-                    {% if filtros and filtros.get('status') == status %}selected{% endif %}
-                >
-                    {{ status }}
-                </option>
-            {% endfor %}
-        </select>
-        <br><br>
+                <div class="field-group">
+                    <label for="data_saida_inicial">Data Saída Inicial</label>
+                    <input
+                        type="date"
+                        id="data_saida_inicial"
+                        name="data_saida_inicial"
+                        class="input-control"
+                        value="{{ filtros.get('data_saida_inicial', '') if filtros else '' }}"
+                    >
+                </div>
 
-        <label for="data_entrada_inicial">Data Entrada Inicial:</label>
-        <input
-            type="date"
-            id="data_entrada_inicial"
-            name="data_entrada_inicial"
-            value="{{ filtros.get('data_entrada_inicial', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="data_saida_final">Data Saída Final</label>
+                    <input
+                        type="date"
+                        id="data_saida_final"
+                        name="data_saida_final"
+                        class="input-control"
+                        value="{{ filtros.get('data_saida_final', '') if filtros else '' }}"
+                    >
+                </div>
 
-        <label for="data_entrada_final">Data Entrada Final:</label>
-        <input
-            type="date"
-            id="data_entrada_final"
-            name="data_entrada_final"
-            value="{{ filtros.get('data_entrada_final', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="ordenar_por">Ordenar por</label>
+                    <select id="ordenar_por" name="ordenar_por" class="select-control">
+                        <option value="id" {% if ordenar_por == 'id' %}selected{% endif %}>ID</option>
+                        <option value="tipo" {% if ordenar_por == 'tipo' %}selected{% endif %}>Tipo</option>
+                        <option value="marca" {% if ordenar_por == 'marca' %}selected{% endif %}>Marca</option>
+                        <option value="modelo" {% if ordenar_por == 'modelo' %}selected{% endif %}>Modelo</option>
+                        <option value="usuario_responsavel" {% if ordenar_por == 'usuario_responsavel' %}selected{% endif %}>Responsável</option>
+                        <option value="departamento" {% if ordenar_por == 'departamento' %}selected{% endif %}>Departamento</option>
+                        <option value="nota_fiscal" {% if ordenar_por == 'nota_fiscal' %}selected{% endif %}>Nota Fiscal</option>
+                        <option value="garantia" {% if ordenar_por == 'garantia' %}selected{% endif %}>Garantia</option>
+                        <option value="status" {% if ordenar_por == 'status' %}selected{% endif %}>Status</option>
+                        <option value="data_entrada" {% if ordenar_por == 'data_entrada' %}selected{% endif %}>Data Entrada</option>
+                        <option value="data_saida" {% if ordenar_por == 'data_saida' %}selected{% endif %}>Data Saída</option>
+                    </select>
+                </div>
 
-        <label for="data_saida_inicial">Data Saída Inicial:</label>
-        <input
-            type="date"
-            id="data_saida_inicial"
-            name="data_saida_inicial"
-            value="{{ filtros.get('data_saida_inicial', '') if filtros else '' }}"
-        ><br><br>
+                <div class="field-group">
+                    <label for="ordem">Ordem</label>
+                    <select id="ordem" name="ordem" class="select-control">
+                        <option value="asc" {% if ordem == 'asc' %}selected{% endif %}>Crescente</option>
+                        <option value="desc" {% if ordem == 'desc' %}selected{% endif %}>Decrescente</option>
+                    </select>
+                </div>
 
-        <label for="data_saida_final">Data Saída Final:</label>
-        <input
-            type="date"
-            id="data_saida_final"
-            name="data_saida_final"
-            value="{{ filtros.get('data_saida_final', '') if filtros else '' }}"
-        ><br><br>
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-funnel" aria-hidden="true"></i>
+                        <span>Filtrar</span>
+                    </button>
 
-        <label for="ordenar_por">Ordenar por:</label>
-        <select id="ordenar_por" name="ordenar_por">
-            <option value="id" {% if ordenar_por == 'id' %}selected{% endif %}>ID</option>
-            <option value="tipo" {% if ordenar_por == 'tipo' %}selected{% endif %}>Tipo</option>
-            <option value="marca" {% if ordenar_por == 'marca' %}selected{% endif %}>Marca</option>
-            <option value="modelo" {% if ordenar_por == 'modelo' %}selected{% endif %}>Modelo</option>
-            <option value="usuario_responsavel" {% if ordenar_por == 'usuario_responsavel' %}selected{% endif %}>Responsável</option>
-            <option value="departamento" {% if ordenar_por == 'departamento' %}selected{% endif %}>Departamento</option>
-            <option value="nota_fiscal" {% if ordenar_por == 'nota_fiscal' %}selected{% endif %}>Nota Fiscal</option>
-            <option value="garantia" {% if ordenar_por == 'garantia' %}selected{% endif %}>Garantia</option>
-            <option value="status" {% if ordenar_por == 'status' %}selected{% endif %}>Status</option>
-            <option value="data_entrada" {% if ordenar_por == 'data_entrada' %}selected{% endif %}>Data Entrada</option>
-            <option value="data_saida" {% if ordenar_por == 'data_saida' %}selected{% endif %}>Data Saída</option>
-        </select>
-        <br><br>
+                    <a href="{{ url_for('listar_ativos') }}" class="btn btn-secondary">
+                        <i class="bi bi-eraser" aria-hidden="true"></i>
+                        <span>Limpar filtros</span>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </section>
 
-        <label for="ordem">Ordem:</label>
-        <select id="ordem" name="ordem">
-            <option value="asc" {% if ordem == 'asc' %}selected{% endif %}>Crescente</option>
-            <option value="desc" {% if ordem == 'desc' %}selected{% endif %}>Decrescente</option>
-        </select>
-        <br><br>
+    <!-- Tabela de ativos mantendo colunas, dados e acoes existentes -->
+    <section class="panel list-panel table-panel">
+        <div class="panel-header">
+            <h3 class="title-section">
+                <i class="bi bi-hdd-stack" aria-hidden="true"></i>
+                Ativos cadastrados
+            </h3>
+        </div>
 
-        <button type="submit">Filtrar</button>
-        <a href="{{ url_for('listar_ativos') }}">Limpar filtros</a>
-    </form>
+        <div class="panel-body table-wrapper">
+            {% if ativos %}
+                <table class="table-premium">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tipo</th>
+                            <th>Marca</th>
+                            <th>Modelo</th>
+                            <th>Responsável</th>
+                            <th>Departamento</th>
+                            <th>Nota Fiscal</th>
+                            <th>Garantia</th>
+                            <th>Status</th>
+                            <th>Data Entrada</th>
+                            <th>Data Saída</th>
+                            <th>Anexos</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ativo in ativos %}
+                            <tr>
+                                <td class="mono-cell">{{ ativo.id_ativo }}</td>
+                                <td>{{ ativo.tipo }}</td>
+                                <td>{{ ativo.marca }}</td>
+                                <td>{{ ativo.modelo }}</td>
+                                <td>{{ ativo.usuario_responsavel or '' }}</td>
+                                <td>{{ ativo.departamento }}</td>
+                                <td>
+                                    <span class="doc-chip">
+                                        <i class="bi bi-receipt-cutoff" aria-hidden="true"></i>
+                                        <span>{{ ativo.nota_fiscal or '' }}</span>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="doc-chip">
+                                        <i class="bi bi-shield-check" aria-hidden="true"></i>
+                                        <span>{{ ativo.garantia or '' }}</span>
+                                    </span>
+                                </td>
+                                <td>
+                                    {% set status_normalizado = (ativo.status or '')|lower %}
+                                    <span
+                                        class="badge {% if 'uso' in status_normalizado or 'ativo' in status_normalizado %}badge-ok{% elif 'manuten' in status_normalizado %}badge-warning{% else %}badge-danger{% endif %}"
+                                    >
+                                        {{ ativo.status }}
+                                    </span>
+                                </td>
+                                <td>{{ ativo.data_entrada }}</td>
+                                <td>{{ ativo.data_saida or '' }}</td>
+                                <td>
+                                    <span class="badge badge-warning">
+                                        <i class="bi bi-paperclip" aria-hidden="true"></i>
+                                        <span>{{ ativo.total_anexos or 0 }}</span>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="row-actions">
+                                        <a href="{{ url_for('editar_ativo', id_ativo=ativo.id_ativo) }}" class="btn btn-secondary btn-mini">
+                                            <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                            <span>Editar</span>
+                                        </a>
 
-    <hr>
-
-    {% if ativos %}
-        <table border="1" cellpadding="6">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Tipo</th>
-                    <th>Marca</th>
-                    <th>Modelo</th>
-                    <th>Responsável</th>
-                    <th>Departamento</th>
-                    <th>Nota Fiscal</th>
-                    <th>Garantia</th>
-                    <th>Status</th>
-                    <th>Data Entrada</th>
-                    <th>Data Saída</th>
-                    <th>Anexos</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ativo in ativos %}
-                <tr>
-                    <td>{{ ativo.id_ativo }}</td>
-                    <td>{{ ativo.tipo }}</td>
-                    <td>{{ ativo.marca }}</td>
-                    <td>{{ ativo.modelo }}</td>
-                    <td>{{ ativo.usuario_responsavel or '' }}</td>
-                    <td>{{ ativo.departamento }}</td>
-                    <td>{{ ativo.nota_fiscal or '' }}</td>
-                    <td>{{ ativo.garantia or '' }}</td>
-                    <td>{{ ativo.status }}</td>
-                    <td>{{ ativo.data_entrada }}</td>
-                    <td>{{ ativo.data_saida or '' }}</td>
-                    <td>{{ ativo.total_anexos or 0 }}</td>
-                    <td>
-                        <a href="{{ url_for('editar_ativo', id_ativo=ativo.id_ativo) }}">
-                            Editar / Anexos
-                        </a>
-
-                        <form
-                            method="POST"
-                            action="{{ url_for('remover_ativo', id_ativo=ativo.id_ativo) }}"
-                            style="display: inline;"
-                            onsubmit="return confirm('Tem certeza que deseja remover este ativo?');"
-                        >
-                            <button type="submit">Remover</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>Nenhum ativo encontrado.</p>
-    {% endif %}
-
-</body>
-</html>
+                                        <form
+                                            method="POST"
+                                            action="{{ url_for('remover_ativo', id_ativo=ativo.id_ativo) }}"
+                                            class="inline-form"
+                                            onsubmit="return confirm('Tem certeza que deseja remover este ativo?');"
+                                        >
+                                            <button type="submit" class="btn btn-danger btn-mini">
+                                                <i class="bi bi-trash3" aria-hidden="true"></i>
+                                                <span>Remover</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-inbox" aria-hidden="true"></i>
+                    <p>Nenhum ativo encontrado.</p>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+{% endblock %}

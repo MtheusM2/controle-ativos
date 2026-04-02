@@ -1,0 +1,30 @@
+<!-- Bloco de mensagens centralizado para feedback visual reutilizável -->
+<div class="flash-stack" aria-live="polite">
+    <!-- Compatibilidade com mensagens emitidas por flask.flash(...) -->
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% if mensagens %}
+            {% for categoria, mensagem in mensagens %}
+                <div class="flash-message flash-{{ categoria }}">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                    <span>{{ mensagem }}</span>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Compatibilidade com padrão já existente de variável erro -->
+    {% if erro %}
+        <div class="flash-message flash-danger">
+            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+            <span>{{ erro }}</span>
+        </div>
+    {% endif %}
+
+    <!-- Compatibilidade com padrão já existente de variável sucesso -->
+    {% if sucesso %}
+        <div class="flash-message flash-success">
+            <i class="bi bi-check-circle" aria-hidden="true"></i>
+            <span>{{ sucesso }}</span>
+        </div>
+    {% endif %}
+</div>
