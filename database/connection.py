@@ -1,32 +1,11 @@
-# Importa funções para ler variáveis de ambiente.
-import os
-
-# Importa utilitário para trabalhar com caminhos de forma segura.
-from pathlib import Path
-
 # Importa o decorador para criar context managers com "with".
 from contextlib import contextmanager
 
 # Importa o conector do MySQL.
 import mysql.connector
 
-# Importa o carregador de variáveis de ambiente do arquivo .env.
-from dotenv import load_dotenv
-
-
-# =========================
-# CARREGAMENTO DO ARQUIVO .ENV
-# =========================
-# Descobre a pasta raiz do projeto a partir deste arquivo:
-# database/connection.py -> sobe um nível e encontra a raiz do projeto.
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Monta o caminho absoluto do arquivo .env.
-ENV_FILE = BASE_DIR / ".env"
-
-# Carrega o arquivo .env de forma explícita.
-# Isso evita depender do diretório atual do terminal.
-load_dotenv(dotenv_path=ENV_FILE)
+# Importa configurações centralizadas já validadas no startup.
+from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
 
 
 def _db_config(com_database: bool = True) -> dict:
@@ -41,11 +20,12 @@ def _db_config(com_database: bool = True) -> dict:
     Retorno:
     - dicionário com os parâmetros da conexão.
     """
-    host = os.getenv("DB_HOST", "localhost")
-    port = int(os.getenv("DB_PORT", "3306"))
-    user = os.getenv("DB_USER", "root")
-    password = os.getenv("DB_PASSWORD", "")
-    database = os.getenv("DB_NAME", "controle_ativos")
+    # Reutiliza valores centralizados para garantir consistência em toda a app.
+    host = DB_HOST
+    port = DB_PORT
+    user = DB_USER
+    password = DB_PASSWORD
+    database = DB_NAME
 
     cfg = {
         "host": host,
