@@ -651,15 +651,29 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         try:
             ativo = service.buscar_ativo(id_ativo, user_id)
             anexos = arquivo_service.listar_arquivos(id_ativo, user_id)
+            ativo_serializado = _serializar_ativo(ativo)
 
             anexos_nota_fiscal = [a for a in anexos if a.get("tipo_documento") == "nota_fiscal"]
             anexos_garantia = [a for a in anexos if a.get("tipo_documento") == "garantia"]
             anexos_complementares = [a for a in anexos if a.get("tipo_documento") == "outro"]
 
+            # Prioriza documentos realmente vinculados na tabela de anexos.
+            # Mantem fallback para os campos legados do ativo, quando existirem.
+            ativo_serializado["nota_fiscal"] = (
+                anexos_nota_fiscal[0]["nome_original"]
+                if anexos_nota_fiscal
+                else (ativo_serializado.get("nota_fiscal") or "")
+            )
+            ativo_serializado["garantia"] = (
+                anexos_garantia[0]["nome_original"]
+                if anexos_garantia
+                else (ativo_serializado.get("garantia") or "")
+            )
+
             return render_template(
                 "detalhe_ativo.html",
                 usuario_email=session.get("user_email"),
-                ativo=_serializar_ativo(ativo),
+                ativo=ativo_serializado,
                 anexos_nota_fiscal=anexos_nota_fiscal,
                 anexos_garantia=anexos_garantia,
                 anexos_complementares=anexos_complementares,

@@ -21,61 +21,76 @@
         <h3 class="title-section">Dados do ativo</h3>
     </div>
 
-    <div class="panel-body form-grid">
-        <div class="field-group">
-            <label class="field-label">ID</label>
-            <div class="field-display">{{ ativo.id }}</div>
-        </div>
+    <div class="panel-body detail-layout">
+        <article class="detail-card">
+            <h4 class="detail-card-title">Identificação e classificação</h4>
+            <div class="detail-grid">
+                <div class="field-group">
+                    <label class="field-label">ID</label>
+                    <div class="field-display detail-value">{{ ativo.id }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Tipo</label>
-            <div class="field-display">{{ ativo.tipo }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Tipo</label>
+                    <div class="field-display detail-value">{{ ativo.tipo }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Marca</label>
-            <div class="field-display">{{ ativo.marca }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Marca</label>
+                    <div class="field-display detail-value">{{ ativo.marca }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Modelo</label>
-            <div class="field-display">{{ ativo.modelo }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Modelo</label>
+                    <div class="field-display detail-value">{{ ativo.modelo }}</div>
+                </div>
+            </div>
+        </article>
 
-        <div class="field-group">
-            <label class="field-label">Responsavel</label>
-            <div class="field-display">{{ ativo.usuario_responsavel or '-' }}</div>
-        </div>
+        <article class="detail-card">
+            <h4 class="detail-card-title">Responsabilidade e status</h4>
+            <div class="detail-grid">
+                <div class="field-group">
+                    <label class="field-label">Responsavel</label>
+                    <div class="field-display detail-value">{{ ativo.usuario_responsavel or '-' }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Departamento</label>
-            <div class="field-display">{{ ativo.departamento or '-' }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Departamento</label>
+                    <div class="field-display detail-value">{{ ativo.departamento or '-' }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Status</label>
-            <div class="field-display">{{ ativo.status or '-' }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Status</label>
+                    <div class="field-display detail-value">{{ ativo.status or '-' }}</div>
+                </div>
+            </div>
+        </article>
 
-        <div class="field-group">
-            <label class="field-label">Data de entrada</label>
-            <div class="field-display">{{ ativo.data_entrada or '-' }}</div>
-        </div>
+        <article class="detail-card">
+            <h4 class="detail-card-title">Ciclo e vinculos documentais</h4>
+            <div class="detail-grid">
+                <div class="field-group">
+                    <label class="field-label">Data de entrada</label>
+                    <div class="field-display detail-value">{{ ativo.data_entrada or '-' }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Data de saida</label>
-            <div class="field-display">{{ ativo.data_saida or '-' }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Data de saida</label>
+                    <div class="field-display detail-value">{{ ativo.data_saida or '-' }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Nota fiscal vinculada</label>
-            <div class="field-display">{{ ativo.nota_fiscal or '-' }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Nota fiscal vinculada</label>
+                    <div class="field-display detail-value">{{ ativo.nota_fiscal or '-' }}</div>
+                </div>
 
-        <div class="field-group">
-            <label class="field-label">Garantia vinculada</label>
-            <div class="field-display">{{ ativo.garantia or '-' }}</div>
-        </div>
+                <div class="field-group">
+                    <label class="field-label">Garantia vinculada</label>
+                    <div class="field-display detail-value">{{ ativo.garantia or '-' }}</div>
+                </div>
+            </div>
+        </article>
     </div>
 </section>
 
@@ -85,6 +100,11 @@
     </div>
 
     <div class="panel-body">
+        <div class="form-actions attachment-toolbar-inline">
+            <a class="btn btn-secondary" href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos">Adicionar documento</a>
+            <a class="btn btn-secondary" href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos">Gerenciar anexos</a>
+        </div>
+
         <div class="table-wrapper">
             <table class="table-premium table-mini">
                 <thead>

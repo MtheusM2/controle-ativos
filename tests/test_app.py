@@ -45,6 +45,72 @@ def test_asset_details_page_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/detalhes/A-001")
     assert response.status_code == 200
     assert "Documentos vinculados" in response.get_data(as_text=True)
+    assert "nf.pdf" in response.get_data(as_text=True)
+
+
+def test_asset_details_page_shows_garantia_and_complementar_from_attachments():
+    class FakeArquivosDetalhe:
+        upload_base_dir = "."
+
+        def listar_arquivos(self, id_ativo, _user_id):
+            return [
+                {
+                    "id": 11,
+                    "ativo_id": id_ativo,
+                    "tipo_documento": "garantia",
+                    "nome_original": "garantia_produto.pdf",
+                    "tamanho_bytes": 1024,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-06",
+                },
+                {
+                    "id": 12,
+                    "ativo_id": id_ativo,
+                    "tipo_documento": "outro",
+                    "nome_original": "manual_tecnico.pdf",
+                    "tamanho_bytes": 2048,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-06",
+                },
+            ]
+
+        def salvar_arquivo(self, **_kwargs):
+            return 11
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {
+                "caminho_arquivo": "uploads/garantia_produto.pdf",
+                "nome_original": "garantia_produto.pdf",
+                "mime_type": "application/pdf",
+            }
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": FakeArquivosDetalhe(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+        session_data["user_perfil"] = "usuario"
+        session_data["user_empresa_id"] = 10
+        session_data["user_empresa_nome"] = "Empresa Demo"
+
+    response = client.get("/ativos/detalhes/A-001")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "garantia_produto.pdf" in html
+    assert "manual_tecnico.pdf" in html
 
 
 def test_asset_edit_alias_route_authenticated(authenticated_client):
