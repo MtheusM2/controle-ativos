@@ -22,7 +22,8 @@
     </div>
 
     <div class="panel-body">
-        <form id="create-asset-form" class="form-grid">
+        <form id="create-asset-form" class="form-grid asset-form-grid">
+            <div class="form-block-title">Identificação e classificação</div>
             <div class="field-group">
                 <label for="id">ID</label>
                 <input type="text" id="id" name="id" class="input-control" required>
@@ -52,6 +53,8 @@
                 <label for="departamento">Departamento</label>
                 <input type="text" id="departamento" name="departamento" class="input-control" required>
             </div>
+
+            <div class="form-block-title">Status e ciclo de datas</div>
 
             <div class="field-group">
                 <label for="status">Status</label>
@@ -88,10 +91,10 @@
     <div class="panel-body">
         <p class="text-muted" id="documents-caption">Anexe nota fiscal, garantia e documentos complementares do ativo.</p>
 
-        <div class="form-actions">
-            <label class="btn btn-secondary" for="attachment-file">Anexar documento</label>
+        <div class="form-actions attachment-toolbar-inline">
+            <label class="btn btn-secondary" for="attachment-file" id="attachment-upload-trigger">Adicionar documento</label>
             <input type="file" id="attachment-file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp">
-            <select id="attachment-type" class="select-control" style="width: 220px;">
+            <select id="attachment-type" class="select-control attachment-type-select">
                 <option value="nota_fiscal">Nota fiscal</option>
                 <option value="garantia">Garantia</option>
                 <option value="outro">Documento complementar</option>
@@ -110,6 +113,9 @@
     const documentsPanel = document.getElementById("documents-panel");
     const documentsCaption = document.getElementById("documents-caption");
     const attachmentList = document.getElementById("attachment-list");
+    const attachmentFileInput = document.getElementById("attachment-file");
+    const attachmentTypeSelect = document.getElementById("attachment-type");
+    const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
 
     let currentAssetId = null;
 
@@ -126,10 +132,18 @@
         assetFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${message}</span></div>`;
     }
 
+    function setAttachmentLoading(message = "Carregando documentos...") {
+        attachmentList.innerHTML = `<p>${message}</p>`;
+    }
+
     async function parseJsonSafely(response) {
         const contentType = response.headers.get("content-type") || "";
         if (!contentType.includes("application/json")) return null;
-        return response.json();
+        try {
+            return await response.json();
+        } catch (_error) {
+            return null;
+        }
     }
 
     function parsePositiveIntId(rawValue) {
@@ -179,19 +193,22 @@
         const listUrl = buildAssetAttachmentsUrl(currentAssetId);
         if (!listUrl) return;
 
-        const { response, payload } = await requestJson(listUrl, { method: "GET" });
-        if (!response.ok) {
-            attachmentList.innerHTML = "<p>Não foi possível carregar os documentos.</p>";
-            return;
-        }
+        setAttachmentLoading();
 
-        const attachments = payload.anexos || [];
-        if (!attachments.length) {
-            attachmentList.innerHTML = "<p>Nenhum documento vinculado ao ativo.</p>";
-            return;
-        }
+        try {
+            const { response, payload } = await requestJson(listUrl, { method: "GET" });
+            if (!response.ok) {
+                attachmentList.innerHTML = `<p>${payload?.erro || "Não foi possível carregar os documentos."}</p>`;
+                return;
+            }
 
-        attachmentList.innerHTML = `
+            const attachments = Array.isArray(payload?.anexos) ? payload.anexos : [];
+            if (!attachments.length) {
+                attachmentList.innerHTML = "<p>Nenhum documento vinculado ao ativo.</p>";
+                return;
+            }
+
+            attachmentList.innerHTML = `
             <table class="table-premium table-mini">
                 <thead>
                     <tr>
@@ -216,6 +233,10 @@
                 </tbody>
             </table>
         `;
+        } catch (error) {
+            console.error("Falha ao carregar documentos do ativo:", error);
+            attachmentList.innerHTML = "<p>Falha ao carregar documentos. Tente novamente.</p>";
+        }
     }
 
     createAssetForm.addEventListener("submit", async (event) => {
@@ -238,6 +259,7 @@
         document.getElementById("id").readOnly = true;
 
         showMessage("success", payload?.mensagem || "Ativo cadastrado com sucesso.");
+        setAttachmentLoading();
         await loadAttachments();
     });
 
@@ -267,7 +289,7 @@
         }
     });
 
-    document.getElementById("attachment-file").addEventListener("change", async (event) => {
+    attachmentFileInput.addEventListener("change", async (event) => {
         const file = event.target.files[0];
         if (!file || !currentAssetId) return;
 
@@ -276,18 +298,29 @@
 
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("type", document.getElementById("attachment-type").value);
+        formData.append("type", attachmentTypeSelect.value);
 
-        const response = await fetch(uploadUrl, { method: "POST", body: formData });
-        const payload = await parseJsonSafely(response);
-        if (!response.ok) {
-            showMessage("danger", payload?.erro || "Não foi possível anexar o documento.");
-            return;
+        try {
+            attachmentUploadTrigger.classList.add("is-loading");
+            attachmentUploadTrigger.style.pointerEvents = "none";
+
+            const response = await fetch(uploadUrl, { method: "POST", body: formData });
+            const payload = await parseJsonSafely(response);
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível anexar o documento.");
+                return;
+            }
+
+            showMessage("success", "Documento anexado com sucesso.");
+            await loadAttachments();
+        } catch (error) {
+            console.error("Falha no upload de documento:", error);
+            showMessage("danger", "Falha de comunicação ao anexar documento.");
+        } finally {
+            event.target.value = "";
+            attachmentUploadTrigger.classList.remove("is-loading");
+            attachmentUploadTrigger.style.pointerEvents = "";
         }
-
-        showMessage("success", "Documento anexado com sucesso.");
-        event.target.value = "";
-        await loadAttachments();
     });
 </script>
 {% endblock %}

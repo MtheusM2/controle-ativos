@@ -77,6 +77,67 @@ def test_attachment_route_authenticated(authenticated_client):
     assert payload["anexos"]
 
 
+def test_attachment_upload_without_file_returns_400(authenticated_client):
+    response = authenticated_client.post(
+        "/ativos/A-001/anexos",
+        data={"type": "nota_fiscal"},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["ok"] is False
+
+
+def test_attachment_upload_invalid_type_returns_400():
+    class FakeArquivosComValidacao:
+        upload_base_dir = "."
+
+        def salvar_arquivo(self, **kwargs):
+            if kwargs.get("tipo_documento") not in {"nota_fiscal", "garantia", "outro"}:
+                from services.ativos_arquivo_service import TipoDocumentoInvalido
+
+                raise TipoDocumentoInvalido("Tipo de documento inválido.")
+            return 1
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            return []
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from io import BytesIO
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": FakeArquivosComValidacao(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/A-001/anexos",
+        data={
+            "type": "nao_permitido",
+            "file": (BytesIO(b"abc"), "teste.pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["ok"] is False
+
+
 def test_export_json_route_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/export/json")
     assert response.status_code == 200

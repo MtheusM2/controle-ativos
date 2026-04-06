@@ -612,12 +612,38 @@ body.app-body {
     gap: 12px;
 }
 
+.asset-form-grid {
+    gap: 14px;
+}
+
+.form-block-title {
+    grid-column: 1 / -1;
+    margin: 4px 0 0;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line-soft);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-1);
+    font-size: 0.74rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
 .form-actions {
     grid-column: 1 / -1;
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
     padding-top: 6px;
+}
+
+.attachment-toolbar-inline {
+    align-items: center;
+    gap: 12px;
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px dashed var(--line-soft);
 }
 
 .upload-grid {
@@ -669,6 +695,11 @@ body.app-body {
     backdrop-filter: blur(4px);
 }
 
+/* Garante fechamento real do modal quando o atributo hidden estiver ativo. */
+.modal[hidden] {
+    display: none !important;
+}
+
 .modal-content {
     width: min(960px, 100%);
     border: 1px solid var(--line-soft);
@@ -705,6 +736,52 @@ body.app-body {
 .modal-footer {
     border-top: 1px solid var(--line-soft);
     border-bottom: none;
+}
+
+.attachment-footer {
+    justify-content: flex-start;
+}
+
+.attachment-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.attachment-type-select {
+    width: 240px;
+    max-width: 100%;
+}
+
+#attachment-list {
+    min-height: 76px;
+}
+
+#attachment-list p {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 0.84rem;
+}
+
+#attachment-list .table-mini {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#attachment-list .table-mini th,
+#attachment-list .table-mini td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+}
+
+#attachment-list .table-mini th {
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.7rem;
 }
 
 .modal-grid {

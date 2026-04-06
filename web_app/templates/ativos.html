@@ -177,14 +177,16 @@
             </div>
         </div>
 
-        <div class="modal-footer">
-            <label class="btn btn-secondary" for="attachment-file">Anexar documento</label>
-            <input type="file" id="attachment-file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp">
-            <select id="attachment-type" class="select-control" style="width: 220px;">
-                <option value="nota_fiscal">Nota fiscal</option>
-                <option value="garantia">Garantia</option>
-                <option value="outro">Documento complementar</option>
-            </select>
+        <div class="modal-footer attachment-footer">
+            <div class="attachment-toolbar">
+                <label class="btn btn-secondary" for="attachment-file" id="attachment-upload-trigger">Anexar documento</label>
+                <input type="file" id="attachment-file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp">
+                <select id="attachment-type" class="select-control attachment-type-select">
+                    <option value="nota_fiscal">Nota fiscal</option>
+                    <option value="garantia">Garantia</option>
+                    <option value="outro">Documento complementar</option>
+                </select>
+            </div>
         </div>
     </div>
 </div>
@@ -194,6 +196,11 @@
 <script>
     const assetTableBody = document.getElementById("asset-table-body");
     const assetsFeedback = document.getElementById("assets-feedback");
+    const attachmentModal = document.getElementById("attachment-modal");
+    const attachmentList = document.getElementById("attachment-list");
+    const attachmentFileInput = document.getElementById("attachment-file");
+    const attachmentTypeSelect = document.getElementById("attachment-type");
+    const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
 
     let currentFilters = {};
     let currentAttachmentAssetId = null;
@@ -215,6 +222,17 @@
     function clearMessage() {
         assetsFeedback.hidden = true;
         assetsFeedback.innerHTML = "";
+    }
+
+    function setAttachmentLoading(message = "Carregando anexos...") {
+        attachmentList.innerHTML = `<p>${message}</p>`;
+    }
+
+    function resetAttachmentModalState() {
+        currentAttachmentAssetId = null;
+        attachmentFileInput.value = "";
+        attachmentTypeSelect.value = "nota_fiscal";
+        setAttachmentLoading("Selecione um ativo para visualizar anexos.");
     }
 
     function parsePositiveIntId(rawValue) {
@@ -248,7 +266,11 @@
     async function parseJsonSafely(response) {
         const contentType = response.headers.get("content-type") || "";
         if (!contentType.includes("application/json")) return null;
-        return response.json();
+        try {
+            return await response.json();
+        } catch (_error) {
+            return null;
+        }
     }
 
     async function requestJson(url, options = {}) {
@@ -339,11 +361,19 @@
     }
 
     function openModal(id) {
-        document.getElementById(id).hidden = false;
+        const modal = document.getElementById(id);
+        if (!modal) return;
+        modal.hidden = false;
     }
 
     function closeModal(id) {
-        document.getElementById(id).hidden = true;
+        const modal = document.getElementById(id);
+        if (!modal) return;
+        modal.hidden = true;
+
+        if (id === "attachment-modal") {
+            resetAttachmentModalState();
+        }
     }
 
     document.getElementById("open-filter-modal").addEventListener("click", () => openModal("filter-modal"));
@@ -351,6 +381,20 @@
 
     document.querySelectorAll("[data-close-modal]").forEach((button) => {
         button.addEventListener("click", () => closeModal(button.getAttribute("data-close-modal")));
+    });
+
+    // Fecha modal por clique fora do conteúdo para manter UX consistente.
+    document.querySelectorAll(".modal").forEach((modal) => {
+        modal.addEventListener("click", (event) => {
+            if (event.target === modal) closeModal(modal.id);
+        });
+    });
+
+    // Fecha modal por tecla ESC sem afetar fluxo principal.
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        const openedModal = document.querySelector(".modal:not([hidden])");
+        if (openedModal) closeModal(openedModal.id);
     });
 
     document.getElementById("apply-filters").addEventListener("click", async () => {
@@ -363,19 +407,12 @@
         await loadAssets({});
     });
 
-    // Mantém UX de exportação com fallback automático para CSV onde o backend ainda não gera o formato.
     document.querySelectorAll("[data-export-format]").forEach((button) => {
         button.addEventListener("click", () => {
             const format = button.getAttribute("data-export-format");
             const queryString = buildQueryString(currentFilters);
-            let chosenFormat = format;
 
-            if (format === "xlsx" || format === "pdf") {
-                showMessage("info", `Formato ${format.toUpperCase()} ainda não está implementado no backend. Exportação em CSV foi aplicada.`);
-                chosenFormat = "csv";
-            }
-
-            const exportUrl = "{{ url_for('exportar_ativos', formato='csv') }}".replace("/csv", `/${chosenFormat}`);
+            const exportUrl = "{{ url_for('exportar_ativos', formato='csv') }}".replace("/csv", `/${format}`);
             window.location.href = exportUrl + queryString;
             closeModal("export-modal");
         });
@@ -385,22 +422,26 @@
         const listUrl = buildAssetAttachmentsUrl(assetId);
         if (!listUrl) {
             showMessage("danger", "ID do ativo inválido para listagem de anexos.");
+            attachmentList.innerHTML = "<p>Não foi possível carregar os anexos para este ativo.</p>";
             return;
         }
 
-        const { response, payload } = await requestJson(listUrl, { method: "GET" });
-        if (!response.ok) {
-            document.getElementById("attachment-list").innerHTML = "<p>Não foi possível carregar os anexos.</p>";
-            return;
-        }
+        setAttachmentLoading();
 
-        const attachments = payload.anexos || [];
-        if (!attachments.length) {
-            document.getElementById("attachment-list").innerHTML = "<p>Nenhum documento vinculado ao ativo.</p>";
-            return;
-        }
+        try {
+            const { response, payload } = await requestJson(listUrl, { method: "GET" });
+            if (!response.ok) {
+                attachmentList.innerHTML = `<p>${payload?.erro || "Não foi possível carregar os anexos."}</p>`;
+                return;
+            }
 
-        document.getElementById("attachment-list").innerHTML = `
+            const attachments = Array.isArray(payload?.anexos) ? payload.anexos : [];
+            if (!attachments.length) {
+                attachmentList.innerHTML = "<p>Nenhum documento vinculado ao ativo.</p>";
+                return;
+            }
+
+            attachmentList.innerHTML = `
             <table class="table-mini">
                 <thead>
                     <tr>
@@ -425,6 +466,10 @@
                 </tbody>
             </table>
         `;
+        } catch (error) {
+            console.error("Falha ao carregar anexos:", error);
+            attachmentList.innerHTML = "<p>Não foi possível carregar os anexos no momento. Tente novamente.</p>";
+        }
     }
 
     assetTableBody.addEventListener("click", async (event) => {
@@ -450,11 +495,12 @@
             currentAttachmentAssetId = attachmentsButton.getAttribute("data-attachments");
             document.getElementById("attachment-modal-title").textContent = `Documentos do ativo ${currentAttachmentAssetId}`;
             openModal("attachment-modal");
+            setAttachmentLoading();
             await loadAttachments(currentAttachmentAssetId);
         }
     });
 
-    document.getElementById("attachment-list").addEventListener("click", async (event) => {
+    attachmentList.addEventListener("click", async (event) => {
         const downloadButton = event.target.closest("[data-download]");
         const deleteAttachmentButton = event.target.closest("[data-delete-attachment]");
 
@@ -488,7 +534,7 @@
         }
     });
 
-    document.getElementById("attachment-file").addEventListener("change", async (event) => {
+    attachmentFileInput.addEventListener("change", async (event) => {
         const file = event.target.files[0];
         if (!file || !currentAttachmentAssetId) return;
 
@@ -500,20 +546,32 @@
 
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("type", document.getElementById("attachment-type").value);
+        formData.append("type", attachmentTypeSelect.value);
 
-        const response = await fetch(uploadUrl, { method: "POST", body: formData });
-        const payload = await parseJsonSafely(response);
-        if (!response.ok) {
-            showMessage("danger", payload?.erro || "Não foi possível enviar o documento.");
-            return;
+        try {
+            attachmentUploadTrigger.classList.add("is-loading");
+            attachmentUploadTrigger.style.pointerEvents = "none";
+
+            const response = await fetch(uploadUrl, { method: "POST", body: formData });
+            const payload = await parseJsonSafely(response);
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível enviar o documento.");
+                return;
+            }
+
+            showMessage("success", "Documento anexado com sucesso.");
+            await loadAttachments(currentAttachmentAssetId);
+        } catch (error) {
+            console.error("Falha no upload de anexo:", error);
+            showMessage("danger", "Falha de comunicação ao enviar documento.");
+        } finally {
+            event.target.value = "";
+            attachmentUploadTrigger.classList.remove("is-loading");
+            attachmentUploadTrigger.style.pointerEvents = "";
         }
-
-        showMessage("success", "Documento anexado com sucesso.");
-        event.target.value = "";
-        await loadAttachments(currentAttachmentAssetId);
     });
 
+    resetAttachmentModalState();
     loadAssets();
 </script>
 {% endblock %}
