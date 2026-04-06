@@ -1151,11 +1151,11 @@ body.app-body {
 }
 
 .table-aligned col.col-attachments {
-    width: 90px;
+    width: 154px;
 }
 
 .table-aligned col.col-actions {
-    width: 240px;
+    width: 300px;
 }
 
 .table-premium th,
@@ -1207,7 +1207,51 @@ body.app-body {
     align-items: center;
     gap: 8px;
     justify-content: flex-end;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+}
+
+/* Mantem consistencia da coluna de documentos e acoes em tabelas de ativos. */
+.table-aligned td.attachment-cell {
+    text-align: center;
+    overflow: visible;
+    white-space: normal;
+}
+
+.table-aligned td.action-cell {
+    text-align: right;
+    overflow: visible;
+    white-space: normal;
+}
+
+.table-aligned td.action-cell .row-actions {
+    justify-content: flex-end;
+}
+
+.table-aligned td.attachment-cell .btn-mini {
+    width: 100%;
+    min-width: 124px;
+    max-width: 100%;
+}
+
+.table-assets-main th:nth-child(10),
+.table-assets-main td:nth-child(10) {
+    text-align: center;
+}
+
+.table-assets-main th:nth-child(11),
+.table-assets-main td:nth-child(11) {
+    text-align: right;
+}
+
+/* Blocos da tela de configuracoes com leitura limpa em desktop e mobile. */
+.settings-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.settings-toggle-group {
+    grid-column: 1 / -1;
 }
 
 .inline-form {
@@ -1217,6 +1261,7 @@ body.app-body {
 .btn-mini {
     padding: 7px 10px;
     font-size: 0.68rem;
+    white-space: nowrap;
 }
 
 .empty-state {
@@ -1274,6 +1319,10 @@ body.app-body {
 
     .asset-section-grid,
     .detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-summary-grid {
         grid-template-columns: 1fr;
     }
 }

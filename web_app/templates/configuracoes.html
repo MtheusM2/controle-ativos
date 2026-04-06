@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Configurações - Sistema de Controle de Ativos{% endblock %}
+
+{% block content %}
+<section class="page-intro">
+    <div>
+        <h2 class="page-title">Configurações da Conta</h2>
+        <p class="page-subtitle">Gerencie perfil, segurança e preferências de sessão.</p>
+    </div>
+</section>
+
+<section class="panel form-panel">
+    <div class="panel-header panel-header-split">
+        <h3 class="title-section">Resumo do Usuário</h3>
+    </div>
+
+    <div class="panel-body settings-summary-grid">
+        <article class="detail-card">
+            <h4 class="detail-card-title">Identidade</h4>
+            <div class="detail-grid">
+                <div class="field-group">
+                    <label class="field-label">Nome</label>
+                    <div class="field-display detail-value">{{ usuario.nome }}</div>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">E-mail</label>
+                    <div class="field-display detail-value">{{ usuario.email }}</div>
+                </div>
+            </div>
+        </article>
+
+        <article class="detail-card">
+            <h4 class="detail-card-title">Acesso</h4>
+            <div class="detail-grid">
+                <div class="field-group">
+                    <label class="field-label">Perfil</label>
+                    <div class="field-display detail-value">{{ usuario.perfil }}</div>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Empresa</label>
+                    <div class="field-display detail-value">{{ usuario.empresa_nome }}</div>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="panel form-panel">
+    <div class="panel-header panel-header-split">
+        <h3 class="title-section">Dados de Perfil</h3>
+    </div>
+
+    <div class="panel-body">
+        <form method="POST" action="{{ url_for('atualizar_configuracoes_perfil') }}" class="form-grid">
+            <div class="field-group">
+                <label for="nome">Nome</label>
+                <input
+                    id="nome"
+                    name="nome"
+                    class="input-control"
+                    value="{{ usuario.nome }}"
+                    {% if not usuario.suporta_nome %}readonly{% endif %}
+                    required
+                >
+            </div>
+
+            <div class="field-group">
+                <label for="email">E-mail</label>
+                <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    class="input-control"
+                    value="{{ usuario.email }}"
+                    {% if not is_admin %}readonly{% endif %}
+                    required
+                >
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Salvar perfil</button>
+            </div>
+
+            {% if not usuario.suporta_nome %}
+            <p class="text-muted">A alteração de nome exige atualização de banco com a migration 004.</p>
+            {% endif %}
+
+            {% if not is_admin %}
+            <p class="text-muted">Somente administradores podem alterar o e-mail da conta.</p>
+            {% endif %}
+        </form>
+    </div>
+</section>
+
+<section class="panel form-panel">
+    <div class="panel-header panel-header-split">
+        <h3 class="title-section">Segurança</h3>
+    </div>
+
+    <div class="panel-body">
+        <form method="POST" action="{{ url_for('atualizar_configuracoes_senha') }}" class="form-grid">
+            <div class="field-group">
+                <label for="senha_atual">Senha atual</label>
+                <input id="senha_atual" name="senha_atual" type="password" class="input-control" required>
+            </div>
+
+            <div class="field-group">
+                <label for="nova_senha">Nova senha</label>
+                <input id="nova_senha" name="nova_senha" type="password" class="input-control" required>
+            </div>
+
+            <div class="field-group">
+                <label for="confirmar_nova_senha">Confirmar nova senha</label>
+                <input id="confirmar_nova_senha" name="confirmar_nova_senha" type="password" class="input-control" required>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Atualizar senha</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="panel form-panel">
+    <div class="panel-header panel-header-split">
+        <h3 class="title-section">Login Contínuo</h3>
+    </div>
+
+    <div class="panel-body">
+        <form method="POST" action="{{ url_for('atualizar_preferencia_lembrar_me') }}" class="form-grid">
+            <div class="field-group settings-toggle-group">
+                <label class="auth-check" for="lembrar_me_ativo">
+                    <input
+                        id="lembrar_me_ativo"
+                        name="lembrar_me_ativo"
+                        type="checkbox"
+                        value="1"
+                        {% if not usuario.suporta_lembrar_me %}disabled{% endif %}
+                        {% if usuario.lembrar_me_ativo %}checked{% endif %}
+                    >
+                    <span>Manter login contínuo e e-mail preenchido na próxima visita</span>
+                </label>
+            </div>
+
+            <div class="form-actions">
+                {% if not usuario.suporta_lembrar_me %}
+                <button type="submit" class="btn btn-primary" disabled>Salvar preferência</button>
+                {% else %}
+                <button type="submit" class="btn btn-primary">Salvar preferência</button>
+                {% endif %}
+            </div>
+
+            {% if not usuario.suporta_lembrar_me %}
+            <p class="text-muted">A preferência de login contínuo exige atualização de banco com a migration 004.</p>
+            {% endif %}
+        </form>
+    </div>
+</section>
+
+{% if is_admin %}
+<section class="panel form-panel">
+    <div class="panel-header panel-header-split">
+        <h3 class="title-section">Área Administrativa</h3>
+    </div>
+
+    <div class="panel-body">
+        <p class="intro-text">Seu perfil possui escopo administrativo global. Nesta base inicial, você já pode alterar e-mail próprio e visualizar ativos de qualquer empresa/domínio.</p>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

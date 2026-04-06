@@ -15,18 +15,23 @@ class Usuario:
         self,
         id,
         email,
+        nome,
         senha_hash,
         pergunta_recuperacao,
         resposta_recuperacao_hash,
         perfil="usuario",
         empresa_id=None,
-        empresa_nome=None
+        empresa_nome=None,
+        lembrar_me_ativo=False,
     ):
         # Identificador interno do usuário.
         self.id = id
 
         # E-mail de login do usuário.
         self.email = email
+
+        # Nome de exibição para perfil e configurações.
+        self.nome = nome
 
         # Hash da senha.
         self.senha_hash = senha_hash
@@ -48,3 +53,6 @@ class Usuario:
 
         # Nome da empresa para exibição na interface.
         self.empresa_nome = empresa_nome
+
+        # Preferência persistente de sessão prolongada (lembrar de mim).
+        self.lembrar_me_ativo = bool(lembrar_me_ativo)

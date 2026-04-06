@@ -153,6 +153,10 @@ def test_login_with_remember_me_sets_permanent_session(http_client):
     with http_client.session_transaction() as session_data:
         assert session_data.permanent is True
 
+    set_cookie = " ".join(response.headers.getlist("Set-Cookie"))
+    assert "remember_active=1" in set_cookie
+    assert "remember_email=" in set_cookie
+
 
 def test_login_without_remember_me_keeps_default_session(http_client):
     response = http_client.post(
@@ -165,6 +169,37 @@ def test_login_without_remember_me_keeps_default_session(http_client):
         assert session_data.permanent is False
 
 
+def test_login_remember_me_still_works_when_db_is_legacy():
+    from tests.conftest import FakeArquivosService, FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    class LegacyRememberAuthService(FakeAuthService):
+        def atualizar_preferencia_lembrar_me(self, _user_id: int, _ativo: bool):
+            from services.auth_service import AuthErro
+
+            raise AuthErro("A preferencia 'lembrar de mim' requer atualizacao de banco (migration 004).")
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": LegacyRememberAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+
+    response = client.post(
+        "/login",
+        json={"email": "user@example.com", "senha": "secret", "lembrar_me": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert "migration 004" in (payload.get("aviso") or "")
+
+
 def test_login_page_available(http_client):
     response = http_client.get("/login")
     assert response.status_code == 200
@@ -172,6 +207,103 @@ def test_login_page_available(http_client):
     assert "Acesso ao Sistema" in html
     assert "mostrar-senha" in html
     assert "lembrar_me" in html
+
+
+def test_login_page_prefills_email_when_remember_cookie_is_active(http_client):
+    http_client.set_cookie("remember_active", "1")
+    http_client.set_cookie("remember_email", "remembered@example.com")
+
+    response = http_client.get("/login")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "remembered@example.com" in html
+    assert "checked disabled" in html
+
+
+def test_settings_page_authenticated(authenticated_client):
+    response = authenticated_client.get("/configuracoes")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Configurações da Conta" in html
+    assert "Dados de Perfil" in html
+
+
+def test_settings_user_cannot_change_email(authenticated_client):
+    response = authenticated_client.post(
+        "/configuracoes/perfil",
+        data={"nome": "Novo Nome", "email": "novo-email@example.com"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Apenas administradores podem alterar o e-mail." in html
+
+
+def test_settings_user_can_change_name(authenticated_client):
+    response = authenticated_client.post(
+        "/configuracoes/perfil",
+        data={"nome": "Nome Atualizado", "email": "user@example.com"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "Perfil atualizado com sucesso." in response.get_data(as_text=True)
+
+
+def test_settings_admin_can_change_email():
+    from tests.conftest import FakeArquivosService, FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    auth = FakeAuthService()
+    auth.user_data["perfil"] = "admin"
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": auth,
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+        session_data["user_perfil"] = "admin"
+        session_data["user_empresa_id"] = 10
+        session_data["user_empresa_nome"] = "Empresa Demo"
+
+    response = client.post(
+        "/configuracoes/perfil",
+        data={"nome": "Admin", "email": "admin@empresa.com"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "Perfil atualizado com sucesso." in response.get_data(as_text=True)
+
+
+def test_settings_can_disable_remember_me(authenticated_client):
+    response = authenticated_client.post(
+        "/configuracoes/lembrar-me",
+        data={},
+        follow_redirects=False,
+    )
+    assert response.status_code in {301, 302}
+    set_cookie = " ".join(response.headers.getlist("Set-Cookie"))
+    assert "remember_active=;" in set_cookie
+
+
+def test_settings_can_change_password(authenticated_client):
+    response = authenticated_client.post(
+        "/configuracoes/senha",
+        data={
+            "senha_atual": "secret",
+            "nova_senha": "secretNova123",
+            "confirmar_nova_senha": "secretNova123",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "Senha atualizada com sucesso." in response.get_data(as_text=True)
 
 
 def test_dashboard_requires_authentication(http_client):

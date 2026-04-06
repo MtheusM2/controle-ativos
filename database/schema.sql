@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS empresas (
 -- =========================================================
 CREATE TABLE IF NOT EXISTS usuarios (
     id INT NOT NULL AUTO_INCREMENT,
+    nome VARCHAR(120) NOT NULL,
     email VARCHAR(255) NOT NULL,
     senha_hash VARCHAR(512) NOT NULL,
     pergunta_recuperacao VARCHAR(255) NOT NULL,
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     reset_token_usado_em TIMESTAMP NULL DEFAULT NULL,
     perfil VARCHAR(20) NOT NULL DEFAULT 'usuario',
     empresa_id INT NOT NULL,
+    lembrar_me_ativo TINYINT(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
     UNIQUE KEY uk_usuarios_email (email),
     KEY idx_usuarios_perfil (perfil),

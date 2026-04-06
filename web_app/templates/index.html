@@ -43,10 +43,22 @@
                 </label>
 
                 <label class="auth-check" for="lembrar-me">
-                    <input type="checkbox" id="lembrar-me" name="lembrar_me" value="1">
+                    <input
+                        type="checkbox"
+                        id="lembrar-me"
+                        name="lembrar_me"
+                        value="1"
+                        {% if remember_enabled %}checked disabled{% endif %}
+                    >
                     <span>Lembre de mim</span>
                 </label>
             </div>
+
+            {% if remember_enabled %}
+            <!-- Mantem a flag ativa quando a preferencia ja foi definida nas configuracoes. -->
+            <input type="hidden" name="lembrar_me" value="1">
+            <p class="text-muted">Login contínuo ativo. Para desativar, acesse Configurações após entrar.</p>
+            {% endif %}
 
             <button type="submit" class="btn btn-primary auth-submit">
                 Entrar

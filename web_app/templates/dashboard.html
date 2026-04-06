@@ -112,7 +112,7 @@
                     <td>{{ ativo.modelo }}</td>
                     <td>{{ ativo.status }}</td>
                     <td>{{ ativo.data_entrada }}</td>
-                    <td>
+                    <td class="action-cell">
                         <div class="row-actions">
                             <a href="{{ url_for('detalhar_ativo_html', id_ativo=ativo.id) }}" class="btn btn-secondary btn-mini">Ver</a>
                             <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}" class="btn btn-secondary btn-mini">Editar</a>

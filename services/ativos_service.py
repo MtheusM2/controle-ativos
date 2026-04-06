@@ -144,7 +144,8 @@ class AtivosService:
         """
         Indica se o usuário possui perfil administrativo.
         """
-        return (contexto.get("perfil") or "").strip().lower() == "adm"
+        # Aceita perfis administrativo legado e novo para evolucao sem quebra.
+        return (contexto.get("perfil") or "").strip().lower() in {"adm", "admin"}
 
     def criar_ativo(self, ativo: Ativo, user_id: int) -> None:
         """

@@ -25,16 +25,72 @@ from web_app.app import create_app
 
 
 class FakeAuthService:
+    def __init__(self):
+        self.user_data = {
+            "id": 1,
+            "nome": "Usuario Demo",
+            "email": "user@example.com",
+            "perfil": "usuario",
+            "empresa_id": 10,
+            "empresa_nome": "Empresa Demo",
+            "lembrar_me_ativo": False,
+            "senha": "secret",
+        }
+
     def autenticar(self, email: str, senha: str):
-        if email != "user@example.com" or senha != "secret":
+        if email != self.user_data["email"] or senha != self.user_data["senha"]:
             from services.auth_service import CredenciaisInvalidas
 
             raise CredenciaisInvalidas("E-mail ou senha invalidos.")
 
-        return SimpleNamespace(id=1, email=email, perfil="usuario", empresa_id=10, empresa_nome="Empresa Demo")
+        return SimpleNamespace(
+            id=self.user_data["id"],
+            nome=self.user_data["nome"],
+            email=self.user_data["email"],
+            perfil=self.user_data["perfil"],
+            empresa_id=self.user_data["empresa_id"],
+            empresa_nome=self.user_data["empresa_nome"],
+            lembrar_me_ativo=self.user_data["lembrar_me_ativo"],
+        )
 
     def registrar_usuario(self, **_kwargs):
         return 1
+
+    def obter_usuario_por_id(self, _user_id: int):
+        return {
+            "id": self.user_data["id"],
+            "nome": self.user_data["nome"],
+            "email": self.user_data["email"],
+            "perfil": self.user_data["perfil"],
+            "empresa_id": self.user_data["empresa_id"],
+            "empresa_nome": self.user_data["empresa_nome"],
+            "lembrar_me_ativo": self.user_data["lembrar_me_ativo"],
+            "suporta_nome": True,
+            "suporta_lembrar_me": True,
+        }
+
+    def atualizar_preferencia_lembrar_me(self, _user_id: int, ativo: bool):
+        self.user_data["lembrar_me_ativo"] = bool(ativo)
+        return None
+
+    def atualizar_proprio_perfil(self, _user_id: int, nome: str, email: str | None = None):
+        self.user_data["nome"] = nome
+        if email and email != self.user_data["email"] and self.user_data["perfil"] not in {"adm", "admin"}:
+            from services.auth_service import PermissaoAuthNegada
+
+            raise PermissaoAuthNegada("Apenas administradores podem alterar o e-mail.")
+
+        if email:
+            self.user_data["email"] = email
+        return self.obter_usuario_por_id(_user_id)
+
+    def alterar_senha_propria(self, _user_id: int, senha_atual: str, nova_senha: str):
+        if senha_atual != self.user_data["senha"]:
+            from services.auth_service import CredenciaisInvalidas
+
+            raise CredenciaisInvalidas("Senha atual invalida.")
+        self.user_data["senha"] = nova_senha
+        return None
 
     def obter_pergunta_recuperacao(self, _email: str):
         return "Pergunta de seguranca?"

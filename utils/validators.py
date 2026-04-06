@@ -20,7 +20,9 @@ STATUS_VALIDOS = [
 
 PERFIS_VALIDOS = [
     "usuario",
-    "adm"
+    # Mantem compatibilidade com legado (adm) e novo rotulo (admin).
+    "adm",
+    "admin"
 ]
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

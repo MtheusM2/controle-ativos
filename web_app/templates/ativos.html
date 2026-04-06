@@ -344,10 +344,10 @@
                 <td>${asset.status || ""}</td>
                 <td>${asset.data_entrada || ""}</td>
                 <td>${asset.data_saida || ""}</td>
-                <td>
+                <td class="attachment-cell">
                     <button type="button" class="btn btn-secondary btn-mini" data-attachments="${asset.id}">Documentos</button>
                 </td>
-                <td>
+                <td class="action-cell">
                     <div class="row-actions">
                         <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Visualizar</a>
                         <a href="{{ url_for('editar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Editar</a>
