@@ -98,3 +98,8 @@ Thumbs.db
 .dmypy.json
 dmypy.json
 node_modules/
+
+# ==================================================
+# Internal Local Documentation (Private)
+# ==================================================
+docs_interno_local/
