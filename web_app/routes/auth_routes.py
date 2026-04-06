@@ -22,6 +22,14 @@ def _request_data() -> dict:
     return request.form.to_dict()
 
 
+def _parse_bool_flag(raw_value) -> bool:
+    """
+    Normaliza flags booleanas vindas de checkbox/form/json.
+    """
+    value = str(raw_value or "").strip().lower()
+    return value in {"1", "true", "on", "yes", "sim"}
+
+
 def _json_success(message: str, *, redirect_url: str | None = None, status: int = 200, **payload):
     """
     Padroniza respostas JSON de sucesso da autenticação.
@@ -75,10 +83,13 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
         dados = _request_data()
         email = dados.get("email", "")
         senha = dados.get("senha", "")
+        lembrar_me = _parse_bool_flag(dados.get("lembrar_me"))
 
         try:
             usuario = auth_service.autenticar(email, senha)
             session.clear()
+            # Quando habilitado, usa cookie permanente com TTL da configuracao central.
+            session.permanent = lembrar_me
             session["user_id"] = int(usuario.id)
             session["user_email"] = usuario.email
             session["user_perfil"] = usuario.perfil

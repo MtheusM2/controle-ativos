@@ -258,6 +258,14 @@ body.app-body {
     border-bottom: 1px solid var(--line-soft);
 }
 
+/* Versao com titulo + acoes alinhados para cabecalhos de listagem. */
+.panel-header-split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
 .panel-body {
     padding: 18px;
 }
@@ -590,6 +598,34 @@ body.app-body {
 .auth-submit {
     width: 100%;
     margin-top: 4px;
+}
+
+/* Opcoes compactas do login para melhorar UX sem alterar o fluxo de auth. */
+.auth-options-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: -2px;
+}
+
+.auth-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--text-1);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.auth-check input[type="checkbox"] {
+    accent-color: var(--wine-2);
+    width: 15px;
+    height: 15px;
 }
 
 .auth-links {
@@ -1068,6 +1104,60 @@ body.app-body {
     min-width: 1220px;
 }
 
+/* Padrao unificado para tabelas de listagem com colunas estaveis. */
+.table-aligned {
+    table-layout: fixed;
+}
+
+.table-aligned th,
+.table-aligned td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.table-aligned td:last-child,
+.table-aligned th:last-child {
+    text-align: right;
+}
+
+.table-dashboard-preview {
+    min-width: 820px;
+}
+
+.table-assets-main {
+    min-width: 1320px;
+}
+
+/* Colunas fixas evitam deslocamento do corpo em relacao ao cabecalho. */
+.table-aligned col.col-id {
+    width: 96px;
+}
+
+.table-aligned col.col-type,
+.table-aligned col.col-brand,
+.table-aligned col.col-model,
+.table-aligned col.col-owner,
+.table-aligned col.col-department {
+    width: 130px;
+}
+
+.table-aligned col.col-status {
+    width: 112px;
+}
+
+.table-aligned col.col-date {
+    width: 118px;
+}
+
+.table-aligned col.col-attachments {
+    width: 90px;
+}
+
+.table-aligned col.col-actions {
+    width: 240px;
+}
+
 .table-premium th,
 .table-premium td {
     padding: 11px 12px;
@@ -1116,6 +1206,8 @@ body.app-body {
     display: flex;
     align-items: center;
     gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
 }
 
 .inline-form {
@@ -1218,6 +1310,11 @@ body.app-body {
 
     .page-intro {
         flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .panel-header-split {
+        flex-wrap: wrap;
         align-items: flex-start;
     }
 
@@ -1392,6 +1489,12 @@ body.app-body {
         gap: 10px;
     }
 
+    .auth-options-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+    }
+
     .auth-card-footer {
         padding: 12px;
     }
@@ -1412,6 +1515,10 @@ body.app-body {
     .table-premium th,
     .table-premium td {
         padding: 8px 10px;
+    }
+
+    .row-actions {
+        justify-content: flex-start;
     }
 
     .upload-grid {

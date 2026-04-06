@@ -36,6 +36,18 @@
                 >
             </div>
 
+            <div class="auth-options-row">
+                <label class="auth-check" for="mostrar-senha">
+                    <input type="checkbox" id="mostrar-senha">
+                    <span>Exibir senha</span>
+                </label>
+
+                <label class="auth-check" for="lembrar-me">
+                    <input type="checkbox" id="lembrar-me" name="lembrar_me" value="1">
+                    <span>Lembre de mim</span>
+                </label>
+            </div>
+
             <button type="submit" class="btn btn-primary auth-submit">
                 Entrar
             </button>
@@ -53,6 +65,8 @@
 <script>
     const loginForm = document.getElementById("login-form");
     const loginFeedback = document.getElementById("login-feedback");
+    const senhaInput = document.getElementById("senha");
+    const mostrarSenhaCheckbox = document.getElementById("mostrar-senha");
 
     function showLoginMessage(type, message) {
         loginFeedback.hidden = false;
@@ -76,6 +90,11 @@
         }
         return response.json();
     }
+
+    // Permite inspeção rápida do valor digitado sem alterar o envio do formulário.
+    mostrarSenhaCheckbox.addEventListener("change", () => {
+        senhaInput.type = mostrarSenhaCheckbox.checked ? "text" : "password";
+    });
 
     loginForm.addEventListener("submit", async (event) => {
         event.preventDefault();

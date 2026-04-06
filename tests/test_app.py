@@ -18,13 +18,19 @@ def test_healthcheck(http_client):
 def test_dashboard_authenticated(authenticated_client):
     response = authenticated_client.get("/dashboard")
     assert response.status_code == 200
-    assert "Dashboard de Ativos" in response.get_data(as_text=True)
+    html = response.get_data(as_text=True)
+    assert "Dashboard de Ativos" in html
+    assert "table-dashboard-preview" in html
+    assert "panel-header-split" in html
 
 
 def test_assets_listing_page_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/lista")
     assert response.status_code == 200
-    assert "Listagem de Ativos" in response.get_data(as_text=True)
+    html = response.get_data(as_text=True)
+    assert "Listagem de Ativos" in html
+    assert "table-assets-main" in html
+    assert "table-aligned" in html
 
 
 def test_asset_create_page_authenticated(authenticated_client):
@@ -137,10 +143,35 @@ def test_login_flow_basic(http_client):
     assert payload["redirect_url"].endswith("/dashboard")
 
 
+def test_login_with_remember_me_sets_permanent_session(http_client):
+    response = http_client.post(
+        "/login",
+        json={"email": "user@example.com", "senha": "secret", "lembrar_me": True},
+    )
+    assert response.status_code == 200
+
+    with http_client.session_transaction() as session_data:
+        assert session_data.permanent is True
+
+
+def test_login_without_remember_me_keeps_default_session(http_client):
+    response = http_client.post(
+        "/login",
+        json={"email": "user@example.com", "senha": "secret", "lembrar_me": False},
+    )
+    assert response.status_code == 200
+
+    with http_client.session_transaction() as session_data:
+        assert session_data.permanent is False
+
+
 def test_login_page_available(http_client):
     response = http_client.get("/login")
     assert response.status_code == 200
-    assert "Acesso ao Sistema" in response.get_data(as_text=True)
+    html = response.get_data(as_text=True)
+    assert "Acesso ao Sistema" in html
+    assert "mostrar-senha" in html
+    assert "lembrar_me" in html
 
 
 def test_dashboard_requires_authentication(http_client):
