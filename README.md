@@ -67,11 +67,11 @@ The system follows a **layered architecture** for maintainability and scalabilit
 
 ### Prerequisites
 
-- Python 3.8+
-- MySQL 8.0+
-- pip or poetry
+- **Python** 3.8+ (recommend 3.9+)
+- **MySQL** 8.0+
+- **pip** 3.6+ (or poetry)
 
-### Installation
+### Installation & Setup
 
 1. **Clone the repository:**
    ```bash
@@ -79,10 +79,15 @@ The system follows a **layered architecture** for maintainability and scalabilit
    cd opus-assets
    ```
 
-2. **Create and activate virtual environment:**
+2. **Create virtual environment:**
    ```bash
+   # Linux / macOS
    python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\Activate.ps1
+   source .venv/bin/activate
+   
+   # Windows
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
    ```
 
 3. **Install dependencies:**
@@ -90,36 +95,40 @@ The system follows a **layered architecture** for maintainability and scalabilit
    pip install -r requirements.txt
    ```
 
-4. **Configure environment:**
+4. **Configure environment variables:**
    ```bash
+   # Copy template
    cp .env.example .env
-   # Edit .env with your database credentials and secret keys
-   nano .env
+   
+   # Edit with your credentials
+   nano .env  # or use your editor
    ```
+   
+   **Required variables:**
+   - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+   - `FLASK_SECRET_KEY` (generate with: `python -c "import secrets; print(secrets.token_hex(32))"`)
+   - `APP_PEPPER` (generate with: `python -c "import secrets; print(secrets.token_hex(32))"`)
 
 5. **Initialize database:**
    ```bash
    python database/init_db.py
    ```
 
-6. **Run the application:**
+6. **Start the application:**
    ```bash
-   # Terminal mode
-   python main.py
-   
-   # Or web mode
-   python app.py
-   # Compatibility entrypoint
+   # Web interface (default: http://localhost:5000)
    python web_app/app.py
-   # Access at http://localhost:5000
+   
+   # Or CLI terminal mode
+   python main.py
    ```
 
-### Environment note
+### Troubleshooting: Virtual Environment on Windows
 
-If `.venv` stops working on Windows with an error pointing to `WindowsApps`, recreate it from a valid local Python installation:
+If you see a `WindowsApps` error, recreate the environment:
 
-```bash
-rmdir /s /q .venv
+```powershell
+Remove-Item -Recurse -Force .venv
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -236,84 +245,166 @@ opus-assets/
 ### Running Tests
 
 ```bash
+# Activate virtual environment first
+source .venv/bin/activate  # or .venv\Scripts\Activate.ps1 on Windows
+
+# Run all tests
 pytest
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage report
+pytest --cov=.
 ```
 
 ### Database Migrations
 
 ```bash
-# Apply pending migrations
+# Initialize or apply pending migrations
 python database/init_db.py
 
-# Or manually run a specific migration
-mysql -u <user> -p <database> < database/migrations/001_initial.sql
+# Manually run a specific migration
+mysql -u <user> -p <database> < database/migrations/001_usuario_responsavel_opcional.sql
 ```
 
-### Code Style
+### Code Standards
 
-- Follow PEP 8
-- Use meaningful variable and function names
-- Write docstrings for all functions and classes
-- Keep functions small and focused
-- Avoid deep nesting
+- **Style:** Follows PEP 8
+- **Functions:** Keep small, focused, with clear docstrings
+- **Variables:** Use meaningful names in English
+- **Types:** Use type hints where applicable
+- **Comments:** Document non-obvious logic only
 
-### Debugging
+### Local Debugging
 
 ```bash
-# Enable Flask debug mode
+# Enable Flask debug mode (hot reload)
 export FLASK_DEBUG=1
-python app.py
+python web_app/app.py
+
+# On Windows
+$env:FLASK_DEBUG=1
+python web_app/app.py
 ```
 
 ## 🚢 Deployment
 
-### Local production simulation on Windows
+### Production Stack
 
-```powershell
-scripts\simulate_production.ps1
-```
+The application is designed to run with:
+- **Application Server:** Gunicorn (with WSGI)
+- **Web Server:** Nginx (reverse proxy)
+- **Process Manager:** systemd (Linux)
+- **Database:** MySQL 8.0+
 
-### Local production simulation on Linux
+### Pre-Deployment Checklist
+
+- [ ] All tests passing: `pytest`
+- [ ] `.env` configured with production credentials
+- [ ] Database migrations applied: `python database/init_db.py`
+- [ ] Dependencies installed: `pip install -r requirements.txt`
+
+### Deployment on Linux/Ubuntu
 
 ```bash
-chmod +x scripts/*.sh
-scripts/simulate_production.sh
-```
+# 1. Run setup script
+chmod +x scripts/setup_server.sh
+./scripts/setup_server.sh
 
-### Production on Ubuntu with Gunicorn
-
-```bash
-scripts/setup_server.sh
+# 2. Activate virtual environment
 source .venv/bin/activate
+
+# 3. Start with Gunicorn
 gunicorn -c gunicorn.conf.py wsgi:app
 ```
 
-### Main production artifacts
+### Local Production Simulation
 
-- [wsgi.py](wsgi.py)
-- [gunicorn.conf.py](gunicorn.conf.py)
-- [deploy/nginx/controle_ativos.conf](deploy/nginx/controle_ativos.conf)
-- [deploy/systemd/controle_ativos.service](deploy/systemd/controle_ativos.service)
-- [.env.example](.env.example)
+**Windows:**
+```powershell
+./scripts/simulate_production.ps1
+```
+
+**Linux/macOS:**
+```bash
+chmod +x scripts/simulate_production.sh
+./scripts/simulate_production.sh
+```
+
+### Production Configuration Files
+
+Key deployment artifacts:
+- [wsgi.py](wsgi.py) — WSGI application entry point
+- [gunicorn.conf.py](gunicorn.conf.py) — Gunicorn configuration
+- [deploy/nginx/controle_ativos.conf](deploy/nginx/controle_ativos.conf) — Nginx configuration
+- [deploy/systemd/controle_ativos.service](deploy/systemd/controle_ativos.service) — systemd service unit
+
+### Environment Variables for Production
+
+Required `.env` variables (must be configured before deployment):
+```
+DB_HOST=<production-db-host>
+DB_PORT=3306
+DB_USER=<db-user>
+DB_PASSWORD=<strong-password>
+DB_NAME=opus_assets
+FLASK_SECRET_KEY=<generate-random-string>
+APP_PEPPER=<generate-random-string>
+FLASK_ENV=production
+```
+
+**Never commit `.env` to version control.**
 
 ---
 
 ## 📌 Contributing
 
-This is a proprietary internal system. External contributions are not accepted.
+This is a proprietary internal system developed for Opus Medical. 
 
-For internal team updates:
-1. Create a feature branch: `git checkout -b feature/your-feature`
-2. Commit with clear messages: `git commit -m "feat: add your feature"`
-3. Push and create a pull request
-4. Code review required before merge
+**For internal team members:**
+
+1. **Create a feature branch:**
+   ```bash
+   git checkout -b feature/descriptive-name
+   # or for fixes
+   git checkout -b fix/issue-description
+   ```
+
+2. **Make commits with clear messages:**
+   ```bash
+   git commit -m "feat: add new functionality"
+   git commit -m "fix: resolve specific issue"
+   git commit -m "docs: update documentation"
+   git commit -m "refactor: improve code structure"
+   ```
+
+3. **Push and open a Pull Request:**
+   ```bash
+   git push origin feature/descriptive-name
+   ```
+
+4. **Code review** is required before merging to main
+
+**External contributions:** Not accepted. This is internal use only.
 
 ---
 
-## 📄 License
+## 📄 License & Usage
 
-This software is proprietary and confidential. All rights reserved.
+**Status:** Proprietary — All rights reserved
 
+This software is confidential and proprietary to Opus Medical.  
+Unauthorized distribution, reproduction, or use is prohibited.
+
+For access or licensing inquiries, contact the development team.
+
+---
+
+## 📞 Internal Resources
+
+- **Documentation:** See [docs/](docs/) folder
+- **Internal notes:** See [docs/interno/](docs/interno/) folder (reference only)
 
 ---
 
