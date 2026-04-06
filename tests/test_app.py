@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from io import BytesIO
 from types import SimpleNamespace
 
+from openpyxl import load_workbook
 from web_app.app import create_app
 
 def test_healthcheck(http_client):
@@ -127,6 +129,41 @@ def test_login_flow_basic(http_client):
     assert payload["redirect_url"].endswith("/dashboard")
 
 
+def test_login_page_available(http_client):
+    response = http_client.get("/login")
+    assert response.status_code == 200
+    assert "Acesso ao Sistema" in response.get_data(as_text=True)
+
+
+def test_dashboard_requires_authentication(http_client):
+    response = http_client.get("/dashboard", follow_redirects=False)
+    assert response.status_code in {301, 302}
+    assert response.headers.get("Location", "").endswith("/")
+
+
+def test_assets_html_requires_authentication(http_client):
+    response = http_client.get("/ativos/lista", follow_redirects=False)
+    assert response.status_code in {301, 302}
+    assert response.headers.get("Location", "").endswith("/")
+
+
+def test_logout_web_clears_session(authenticated_client):
+    response = authenticated_client.get("/logout", follow_redirects=False)
+    assert response.status_code in {301, 302}
+    assert response.headers.get("Location", "").endswith("/")
+
+    response_after_logout = authenticated_client.get("/dashboard", follow_redirects=False)
+    assert response_after_logout.status_code in {301, 302}
+    assert response_after_logout.headers.get("Location", "").endswith("/")
+
+
+def test_session_endpoint_requires_authentication(http_client):
+    response = http_client.get("/session")
+    assert response.status_code == 401
+    payload = response.get_json()
+    assert payload["authenticated"] is False
+
+
 def test_ativos_route_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos")
     assert response.status_code == 200
@@ -211,6 +248,259 @@ def test_export_json_route_authenticated(authenticated_client):
     assert payload["ok"] is True
     assert payload["formato"] == "json"
     assert isinstance(payload["ativos"], list)
+
+
+def test_export_json_uses_linked_documents_for_nota_fiscal_and_garantia():
+    class FakeAtivosSemDocs:
+        def listar_ativos(self, _user_id):
+            return [
+                SimpleNamespace(
+                    id_ativo="A-777",
+                    tipo="Notebook",
+                    marca="Dell",
+                    modelo="XPS",
+                    usuario_responsavel="Ana",
+                    departamento="TI",
+                    status="Ativo",
+                    data_entrada="2026-04-01",
+                    data_saida=None,
+                    nota_fiscal="",
+                    garantia="",
+                )
+            ]
+
+        def filtrar_ativos(self, **_kwargs):
+            return self.listar_ativos(1)
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return self.listar_ativos(1)[0]
+
+    class FakeArquivosExport:
+        upload_base_dir = "."
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            return [
+                {
+                    "id": 20,
+                    "ativo_id": "A-777",
+                    "tipo_documento": "nota_fiscal",
+                    "nome_original": "nf_mais_recente.pdf",
+                    "tamanho_bytes": 100,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-06",
+                },
+                {
+                    "id": 19,
+                    "ativo_id": "A-777",
+                    "tipo_documento": "nota_fiscal",
+                    "nome_original": "nf_antiga.pdf",
+                    "tamanho_bytes": 90,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-01",
+                },
+                {
+                    "id": 21,
+                    "ativo_id": "A-777",
+                    "tipo_documento": "garantia",
+                    "nome_original": "garantia_1ano.pdf",
+                    "tamanho_bytes": 80,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-06",
+                },
+                {
+                    "id": 22,
+                    "ativo_id": "A-777",
+                    "tipo_documento": "outro",
+                    "nome_original": "manual.pdf",
+                    "tamanho_bytes": 70,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-06",
+                },
+            ]
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from tests.conftest import FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosSemDocs(),
+            "ativos_arquivo_service": FakeArquivosExport(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.get("/ativos/export/json")
+    assert response.status_code == 200
+    payload = response.get_json()
+    ativo = payload["ativos"][0]
+    assert ativo["nota_fiscal"] == "nf_mais_recente.pdf"
+    assert ativo["garantia"] == "garantia_1ano.pdf"
+
+
+def test_export_xlsx_uses_linked_documents_for_columns():
+    class FakeAtivosSemDocs:
+        def listar_ativos(self, _user_id):
+            return [
+                SimpleNamespace(
+                    id_ativo="A-888",
+                    tipo="Servidor",
+                    marca="HP",
+                    modelo="DL380",
+                    usuario_responsavel="Carlos",
+                    departamento="Infra",
+                    status="Ativo",
+                    data_entrada="2026-04-02",
+                    data_saida=None,
+                    nota_fiscal="",
+                    garantia="",
+                )
+            ]
+
+        def filtrar_ativos(self, **_kwargs):
+            return self.listar_ativos(1)
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return self.listar_ativos(1)[0]
+
+    class FakeArquivosExport:
+        upload_base_dir = "."
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            return [
+                {
+                    "id": 30,
+                    "ativo_id": "A-888",
+                    "tipo_documento": "nota_fiscal",
+                    "nome_original": "nf_servidor.pdf",
+                    "tamanho_bytes": 120,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-06",
+                },
+                {
+                    "id": 31,
+                    "ativo_id": "A-888",
+                    "tipo_documento": "garantia",
+                    "nome_original": "garantia_servidor.pdf",
+                    "tamanho_bytes": 130,
+                    "mime_type": "application/pdf",
+                    "criado_em": "2026-04-06",
+                },
+            ]
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from tests.conftest import FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosSemDocs(),
+            "ativos_arquivo_service": FakeArquivosExport(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.get("/ativos/export/xlsx")
+    assert response.status_code == 200
+
+    workbook = load_workbook(filename=BytesIO(response.data))
+    worksheet = workbook.active
+    headers = [cell.value for cell in worksheet[1]]
+    values = [cell.value for cell in worksheet[2]]
+    row = dict(zip(headers, values))
+
+    assert row["Nota Fiscal"] == "nf_servidor.pdf"
+    assert row["Garantia"] == "garantia_servidor.pdf"
+
+
+def test_export_json_fallbacks_to_legacy_fields_without_attachments():
+    class FakeAtivosLegado:
+        def listar_ativos(self, _user_id):
+            return [
+                SimpleNamespace(
+                    id_ativo="A-999",
+                    tipo="Monitor",
+                    marca="LG",
+                    modelo="27UL",
+                    usuario_responsavel="Bruna",
+                    departamento="Design",
+                    status="Ativo",
+                    data_entrada="2026-04-03",
+                    data_saida=None,
+                    nota_fiscal="NF-LEGADO-123",
+                    garantia="GAR-LEGADO-ABC",
+                )
+            ]
+
+        def filtrar_ativos(self, **_kwargs):
+            return self.listar_ativos(1)
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return self.listar_ativos(1)[0]
+
+    class FakeArquivosVazio:
+        upload_base_dir = "."
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            return []
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from tests.conftest import FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosLegado(),
+            "ativos_arquivo_service": FakeArquivosVazio(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.get("/ativos/export/json")
+    assert response.status_code == 200
+    payload = response.get_json()
+    ativo = payload["ativos"][0]
+    assert ativo["nota_fiscal"] == "NF-LEGADO-123"
+    assert ativo["garantia"] == "GAR-LEGADO-ABC"
 
 
 def test_export_xlsx_route_authenticated(authenticated_client):

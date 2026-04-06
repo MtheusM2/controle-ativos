@@ -60,9 +60,12 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
     @app.get("/login")
     def login_page():
         """
-        Mantém compatibilidade com acessos legados à rota /login.
+        Mantem rota dedicada para login sem depender de redirect em cadeia.
         """
-        return redirect(url_for("home"))
+        if session.get("user_id"):
+            return redirect(url_for("dashboard"))
+
+        return render_template("index.html", erro=None, sucesso=None, dados=None, show_chrome=False)
 
     @app.post("/login")
     def login():
@@ -213,6 +216,15 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
         session.clear()
         flash("Logout realizado com sucesso.", "info")
         return _json_success("Logout realizado com sucesso.", redirect_url=url_for("home"))
+
+    @app.get("/logout")
+    def logout_web():
+        """
+        Mantem compatibilidade da navegacao web por link direto de logout.
+        """
+        session.clear()
+        flash("Logout realizado com sucesso.", "info")
+        return redirect(url_for("home"))
 
     @app.get("/session")
     def current_session():

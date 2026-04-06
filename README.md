@@ -180,6 +180,7 @@ opus-assets/
 | `GET` | `/recovery` | Password recovery page |
 | `POST` | `/login` | Authenticate user |
 | `POST` | `/register` | Register new user |
+| `GET` | `/logout` | Web logout (redirect to login/home) |
 | `POST` | `/logout` | End session |
 | `POST` | `/forgot-password` | Initiate password recovery and reset password |
 | `GET` | `/session` | Return current authenticated session context |
@@ -201,10 +202,10 @@ opus-assets/
 
 ### Current Scope
 
-- The main presentation flow is now centered on the dashboard page.
-- Authentication screens use fetch with JSON responses.
-- Asset CRUD is executed from the dashboard using the HTTP endpoints above.
-- The attachment service exists in the services layer, but attachment HTTP routes are not wired in the current web flow.
+- Dashboard remains a summary view with KPIs and preview.
+- Full asset list, details, create, and edit run on dedicated pages.
+- Authentication screens use fetch with JSON responses and web-compatible logout.
+- Attachment HTTP routes are active and integrated in list/create/edit/detail flows.
 
 ---
 

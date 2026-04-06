@@ -246,7 +246,8 @@
     function buildIntRoute(templateUrl, rawId) {
         const parsedId = parsePositiveIntId(rawId);
         if (parsedId === null) return null;
-        return templateUrl.replace(`/${INT_URL_PLACEHOLDER}/`, `/${parsedId}/`);
+        // Aceita rotas com ou sem barra final (ex.: /anexos/0 e /anexos/0/).
+        return templateUrl.replace(/\/0(?=\/|$)/, `/${parsedId}`);
     }
 
     function buildAssetAttachmentsUrl(assetId) {

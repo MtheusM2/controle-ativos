@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import jsonify, redirect, render_template, request, send_file, session, url_for
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -176,6 +177,23 @@ def _resposta_sem_registros_exportacao():
     return _json_error("Nao existem ativos para exportacao com os filtros informados.", status=404)
 
 
+def _status_documento_exportacao(valor_documento: str) -> str:
+    """
+    Retorna texto curto e profissional para colunas documentais no relatorio.
+    """
+    return "Vinculada" if (valor_documento or "").strip() else ""
+
+
+def _texto_curto_pdf(valor: str, limite: int = 28) -> str:
+    """
+    Evita estouro visual no PDF sem perder o sentido do campo.
+    """
+    texto = (valor or "").strip()
+    if len(texto) <= limite:
+        return texto
+    return f"{texto[:limite - 3]}..."
+
+
 def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
     """
     Monta o arquivo XLSX em memoria com cabecalho legivel e ajuste de colunas.
@@ -205,14 +223,55 @@ def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
     for linha in linhas:
-        worksheet.append([linha[campo] for campo, _ in colunas])
+        worksheet.append(
+            [
+                linha["id"],
+                linha["tipo"],
+                linha["marca"],
+                linha["modelo"],
+                linha["usuario_responsavel"],
+                linha["departamento"],
+                linha["status"],
+                linha["data_entrada"],
+                linha["data_saida"],
+                _status_documento_exportacao(linha["nota_fiscal"]),
+                _status_documento_exportacao(linha["garantia"]),
+            ]
+        )
 
-    for idx, (campo, titulo) in enumerate(colunas, start=1):
-        max_len = len(titulo)
-        for linha in linhas:
-            valor = str(linha.get(campo, ""))
-            max_len = max(max_len, len(valor))
-        worksheet.column_dimensions[chr(64 + idx)].width = min(max_len + 2, 40)
+    # Mantem layout legivel sem deixar nomes tecnicos dominarem a planilha.
+    larguras = {
+        "A": 14,
+        "B": 14,
+        "C": 14,
+        "D": 16,
+        "E": 20,
+        "F": 16,
+        "G": 12,
+        "H": 14,
+        "I": 14,
+        "J": 12,
+        "K": 12,
+    }
+    for coluna, largura in larguras.items():
+        worksheet.column_dimensions[coluna].width = largura
+
+    for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=1, max_col=11):
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    # Guarda o nome completo do arquivo em comentario sem poluir a coluna principal.
+    for row_index, linha in enumerate(linhas, start=2):
+        if (linha.get("nota_fiscal") or "").strip():
+            worksheet.cell(row=row_index, column=10).comment = Comment(
+                f"Arquivo vinculado: {linha['nota_fiscal']}",
+                "Sistema"
+            )
+        if (linha.get("garantia") or "").strip():
+            worksheet.cell(row=row_index, column=11).comment = Comment(
+                f"Arquivo vinculado: {linha['garantia']}",
+                "Sistema"
+            )
 
     xlsx_bytes = io.BytesIO()
     workbook.save(xlsx_bytes)
@@ -264,24 +323,24 @@ def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
     for linha in linhas:
         dados_tabela.append(
             [
-                str(linha["id"]),
-                str(linha["tipo"]),
-                str(linha["marca"]),
-                str(linha["modelo"]),
-                str(linha["usuario_responsavel"]),
-                str(linha["departamento"]),
-                str(linha["status"]),
+                _texto_curto_pdf(str(linha["id"]), limite=16),
+                _texto_curto_pdf(str(linha["tipo"]), limite=14),
+                _texto_curto_pdf(str(linha["marca"]), limite=14),
+                _texto_curto_pdf(str(linha["modelo"]), limite=16),
+                _texto_curto_pdf(str(linha["usuario_responsavel"]), limite=20),
+                _texto_curto_pdf(str(linha["departamento"]), limite=16),
+                _texto_curto_pdf(str(linha["status"]), limite=12),
                 str(linha["data_entrada"]),
                 str(linha["data_saida"]),
-                str(linha["nota_fiscal"]),
-                str(linha["garantia"]),
+                _status_documento_exportacao(str(linha["nota_fiscal"])),
+                _status_documento_exportacao(str(linha["garantia"])),
             ]
         )
 
     tabela = Table(
         dados_tabela,
         repeatRows=1,
-        colWidths=[58, 62, 62, 62, 85, 75, 62, 62, 62, 75, 75],
+        colWidths=[56, 60, 60, 64, 78, 70, 52, 58, 58, 62, 62],
     )
     tabela.setStyle(
         TableStyle(
@@ -311,6 +370,39 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     """
     service = ativos_service
     arquivo_service = ativos_arquivo_service
+
+    def _resolver_documento_vinculado(arquivos: list[dict], tipo_documento: str) -> str:
+        """
+        Resolve o documento vinculado por categoria usando o primeiro registro valido.
+        Regra adotada: usar o primeiro da lista retornada pelo service (ordem decrescente de criacao).
+        """
+        for arquivo in arquivos:
+            if arquivo.get("tipo_documento") != tipo_documento:
+                continue
+            nome_original = (arquivo.get("nome_original") or "").strip()
+            if nome_original:
+                return nome_original
+        return ""
+
+    def _linhas_exportacao_enriquecidas(ativos: list[Ativo], user_id: int) -> list[dict]:
+        """
+        Monta linhas de exportacao refletindo anexos reais (nota fiscal/garantia),
+        com fallback para campos legados do ativo quando nao houver anexo da categoria.
+        """
+        linhas = _linhas_exportacao(ativos)
+
+        for ativo, linha in zip(ativos, linhas):
+            ativo_id = str(ativo.id_ativo)
+            arquivos = arquivo_service.listar_arquivos(ativo_id, user_id)
+
+            nota_fiscal_vinculada = _resolver_documento_vinculado(arquivos, "nota_fiscal")
+            garantia_vinculada = _resolver_documento_vinculado(arquivos, "garantia")
+
+            # Mantem compatibilidade com campos legados quando nao houver anexo vinculado.
+            linha["nota_fiscal"] = nota_fiscal_vinculada or linha.get("nota_fiscal", "")
+            linha["garantia"] = garantia_vinculada or linha.get("garantia", "")
+
+        return linhas
 
     def _coletar_filtros_e_ordenacao_da_query() -> tuple[dict, str, str, str | None, str | None]:
         """
@@ -830,7 +922,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             if not ativos:
                 return _resposta_sem_registros_exportacao()
 
-            linhas = _linhas_exportacao(ativos)
+            linhas = _linhas_exportacao_enriquecidas(ativos, user_id)
 
             # Monta CSV em memória
             output = io.StringIO()
@@ -873,7 +965,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             if not ativos:
                 return _resposta_sem_registros_exportacao()
 
-            xlsx_bytes = _gerar_xlsx_em_memoria(_linhas_exportacao(ativos))
+            xlsx_bytes = _gerar_xlsx_em_memoria(_linhas_exportacao_enriquecidas(ativos, user_id))
 
             return send_file(
                 xlsx_bytes,
@@ -900,7 +992,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             if not ativos:
                 return _resposta_sem_registros_exportacao()
 
-            pdf_bytes = _gerar_pdf_em_memoria(_linhas_exportacao(ativos))
+            pdf_bytes = _gerar_pdf_em_memoria(_linhas_exportacao_enriquecidas(ativos, user_id))
 
             return send_file(
                 pdf_bytes,
@@ -940,12 +1032,13 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         if formato_normalizado == "json":
             try:
                 ativos = _buscar_ativos_com_filtros(user_id)
+                linhas = _linhas_exportacao_enriquecidas(ativos, user_id)
                 return jsonify(
                     {
                         "ok": True,
                         "formato": "json",
                         "total": len(ativos),
-                        "ativos": [_serializar_ativo(ativo) for ativo in ativos],
+                        "ativos": linhas,
                     }
                 )
             except AtivoErro as erro:
