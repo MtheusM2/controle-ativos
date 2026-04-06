@@ -198,10 +198,11 @@
     let currentFilters = {};
     let currentAttachmentAssetId = null;
 
-    // Usa placeholder inteiro para compor rotas tipadas com validacao local de ID.
+    // Usa placeholder textual para preservar IDs de ativo como string (ex.: 001, A-001).
+    const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
     const attachmentUrlTemplates = {
-        listByAsset: "{{ url_for('upload_anexo', id_ativo=0) }}",
+        listByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
         downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
         deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
     };
@@ -231,7 +232,9 @@
     }
 
     function buildAssetAttachmentsUrl(assetId) {
-        return buildIntRoute(attachmentUrlTemplates.listByAsset, assetId);
+        const value = String(assetId ?? "").trim();
+        if (!value) return null;
+        return attachmentUrlTemplates.listByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
     }
 
     function buildAttachmentDownloadUrl(attachmentId) {
@@ -310,7 +313,7 @@
                 </td>
                 <td>
                     <div class="row-actions">
-                        <a href="{{ url_for('visualizar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Visualizar</a>
+                        <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Visualizar</a>
                         <a href="{{ url_for('editar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Editar</a>
                         <button type="button" class="btn btn-danger btn-mini" data-delete="${asset.id}">Excluir</button>
                     </div>

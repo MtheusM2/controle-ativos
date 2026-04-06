@@ -16,7 +16,7 @@
 
 <div id="asset-feedback" class="flash-stack" hidden></div>
 
-<section class="panel form-panel">
+<section class="panel form-panel" id="documentos">
     <div class="panel-header">
         <h3 class="title-section">Dados do ativo</h3>
     </div>
@@ -114,9 +114,10 @@
     const assetId = "{{ id_ativo }}";
     const readOnlyMode = {{ 'true' if read_only else 'false' }};
 
+    const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
     const attachmentUrlTemplates = {
-        listByAsset: "{{ url_for('upload_anexo', id_ativo=0) }}",
+        listByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
         downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
         deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
     };
@@ -160,7 +161,9 @@
     }
 
     function buildAssetAttachmentsUrl(rawId) {
-        return buildIntRoute(attachmentUrlTemplates.listByAsset, rawId);
+        const value = String(rawId ?? "").trim();
+        if (!value) return null;
+        return attachmentUrlTemplates.listByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
     }
 
     function buildAttachmentDownloadUrl(rawId) {

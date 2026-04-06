@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import datetime
 from pathlib import Path
 
 from flask import jsonify, redirect, render_template, request, send_file, session, url_for
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from models.ativos import Ativo
 from services.ativos_arquivo_service import ArquivoNaoEncontrado, TipoDocumentoInvalido
@@ -115,6 +122,189 @@ def _ativo_do_payload(dados: dict) -> Ativo:
     )
 
 
+def _validar_intervalo_datas(data_inicial: str | None, data_final: str | None, *, campo: str) -> None:
+    """
+    Valida consistencia de intervalo de datas de filtros (inicial <= final).
+    """
+    if not data_inicial or not data_final:
+        return
+
+    try:
+        inicio = datetime.strptime(data_inicial, "%Y-%m-%d")
+        fim = datetime.strptime(data_final, "%Y-%m-%d")
+    except ValueError as exc:
+        raise AtivoErro(f"Intervalo de {campo} invalido.") from exc
+
+    if inicio > fim:
+        raise AtivoErro(f"Data inicial de {campo} nao pode ser maior que a data final.")
+
+
+def _linhas_exportacao(ativos: list[Ativo]) -> list[dict]:
+    """
+    Padroniza o dataset de exportacao para todos os formatos.
+    """
+    return [
+        {
+            "id": ativo.id_ativo,
+            "tipo": ativo.tipo or "",
+            "marca": ativo.marca or "",
+            "modelo": ativo.modelo or "",
+            "usuario_responsavel": ativo.usuario_responsavel or "",
+            "departamento": ativo.departamento or "",
+            "status": ativo.status or "",
+            "data_entrada": ativo.data_entrada or "",
+            "data_saida": ativo.data_saida or "",
+            "nota_fiscal": getattr(ativo, "nota_fiscal", "") or "",
+            "garantia": getattr(ativo, "garantia", "") or "",
+        }
+        for ativo in ativos
+    ]
+
+
+def _nome_arquivo_exportacao(formato: str) -> str:
+    """
+    Gera nome de arquivo amigavel e deterministico para downloads.
+    """
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    return f"ativos_export_{timestamp}.{formato}"
+
+
+def _resposta_sem_registros_exportacao():
+    """
+    Mantem resposta consistente quando nao existem registros para exportar.
+    """
+    return _json_error("Nao existem ativos para exportacao com os filtros informados.", status=404)
+
+
+def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
+    """
+    Monta o arquivo XLSX em memoria com cabecalho legivel e ajuste de colunas.
+    """
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Ativos"
+
+    colunas = [
+        ("id", "ID"),
+        ("tipo", "Tipo"),
+        ("marca", "Marca"),
+        ("modelo", "Modelo"),
+        ("usuario_responsavel", "Responsavel"),
+        ("departamento", "Departamento"),
+        ("status", "Status"),
+        ("data_entrada", "Data Entrada"),
+        ("data_saida", "Data Saida"),
+        ("nota_fiscal", "Nota Fiscal"),
+        ("garantia", "Garantia"),
+    ]
+
+    worksheet.append([titulo for _, titulo in colunas])
+
+    for cell in worksheet[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for linha in linhas:
+        worksheet.append([linha[campo] for campo, _ in colunas])
+
+    for idx, (campo, titulo) in enumerate(colunas, start=1):
+        max_len = len(titulo)
+        for linha in linhas:
+            valor = str(linha.get(campo, ""))
+            max_len = max(max_len, len(valor))
+        worksheet.column_dimensions[chr(64 + idx)].width = min(max_len + 2, 40)
+
+    xlsx_bytes = io.BytesIO()
+    workbook.save(xlsx_bytes)
+    xlsx_bytes.seek(0)
+    return xlsx_bytes
+
+
+def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
+    """
+    Gera PDF tabular em memoria para exportacao de ativos.
+    """
+    pdf_buffer = io.BytesIO()
+    documento = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=landscape(A4),
+        leftMargin=24,
+        rightMargin=24,
+        topMargin=24,
+        bottomMargin=24,
+        title="Relatorio de Ativos",
+    )
+
+    estilos = getSampleStyleSheet()
+    elementos = [
+        Paragraph("Relatorio de Ativos", estilos["Title"]),
+        Spacer(1, 8),
+        Paragraph(
+            f"Gerado em: {datetime.utcnow().strftime('%d/%m/%Y %H:%M:%S')} UTC",
+            estilos["Normal"],
+        ),
+        Spacer(1, 12),
+    ]
+
+    cabecalho = [
+        "ID",
+        "Tipo",
+        "Marca",
+        "Modelo",
+        "Responsavel",
+        "Departamento",
+        "Status",
+        "Entrada",
+        "Saida",
+        "Nota Fiscal",
+        "Garantia",
+    ]
+    dados_tabela = [cabecalho]
+
+    for linha in linhas:
+        dados_tabela.append(
+            [
+                str(linha["id"]),
+                str(linha["tipo"]),
+                str(linha["marca"]),
+                str(linha["modelo"]),
+                str(linha["usuario_responsavel"]),
+                str(linha["departamento"]),
+                str(linha["status"]),
+                str(linha["data_entrada"]),
+                str(linha["data_saida"]),
+                str(linha["nota_fiscal"]),
+                str(linha["garantia"]),
+            ]
+        )
+
+    tabela = Table(
+        dados_tabela,
+        repeatRows=1,
+        colWidths=[58, 62, 62, 62, 85, 75, 62, 62, 62, 75, 75],
+    )
+    tabela.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4f1020")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#7a7a7a")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f5f5")]),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
+
+    elementos.append(tabela)
+    documento.build(elementos)
+    pdf_buffer.seek(0)
+    return pdf_buffer
+
+
 def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo_service):
     """
     Registra a camada HTTP do dashboard e do CRUD mínimo de ativos.
@@ -145,6 +335,36 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         ordenar_por = request.args.get("ordenar_por", "id").strip() or "id"
         ordem = request.args.get("ordem", "asc").strip().lower() or "asc"
+
+        if ordem not in {"asc", "desc"}:
+            raise AtivoErro("Ordem de classificacao invalida. Use asc ou desc.")
+
+        campos_ordenacao_permitidos = {
+            "id",
+            "tipo",
+            "marca",
+            "modelo",
+            "usuario_responsavel",
+            "departamento",
+            "nota_fiscal",
+            "garantia",
+            "status",
+            "data_entrada",
+            "data_saida",
+        }
+        if ordenar_por not in campos_ordenacao_permitidos:
+            raise AtivoErro("Campo de ordenacao invalido.")
+
+        _validar_intervalo_datas(
+            filtros.get("data_entrada_inicial"),
+            filtros.get("data_entrada_final"),
+            campo="data de entrada",
+        )
+        _validar_intervalo_datas(
+            filtros.get("data_saida_inicial"),
+            filtros.get("data_saida_final"),
+            campo="data de saida",
+        )
 
         tem_garantia = _normalizar_flag_presenca(request.args.get("tem_garantia"))
         tem_nota_fiscal = _normalizar_flag_presenca(request.args.get("tem_nota_fiscal"))
@@ -211,12 +431,21 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "total_disponivel": 0,
             "total_baixado": 0,
         }
+        ativos_preview: list[dict] = []
         try:
             ativos = service.listar_ativos(user_id)
             indicadores["total_ativos"] = len(ativos)
             indicadores["total_em_uso"] = sum(1 for a in ativos if (a.status or "").strip().lower() == "em uso")
             indicadores["total_disponivel"] = sum(1 for a in ativos if (a.status or "").strip().lower() == "disponível")
             indicadores["total_baixado"] = sum(1 for a in ativos if (a.status or "").strip().lower() == "baixado")
+
+            # Exibe apenas uma amostra para manter o dashboard como resumo executivo.
+            ativos_ordenados = sorted(
+                ativos,
+                key=lambda item: ((item.data_entrada or "").strip(), str(item.id_ativo)),
+                reverse=True,
+            )
+            ativos_preview = [_serializar_ativo(ativo) for ativo in ativos_ordenados[:5]]
         except AtivoErro:
             # Em caso de falha de leitura, preserva renderização do dashboard sem interromper UX.
             pass
@@ -226,6 +455,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             usuario_email=session.get("user_email"),
             status_validos=STATUS_VALIDOS,
             indicadores=indicadores,
+            ativos_preview=ativos_preview,
             show_chrome=True,
         )
 
@@ -395,23 +625,59 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             show_chrome=True,
         )
 
+    @app.get("/ativos/<id_ativo>/editar")
+    def editar_ativo_html_alias(id_ativo):
+        """
+        Alias para manter semantica de rota por recurso sem quebrar URLs legadas.
+        """
+        return redirect(url_for("editar_ativo_html", id_ativo=id_ativo))
+
     @app.get("/ativos/visualizar/<id_ativo>")
     def visualizar_ativo_html(id_ativo):
         """
-        Renderiza visualização somente leitura para consulta rápida do ativo.
+        Mantem compatibilidade do endpoint legado de visualizacao.
+        """
+        return redirect(url_for("detalhar_ativo_html", id_ativo=id_ativo))
+
+    @app.get("/ativos/detalhes/<id_ativo>")
+    def detalhar_ativo_html(id_ativo):
+        """
+        Renderiza tela de especificacoes completas e documentos do ativo.
         """
         user_id = _obter_user_id_logado()
         if user_id is None:
             return redirect(url_for("home"))
 
-        return render_template(
-            "editar_ativo.html",
-            usuario_email=session.get("user_email"),
-            status_validos=STATUS_VALIDOS,
-            id_ativo=id_ativo,
-            read_only=True,
-            show_chrome=True,
-        )
+        try:
+            ativo = service.buscar_ativo(id_ativo, user_id)
+            anexos = arquivo_service.listar_arquivos(id_ativo, user_id)
+
+            anexos_nota_fiscal = [a for a in anexos if a.get("tipo_documento") == "nota_fiscal"]
+            anexos_garantia = [a for a in anexos if a.get("tipo_documento") == "garantia"]
+            anexos_complementares = [a for a in anexos if a.get("tipo_documento") == "outro"]
+
+            return render_template(
+                "detalhe_ativo.html",
+                usuario_email=session.get("user_email"),
+                ativo=_serializar_ativo(ativo),
+                anexos_nota_fiscal=anexos_nota_fiscal,
+                anexos_garantia=anexos_garantia,
+                anexos_complementares=anexos_complementares,
+                show_chrome=True,
+            )
+        except AtivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except (PermissaoNegada, AtivoErro) as erro:
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao carregar detalhes do ativo.", status=500)
+
+    @app.get("/ativos/<id_ativo>/detalhes")
+    def detalhar_ativo_html_alias(id_ativo):
+        """
+        Alias para rota de detalhes no padrao por recurso.
+        """
+        return redirect(url_for("detalhar_ativo_html", id_ativo=id_ativo))
 
     @app.post("/ativos/remover/<id_ativo>")
     def remover_ativo_html(id_ativo):
@@ -547,6 +813,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         try:
             ativos = _buscar_ativos_com_filtros(user_id)
+            if not ativos:
+                return _resposta_sem_registros_exportacao()
+
+            linhas = _linhas_exportacao(ativos)
 
             # Monta CSV em memória
             output = io.StringIO()
@@ -559,28 +829,15 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 ]
             )
             writer.writeheader()
-            
-            for ativo in ativos:
-                writer.writerow({
-                    "id": ativo.id_ativo,
-                    "tipo": ativo.tipo,
-                    "marca": ativo.marca,
-                    "modelo": ativo.modelo,
-                    "usuario_responsavel": ativo.usuario_responsavel or "",
-                    "departamento": ativo.departamento or "",
-                    "status": ativo.status or "",
-                    "data_entrada": ativo.data_entrada or "",
-                    "data_saida": ativo.data_saida or "",
-                    "nota_fiscal": ativo.nota_fiscal or "",
-                    "garantia": ativo.garantia or "",
-                })
+            for linha in linhas:
+                writer.writerow(linha)
             
             csv_bytes = io.BytesIO(output.getvalue().encode("utf-8-sig"))
             
             return send_file(
                 csv_bytes,
                 as_attachment=True,
-                download_name="ativos_export.csv",
+                download_name=_nome_arquivo_exportacao("csv"),
                 mimetype="text/csv"
             )
         except AtivoErro as erro:
@@ -588,19 +845,82 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         except Exception:
             return _json_error("Erro ao exportar ativos.", status=500)
 
+    @app.get("/ativos/export/xlsx")
+    def exportar_ativos_xlsx():
+        """
+        Exporta a lista de ativos (com filtros opcionais) em formato XLSX real.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        try:
+            ativos = _buscar_ativos_com_filtros(user_id)
+            if not ativos:
+                return _resposta_sem_registros_exportacao()
+
+            xlsx_bytes = _gerar_xlsx_em_memoria(_linhas_exportacao(ativos))
+
+            return send_file(
+                xlsx_bytes,
+                as_attachment=True,
+                download_name=_nome_arquivo_exportacao("xlsx"),
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao exportar ativos em XLSX.", status=500)
+
+    @app.get("/ativos/export/pdf")
+    def exportar_ativos_pdf():
+        """
+        Exporta a lista de ativos (com filtros opcionais) em formato PDF real.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        try:
+            ativos = _buscar_ativos_com_filtros(user_id)
+            if not ativos:
+                return _resposta_sem_registros_exportacao()
+
+            pdf_bytes = _gerar_pdf_em_memoria(_linhas_exportacao(ativos))
+
+            return send_file(
+                pdf_bytes,
+                as_attachment=True,
+                download_name=_nome_arquivo_exportacao("pdf"),
+                mimetype="application/pdf",
+            )
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao exportar ativos em PDF.", status=500)
+
     @app.get("/ativos/export/<formato>")
     def exportar_ativos(formato: str):
         """
-        Estrutura extensível de exportação com fallback seguro para CSV.
+        Controlador central de exportacao com validacao explicita de formato.
         """
         user_id = _obter_user_id_logado()
         if user_id is None:
             return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
         formato_normalizado = (formato or "").strip().lower()
+        formatos_permitidos = {"csv", "xlsx", "xls", "pdf", "json"}
 
-        if formato_normalizado in {"csv", "xlsx", "xls", "pdf"}:
-            # Mantém fallback em CSV para formatos ainda não implementados no backend.
+        if formato_normalizado not in formatos_permitidos:
+            return _json_error("Formato de exportação não suportado.", status=400)
+
+        if formato_normalizado in {"xlsx", "xls"}:
+            return exportar_ativos_xlsx()
+
+        if formato_normalizado == "pdf":
+            return exportar_ativos_pdf()
+
+        if formato_normalizado == "csv":
             return exportar_ativos_csv()
 
         if formato_normalizado == "json":

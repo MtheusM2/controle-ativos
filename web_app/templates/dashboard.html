@@ -73,4 +73,50 @@
         </a>
     </div>
 </section>
+
+<section class="panel list-panel">
+    <div class="panel-header">
+        <h3 class="title-section">Prévia de ativos</h3>
+        <a href="{{ url_for('listar_ativos_html') }}" class="btn btn-secondary btn-mini">Ver todos os ativos</a>
+    </div>
+
+    <div class="panel-body table-wrapper">
+        {% if ativos_preview %}
+        <table class="table-premium table-mini">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tipo</th>
+                    <th>Marca</th>
+                    <th>Modelo</th>
+                    <th>Status</th>
+                    <th>Entrada</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ativo in ativos_preview %}
+                <tr>
+                    <td>{{ ativo.id }}</td>
+                    <td>{{ ativo.tipo }}</td>
+                    <td>{{ ativo.marca }}</td>
+                    <td>{{ ativo.modelo }}</td>
+                    <td>{{ ativo.status }}</td>
+                    <td>{{ ativo.data_entrada }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <a href="{{ url_for('detalhar_ativo_html', id_ativo=ativo.id) }}" class="btn btn-secondary btn-mini">Ver</a>
+                            <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}" class="btn btn-secondary btn-mini">Editar</a>
+                            <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos" class="btn btn-secondary btn-mini">Anexos</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted">Nenhum ativo disponível para pré-visualização.</p>
+        {% endif %}
+    </div>
+</section>
 {% endblock %}

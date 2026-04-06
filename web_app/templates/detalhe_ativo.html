@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}Detalhes do Ativo - Sistema de Controle de Ativos{% endblock %}
+
+{% block content %}
+<section class="page-intro">
+    <div>
+        <h2 class="page-title">Especificacoes do ativo {{ ativo.id }}</h2>
+        <p class="page-subtitle">Referencia completa de dados tecnicos e documentais do ativo selecionado.</p>
+    </div>
+
+    <div class="page-actions">
+        <a href="{{ url_for('listar_ativos_html') }}" class="btn btn-secondary">Voltar a listagem</a>
+        <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}" class="btn btn-primary">Editar ativo</a>
+        <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos" class="btn btn-secondary">Gerenciar anexos</a>
+    </div>
+</section>
+
+<section class="panel form-panel">
+    <div class="panel-header">
+        <h3 class="title-section">Dados do ativo</h3>
+    </div>
+
+    <div class="panel-body form-grid">
+        <div class="field-group">
+            <label class="field-label">ID</label>
+            <div class="field-display">{{ ativo.id }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Tipo</label>
+            <div class="field-display">{{ ativo.tipo }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Marca</label>
+            <div class="field-display">{{ ativo.marca }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Modelo</label>
+            <div class="field-display">{{ ativo.modelo }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Responsavel</label>
+            <div class="field-display">{{ ativo.usuario_responsavel or '-' }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Departamento</label>
+            <div class="field-display">{{ ativo.departamento or '-' }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Status</label>
+            <div class="field-display">{{ ativo.status or '-' }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Data de entrada</label>
+            <div class="field-display">{{ ativo.data_entrada or '-' }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Data de saida</label>
+            <div class="field-display">{{ ativo.data_saida or '-' }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Nota fiscal vinculada</label>
+            <div class="field-display">{{ ativo.nota_fiscal or '-' }}</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Garantia vinculada</label>
+            <div class="field-display">{{ ativo.garantia or '-' }}</div>
+        </div>
+    </div>
+</section>
+
+<section class="panel form-panel" id="documentos">
+    <div class="panel-header">
+        <h3 class="title-section">Documentos vinculados</h3>
+    </div>
+
+    <div class="panel-body">
+        <div class="table-wrapper">
+            <table class="table-premium table-mini">
+                <thead>
+                    <tr>
+                        <th>Categoria</th>
+                        <th>Arquivo</th>
+                        <th>Tamanho (bytes)</th>
+                        <th>Acao</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for arquivo in anexos_nota_fiscal %}
+                    <tr>
+                        <td>Nota fiscal</td>
+                        <td>{{ arquivo.nome_original }}</td>
+                        <td>{{ arquivo.tamanho_bytes }}</td>
+                        <td><a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a></td>
+                    </tr>
+                    {% endfor %}
+
+                    {% for arquivo in anexos_garantia %}
+                    <tr>
+                        <td>Garantia</td>
+                        <td>{{ arquivo.nome_original }}</td>
+                        <td>{{ arquivo.tamanho_bytes }}</td>
+                        <td><a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a></td>
+                    </tr>
+                    {% endfor %}
+
+                    {% for arquivo in anexos_complementares %}
+                    <tr>
+                        <td>Documento complementar</td>
+                        <td>{{ arquivo.nome_original }}</td>
+                        <td>{{ arquivo.tamanho_bytes }}</td>
+                        <td><a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a></td>
+                    </tr>
+                    {% endfor %}
+
+                    {% if not anexos_nota_fiscal and not anexos_garantia and not anexos_complementares %}
+                    <tr>
+                        <td colspan="4">Nao existem documentos vinculados a este ativo.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}
