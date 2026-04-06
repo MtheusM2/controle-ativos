@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from openpyxl import load_workbook
+from services.ativos_arquivo_service import AtivosArquivoService
 from web_app.app import create_app
 
 def test_healthcheck(http_client):
@@ -29,6 +31,12 @@ def test_asset_create_page_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/novo")
     assert response.status_code == 200
     assert "Cadastro de ativo" in response.get_data(as_text=True)
+
+
+def test_asset_create_page_uses_safe_attachment_int_route_builder(authenticated_client):
+    response = authenticated_client.get("/ativos/novo")
+    html = response.get_data(as_text=True)
+    assert "templateUrl.replace(/\\/0(?=\\/|$)/" in html
 
 
 def test_asset_edit_page_authenticated(authenticated_client):
@@ -211,7 +219,6 @@ def test_attachment_upload_invalid_type_returns_400():
         def remover_arquivo(self, _arquivo_id, _user_id):
             return None
 
-    from io import BytesIO
     from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
 
     app = create_app(
@@ -239,6 +246,77 @@ def test_attachment_upload_invalid_type_returns_400():
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["ok"] is False
+
+
+def test_attachment_delete_route_uses_correct_attachment_id():
+    class FakeArquivosDeleteTracking:
+        upload_base_dir = "."
+
+        def __init__(self):
+            self.removed_ids = []
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            return []
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, arquivo_id, _user_id):
+            self.removed_ids.append(arquivo_id)
+
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    fake_arquivos = FakeArquivosDeleteTracking()
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": fake_arquivos,
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.delete("/anexos/7")
+    assert response.status_code == 200
+    assert fake_arquivos.removed_ids == [7]
+
+
+def test_service_delete_keeps_db_cleanup_when_physical_file_is_missing(tmp_path):
+    class FakeCursor:
+        def __init__(self):
+            self.rowcount = 1
+
+        def execute(self, _query, _params):
+            return None
+
+    class FakeCursorContext:
+        def __init__(self, cursor):
+            self.cursor = cursor
+
+        def __enter__(self):
+            return (None, self.cursor)
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    fake_cursor = FakeCursor()
+    service = AtivosArquivoService(str(tmp_path))
+
+    with patch("services.ativos_arquivo_service.cursor_mysql", return_value=FakeCursorContext(fake_cursor)):
+        service.obter_arquivo = lambda _arquivo_id, _user_id: {
+            "caminho_arquivo": "ativos/A-001/nao_existe.pdf"
+        }
+        service.remover_arquivo(123, 1)
+
+    assert fake_cursor.rowcount == 1
 
 
 def test_export_json_route_authenticated(authenticated_client):
@@ -435,8 +513,12 @@ def test_export_xlsx_uses_linked_documents_for_columns():
     values = [cell.value for cell in worksheet[2]]
     row = dict(zip(headers, values))
 
-    assert row["Nota Fiscal"] == "nf_servidor.pdf"
-    assert row["Garantia"] == "garantia_servidor.pdf"
+    assert row["Nota Fiscal"] == "Vinculada"
+    assert row["Garantia"] == "Vinculada"
+    assert worksheet["J2"].comment is not None
+    assert worksheet["K2"].comment is not None
+    assert "nf_servidor.pdf" in worksheet["J2"].comment.text
+    assert "garantia_servidor.pdf" in worksheet["K2"].comment.text
 
 
 def test_export_json_fallbacks_to_legacy_fields_without_attachments():
