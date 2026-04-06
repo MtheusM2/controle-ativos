@@ -211,24 +211,6 @@ def comparar_datas(data_inicial: str, data_final: str | None) -> tuple[bool, str
     return True, ""
 
 
-def validar_documentacao_ativo(
-    nota_fiscal: str | None,
-    garantia: str | None
-) -> tuple[bool, str]:
-    """
-    Garante que pelo menos um dos campos
-    nota_fiscal ou garantia esteja preenchido.
-    """
-    nota_fiscal_fmt = (nota_fiscal or "").strip()
-    garantia_fmt = (garantia or "").strip()
-
-    if not nota_fiscal_fmt and not garantia_fmt:
-        # Mantém a regra documental: ao menos um entre nota fiscal e garantia.
-        return False, "É obrigatório informar pelo menos a nota fiscal ou a garantia do produto."
-
-    return True, ""
-
-
 def validar_regras_ativo(
     status: str,
     usuario_responsavel: str | None,
@@ -294,10 +276,6 @@ def validar_ativo(ativo) -> None:
 
     # Valida o campo opcional de garantia mantendo o mesmo limite textual.
     ok, msg = validar_texto_opcional(ativo.garantia, "garantia")
-    if not ok:
-        raise ValueError(msg)
-
-    ok, msg = validar_documentacao_ativo(ativo.nota_fiscal, ativo.garantia)
     if not ok:
         raise ValueError(msg)
 

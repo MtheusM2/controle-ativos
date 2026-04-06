@@ -1,0 +1,17 @@
+[Unit]
+Description=Controle de Ativos Flask App
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/controle_ativos
+EnvironmentFile=/opt/controle_ativos/.env
+ExecStart=/opt/controle_ativos/.venv/bin/gunicorn -c /opt/controle_ativos/gunicorn.conf.py wsgi:app
+Restart=always
+RestartSec=5
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

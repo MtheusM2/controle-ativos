@@ -11,17 +11,17 @@
 
     <!-- Menu principal com ícones técnicos -->
     <nav class="sidebar-nav">
-        <a href="{{ url_for('listar_ativos') }}" class="nav-item">
+        <a href="{{ url_for('dashboard') }}" class="nav-item">
             <i class="bi bi-speedometer2" aria-hidden="true"></i>
             <span>Dashboard</span>
         </a>
 
-        <a href="{{ url_for('listar_ativos') }}" class="nav-item">
+        <a href="{{ url_for('listar_ativos_html') }}" class="nav-item">
             <i class="bi bi-hdd-stack" aria-hidden="true"></i>
             <span>Ativos</span>
         </a>
 
-        <a href="{{ url_for('criar_ativo') }}" class="nav-item">
+        <a href="{{ url_for('criar_ativo_html') }}" class="nav-item">
             <i class="bi bi-plus-square" aria-hidden="true"></i>
             <span>Cadastrar</span>
         </a>
@@ -29,7 +29,7 @@
 
     <!-- Rodapé da sidebar com ação de logout -->
     <div class="sidebar-footer">
-        <a href="{{ url_for('logout') }}" class="nav-item nav-item-danger">
+        <a href="{{ url_for('home') }}" class="nav-item nav-item-danger" data-logout-link>
             <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
             <span>Logout</span>
         </a>

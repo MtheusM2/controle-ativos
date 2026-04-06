@@ -51,8 +51,8 @@ class AtivosArquivoService:
     de anexos ligados a um ativo.
     """
 
-    # Tipos documentais permitidos nesta fase.
-    TIPOS_PERMITIDOS = {"nota_fiscal", "garantia"}
+    # Tipos documentais permitidos, com categoria complementar para anexos gerais.
+    TIPOS_PERMITIDOS = {"nota_fiscal", "garantia", "outro"}
 
     # Extensões aceitas nesta fase.
     EXTENSOES_PERMITIDAS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}

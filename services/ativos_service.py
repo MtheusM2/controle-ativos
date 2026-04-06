@@ -313,6 +313,19 @@ class AtivosService:
             where.append("id = %s")
             params.append(filtros["id_ativo"].strip())
 
+        # Suporta filtros textuais diretos da nova experiência da listagem.
+        if filtros.get("tipo"):
+            where.append("tipo LIKE %s")
+            params.append(f"%{filtros['tipo'].strip()}%")
+
+        if filtros.get("marca"):
+            where.append("marca LIKE %s")
+            params.append(f"%{filtros['marca'].strip()}%")
+
+        if filtros.get("modelo"):
+            where.append("modelo LIKE %s")
+            params.append(f"%{filtros['modelo'].strip()}%")
+
         if filtros.get("usuario_responsavel"):
             where.append("usuario_responsavel LIKE %s")
             params.append(f"%{filtros['usuario_responsavel'].strip()}%")

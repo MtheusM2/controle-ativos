@@ -1,288 +1,311 @@
 {% extends 'base.html' %}
 
-{% block title %}Editar Ativo{% endblock %}
+{% block title %}Editar Ativo - Sistema de Controle de Ativos{% endblock %}
 
 {% block content %}
-    <!-- Cabecalho da tela de edicao com identificador do ativo -->
-    <section class="page-intro">
-        <div>
-            <h2 class="page-title">Editar Ativo {{ id_ativo }}</h2>
-            <p class="page-subtitle">Atualize dados operacionais e mantenha os anexos sincronizados.</p>
-        </div>
+<section class="page-intro">
+    <div>
+        <h2 class="page-title">{% if read_only %}Visualização{% else %}Edição{% endif %} do ativo {{ id_ativo }}</h2>
+        <p class="page-subtitle">Dados operacionais e documentos vinculados ao ativo selecionado.</p>
+    </div>
 
-        <div class="page-actions">
-            <a href="{{ url_for('listar_ativos') }}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left-circle" aria-hidden="true"></i>
-                <span>Voltar para lista</span>
-            </a>
-        </div>
-    </section>
+    <div class="page-actions">
+        <a href="{{ url_for('listar_ativos_html') }}" class="btn btn-secondary">Voltar à listagem</a>
+    </div>
+</section>
 
-    <!-- Formulario de edicao preservando action, method e campos existentes -->
-    <section class="panel form-panel">
-        <div class="panel-header">
-            <h3 class="title-section">
-                <i class="bi bi-pencil-square" aria-hidden="true"></i>
-                Dados do ativo
-            </h3>
-        </div>
+<div id="asset-feedback" class="flash-stack" hidden></div>
 
-        <div class="panel-body">
-            <form method="POST" action="{{ url_for('editar_ativo', id_ativo=id_ativo) }}" class="form-grid">
-                <div class="field-group">
-                    <label for="id_exibicao">ID</label>
-                    <input type="text" id="id_exibicao" class="input-control" value="{{ id_ativo }}" readonly>
-                </div>
+<section class="panel form-panel">
+    <div class="panel-header">
+        <h3 class="title-section">Dados do ativo</h3>
+    </div>
 
-                <div class="field-group">
-                    <label for="tipo">Tipo</label>
-                    <input
-                        type="text"
-                        id="tipo"
-                        name="tipo"
-                        class="input-control"
-                        value="{{ dados.get('tipo', '') if dados else '' }}"
-                        required
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="marca">Marca</label>
-                    <input
-                        type="text"
-                        id="marca"
-                        name="marca"
-                        class="input-control"
-                        value="{{ dados.get('marca', '') if dados else '' }}"
-                        required
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="modelo">Modelo</label>
-                    <input
-                        type="text"
-                        id="modelo"
-                        name="modelo"
-                        class="input-control"
-                        value="{{ dados.get('modelo', '') if dados else '' }}"
-                        required
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="usuario_responsavel">Responsável</label>
-                    <input
-                        type="text"
-                        id="usuario_responsavel"
-                        name="usuario_responsavel"
-                        class="input-control"
-                        value="{{ dados.get('usuario_responsavel', '') if dados else '' }}"
-                    >
-                    <small class="text-muted">Opcional. Obrigatório apenas quando o status for "Em Uso".</small>
-                </div>
-
-                <div class="field-group">
-                    <label for="departamento">Departamento</label>
-                    <input
-                        type="text"
-                        id="departamento"
-                        name="departamento"
-                        class="input-control"
-                        value="{{ dados.get('departamento', '') if dados else '' }}"
-                        required
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="status">Status</label>
-                    <select id="status" name="status" class="select-control" required>
-                        <option value="">Selecione um status</option>
-                        {% for status in status_validos %}
-                            <option
-                                value="{{ status }}"
-                                {% if dados and dados.get('status') == status %}selected{% endif %}
-                            >
-                                {{ status }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="field-group">
-                    <label for="nota_fiscal">Nota Fiscal</label>
-                    <input
-                        type="text"
-                        id="nota_fiscal"
-                        name="nota_fiscal"
-                        class="input-control"
-                        value="{{ dados.get('nota_fiscal', '') if dados else '' }}"
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="garantia">Garantia</label>
-                    <input
-                        type="text"
-                        id="garantia"
-                        name="garantia"
-                        class="input-control"
-                        value="{{ dados.get('garantia', '') if dados else '' }}"
-                    >
-                    <small class="text-muted">Preencha pelo menos um entre Nota Fiscal e Garantia.</small>
-                </div>
-
-                <div class="field-group">
-                    <label for="data_entrada">Data Entrada</label>
-                    <input
-                        type="date"
-                        id="data_entrada"
-                        name="data_entrada"
-                        class="input-control"
-                        value="{{ dados.get('data_entrada', '') if dados else '' }}"
-                        required
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="data_saida">Data Saída</label>
-                    <input
-                        type="date"
-                        id="data_saida"
-                        name="data_saida"
-                        class="input-control"
-                        value="{{ dados.get('data_saida', '') if dados else '' }}"
-                    >
-                </div>
-
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-floppy" aria-hidden="true"></i>
-                        <span>Salvar alterações</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </section>
-
-    <!-- Bloco de anexos preservando fluxo de upload, download e remocao -->
-    <section class="panel form-panel">
-        <div class="panel-header">
-            <h3 class="title-section">
-                <i class="bi bi-paperclip" aria-hidden="true"></i>
-                Anexos do ativo
-            </h3>
-        </div>
-
-        <div class="panel-body">
-            <div class="upload-grid">
-                <form
-                    method="POST"
-                    action="{{ url_for('upload_arquivo_ativo', id_ativo=id_ativo) }}"
-                    enctype="multipart/form-data"
-                    class="upload-card"
-                >
-                    <input type="hidden" name="tipo_documento" value="nota_fiscal">
-
-                    <label for="arquivo_nf" class="upload-label">
-                        <i class="bi bi-receipt-cutoff" aria-hidden="true"></i>
-                        <span>Upload de Nota Fiscal</span>
-                    </label>
-                    <input
-                        type="file"
-                        id="arquivo_nf"
-                        name="arquivo"
-                        class="input-control"
-                        accept=".pdf,.png,.jpg,.jpeg,.webp"
-                        required
-                    >
-                    <button type="submit" class="btn btn-secondary">
-                        <i class="bi bi-upload" aria-hidden="true"></i>
-                        <span>Enviar Nota Fiscal</span>
-                    </button>
-                </form>
-
-                <form
-                    method="POST"
-                    action="{{ url_for('upload_arquivo_ativo', id_ativo=id_ativo) }}"
-                    enctype="multipart/form-data"
-                    class="upload-card"
-                >
-                    <input type="hidden" name="tipo_documento" value="garantia">
-
-                    <label for="arquivo_garantia" class="upload-label">
-                        <i class="bi bi-shield-check" aria-hidden="true"></i>
-                        <span>Upload de Garantia</span>
-                    </label>
-                    <input
-                        type="file"
-                        id="arquivo_garantia"
-                        name="arquivo"
-                        class="input-control"
-                        accept=".pdf,.png,.jpg,.jpeg,.webp"
-                        required
-                    >
-                    <button type="submit" class="btn btn-secondary">
-                        <i class="bi bi-upload" aria-hidden="true"></i>
-                        <span>Enviar Garantia</span>
-                    </button>
-                </form>
+    <div class="panel-body">
+        <form id="edit-asset-form" class="form-grid">
+            <div class="field-group">
+                <label for="id">ID</label>
+                <input type="text" id="id" name="id" class="input-control" readonly>
             </div>
 
-            <p class="text-muted upload-hint">
-                Formatos aceitos: PDF, PNG, JPG, JPEG, WEBP. Tamanho máximo: 10 MB.
-            </p>
+            <div class="field-group">
+                <label for="tipo">Tipo</label>
+                <input type="text" id="tipo" name="tipo" class="input-control" {% if read_only %}disabled{% endif %} required>
+            </div>
 
-            {% if arquivos %}
-                <div class="table-wrapper">
-                    <table class="table-premium table-attachments">
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Nome original</th>
-                                <th>Tamanho (bytes)</th>
-                                <th>Enviado em</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for arquivo in arquivos %}
-                                <tr>
-                                    <td>{{ arquivo.tipo_documento }}</td>
-                                    <td>{{ arquivo.nome_original }}</td>
-                                    <td>{{ arquivo.tamanho_bytes }}</td>
-                                    <td>{{ arquivo.criado_em }}</td>
-                                    <td>
-                                        <div class="row-actions">
-                                            <a href="{{ url_for('download_arquivo_ativo', arquivo_id=arquivo.id) }}" class="btn btn-secondary btn-mini">
-                                                <i class="bi bi-download" aria-hidden="true"></i>
-                                                <span>Baixar</span>
-                                            </a>
+            <div class="field-group">
+                <label for="marca">Marca</label>
+                <input type="text" id="marca" name="marca" class="input-control" {% if read_only %}disabled{% endif %} required>
+            </div>
 
-                                            <form
-                                                method="POST"
-                                                action="{{ url_for('remover_arquivo_ativo', arquivo_id=arquivo.id) }}"
-                                                class="inline-form"
-                                                onsubmit="return confirm('Tem certeza que deseja remover este anexo?');"
-                                            >
-                                                <button type="submit" class="btn btn-danger btn-mini">
-                                                    <i class="bi bi-trash3" aria-hidden="true"></i>
-                                                    <span>Remover</span>
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <div class="empty-state">
-                    <i class="bi bi-folder2-open" aria-hidden="true"></i>
-                    <p>Este ativo ainda não possui anexos.</p>
-                </div>
+            <div class="field-group">
+                <label for="modelo">Modelo</label>
+                <input type="text" id="modelo" name="modelo" class="input-control" {% if read_only %}disabled{% endif %} required>
+            </div>
+
+            <div class="field-group">
+                <label for="usuario_responsavel">Responsável</label>
+                <input type="text" id="usuario_responsavel" name="usuario_responsavel" class="input-control" {% if read_only %}disabled{% endif %}>
+            </div>
+
+            <div class="field-group">
+                <label for="departamento">Departamento</label>
+                <input type="text" id="departamento" name="departamento" class="input-control" {% if read_only %}disabled{% endif %} required>
+            </div>
+
+            <div class="field-group">
+                <label for="status">Status</label>
+                <select id="status" name="status" class="select-control" {% if read_only %}disabled{% endif %} required>
+                    <option value="">Selecione um status</option>
+                    {% for status in status_validos %}
+                        <option value="{{ status }}">{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label for="data_entrada">Data de entrada</label>
+                <input type="date" id="data_entrada" name="data_entrada" class="input-control" {% if read_only %}disabled{% endif %} required>
+            </div>
+
+            <div class="field-group">
+                <label for="data_saida">Data de saída</label>
+                <input type="date" id="data_saida" name="data_saida" class="input-control" {% if read_only %}disabled{% endif %}>
+            </div>
+
+            {% if not read_only %}
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Salvar alterações</button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</section>
+
+<section class="panel form-panel">
+    <div class="panel-header">
+        <h3 class="title-section">Documentos vinculados</h3>
+    </div>
+
+    <div class="panel-body">
+        <div class="form-actions">
+            {% if not read_only %}
+            <label class="btn btn-secondary" for="attachment-file">Adicionar documento</label>
+            <input type="file" id="attachment-file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp">
+            <select id="attachment-type" class="select-control" style="width: 220px;">
+                <option value="nota_fiscal">Nota fiscal</option>
+                <option value="garantia">Garantia</option>
+                <option value="outro">Documento complementar</option>
+            </select>
             {% endif %}
         </div>
-    </section>
+
+        <div id="attachment-list" class="table-wrapper"></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const assetFeedback = document.getElementById("asset-feedback");
+    const editAssetForm = document.getElementById("edit-asset-form");
+    const attachmentList = document.getElementById("attachment-list");
+
+    const assetId = "{{ id_ativo }}";
+    const readOnlyMode = {{ 'true' if read_only else 'false' }};
+
+    const INT_URL_PLACEHOLDER = 0;
+    const attachmentUrlTemplates = {
+        listByAsset: "{{ url_for('upload_anexo', id_ativo=0) }}",
+        downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
+        deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
+    };
+
+    function showMessage(type, message) {
+        assetFeedback.hidden = false;
+        assetFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${message}</span></div>`;
+    }
+
+    async function parseJsonSafely(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) return null;
+        return response.json();
+    }
+
+    async function requestJson(url, options = {}) {
+        const response = await fetch(url, {
+            headers: {
+                "Content-Type": "application/json",
+                "X-Requested-With": "fetch",
+                ...(options.headers || {})
+            },
+            ...options
+        });
+        const payload = await parseJsonSafely(response);
+        return { response, payload };
+    }
+
+    function parsePositiveIntId(rawValue) {
+        const value = String(rawValue ?? "").trim();
+        if (!/^\d+$/.test(value)) return null;
+        const parsed = Number(value);
+        if (!Number.isSafeInteger(parsed) || parsed <= 0) return null;
+        return parsed;
+    }
+
+    function buildIntRoute(templateUrl, rawId) {
+        const parsedId = parsePositiveIntId(rawId);
+        if (parsedId === null) return null;
+        return templateUrl.replace(`/${INT_URL_PLACEHOLDER}/`, `/${parsedId}/`);
+    }
+
+    function buildAssetAttachmentsUrl(rawId) {
+        return buildIntRoute(attachmentUrlTemplates.listByAsset, rawId);
+    }
+
+    function buildAttachmentDownloadUrl(rawId) {
+        return buildIntRoute(attachmentUrlTemplates.downloadByFile, rawId);
+    }
+
+    function buildAttachmentDeleteUrl(rawId) {
+        return buildIntRoute(attachmentUrlTemplates.deleteByFile, rawId);
+    }
+
+    function fillForm(asset) {
+        document.getElementById("id").value = asset.id;
+        document.getElementById("tipo").value = asset.tipo || "";
+        document.getElementById("marca").value = asset.marca || "";
+        document.getElementById("modelo").value = asset.modelo || "";
+        document.getElementById("usuario_responsavel").value = asset.usuario_responsavel || "";
+        document.getElementById("departamento").value = asset.departamento || "";
+        document.getElementById("status").value = asset.status || "";
+        document.getElementById("data_entrada").value = asset.data_entrada || "";
+        document.getElementById("data_saida").value = asset.data_saida || "";
+    }
+
+    async function loadAsset() {
+        const { response, payload } = await requestJson(`{{ url_for('listar_ativos') }}/${encodeURIComponent(assetId)}`, { method: "GET" });
+        if (!response.ok) {
+            showMessage("danger", payload?.erro || "Não foi possível carregar o ativo.");
+            return;
+        }
+        fillForm(payload.ativo);
+    }
+
+    async function loadAttachments() {
+        const listUrl = buildAssetAttachmentsUrl(assetId);
+        if (!listUrl) return;
+
+        const { response, payload } = await requestJson(listUrl, { method: "GET" });
+        if (!response.ok) {
+            attachmentList.innerHTML = "<p>Não foi possível carregar os documentos.</p>";
+            return;
+        }
+
+        const attachments = payload.anexos || [];
+        if (!attachments.length) {
+            attachmentList.innerHTML = "<p>Nenhum documento vinculado ao ativo.</p>";
+            return;
+        }
+
+        const actionHeader = readOnlyMode ? "" : "<th>Ações</th>";
+        attachmentList.innerHTML = `
+            <table class="table-premium table-mini">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Nome</th>
+                        <th>Tamanho</th>
+                        ${actionHeader}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${attachments.map((att) => `
+                        <tr>
+                            <td>${att.tipo_documento}</td>
+                            <td>${att.nome_original}</td>
+                            <td>${(att.tamanho_bytes / 1024).toFixed(2)} KB</td>
+                            <td>
+                                <button type="button" class="btn btn-secondary btn-mini" data-download="${att.id}">Baixar</button>
+                                ${readOnlyMode ? "" : `<button type=\"button\" class=\"btn btn-danger btn-mini\" data-delete=\"${att.id}\">Excluir</button>`}
+                            </td>
+                        </tr>
+                    `).join("")}
+                </tbody>
+            </table>
+        `;
+    }
+
+    if (!readOnlyMode) {
+        editAssetForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const body = Object.fromEntries(new FormData(editAssetForm).entries());
+
+            const { response, payload } = await requestJson(`{{ url_for('listar_ativos') }}/${encodeURIComponent(assetId)}`, {
+                method: "PUT",
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível atualizar o ativo.");
+                return;
+            }
+
+            showMessage("success", payload?.mensagem || "Ativo atualizado com sucesso.");
+            await loadAsset();
+        });
+
+        document.getElementById("attachment-file").addEventListener("change", async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const uploadUrl = buildAssetAttachmentsUrl(assetId);
+            if (!uploadUrl) return;
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("type", document.getElementById("attachment-type").value);
+
+            const response = await fetch(uploadUrl, { method: "POST", body: formData });
+            const payload = await parseJsonSafely(response);
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível anexar o documento.");
+                return;
+            }
+
+            showMessage("success", "Documento anexado com sucesso.");
+            event.target.value = "";
+            await loadAttachments();
+        });
+    }
+
+    attachmentList.addEventListener("click", async (event) => {
+        const downloadButton = event.target.closest("[data-download]");
+        const deleteButton = event.target.closest("[data-delete]");
+
+        if (downloadButton) {
+            const downloadUrl = buildAttachmentDownloadUrl(downloadButton.getAttribute("data-download"));
+            if (downloadUrl) window.location.href = downloadUrl;
+            return;
+        }
+
+        if (deleteButton && !readOnlyMode) {
+            const deleteUrl = buildAttachmentDeleteUrl(deleteButton.getAttribute("data-delete"));
+            if (!deleteUrl) return;
+            if (!window.confirm("Confirma a exclusão deste documento?")) return;
+
+            const { response, payload } = await requestJson(deleteUrl, { method: "DELETE" });
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível excluir o documento.");
+                return;
+            }
+
+            showMessage("success", "Documento removido com sucesso.");
+            await loadAttachments();
+        }
+    });
+
+    loadAsset();
+    loadAttachments();
+</script>
 {% endblock %}

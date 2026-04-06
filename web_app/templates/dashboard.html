@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Sistema de Controle de Ativos{% endblock %}
+
+{% block content %}
+<section class="page-intro">
+    <div>
+        <h2 class="page-title">Dashboard de Ativos</h2>
+        <p class="page-subtitle">Visão geral do ambiente com indicadores e atalhos operacionais.</p>
+    </div>
+
+    <div class="page-actions">
+        <a href="{{ url_for('listar_ativos_html') }}" class="btn btn-secondary">Listar ativos</a>
+        <a href="{{ url_for('criar_ativo_html') }}" class="btn btn-primary">Cadastrar ativo</a>
+    </div>
+</section>
+
+<section class="kpi-grid">
+    <article class="panel kpi-card">
+        <div class="panel-header">
+            <h3 class="title-section">Total de ativos</h3>
+        </div>
+        <div class="panel-body">
+            <p class="kpi-value">{{ indicadores.total_ativos if indicadores is defined else 0 }}</p>
+            <p class="text-muted">Inventário total sob gestão.</p>
+        </div>
+    </article>
+
+    <article class="panel kpi-card">
+        <div class="panel-header">
+            <h3 class="title-section">Em uso</h3>
+        </div>
+        <div class="panel-body">
+            <p class="kpi-value">{{ indicadores.total_em_uso if indicadores is defined else 0 }}</p>
+            <p class="text-muted">Ativos alocados para operação.</p>
+        </div>
+    </article>
+
+    <article class="panel kpi-card">
+        <div class="panel-header">
+            <h3 class="title-section">Disponíveis</h3>
+        </div>
+        <div class="panel-body">
+            <p class="kpi-value">{{ indicadores.total_disponivel if indicadores is defined else 0 }}</p>
+            <p class="text-muted">Ativos prontos para alocação.</p>
+        </div>
+    </article>
+
+    <article class="panel kpi-card">
+        <div class="panel-header">
+            <h3 class="title-section">Baixados</h3>
+        </div>
+        <div class="panel-body">
+            <p class="kpi-value">{{ indicadores.total_baixado if indicadores is defined else 0 }}</p>
+            <p class="text-muted">Itens fora de operação.</p>
+        </div>
+    </article>
+</section>
+
+<section class="panel list-panel">
+    <div class="panel-header">
+        <h3 class="title-section">Atalhos operacionais</h3>
+    </div>
+
+    <div class="panel-body shortcut-grid">
+        <a href="{{ url_for('listar_ativos_html') }}" class="shortcut-card">
+            <h4>Listagem de ativos</h4>
+            <p>Consultar, filtrar, exportar e executar ações por linha.</p>
+        </a>
+        <a href="{{ url_for('criar_ativo_html') }}" class="shortcut-card">
+            <h4>Novo ativo</h4>
+            <p>Cadastrar ativo e anexar nota fiscal, garantia e documentos complementares.</p>
+        </a>
+    </div>
+</section>
+{% endblock %}

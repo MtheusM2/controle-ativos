@@ -1,494 +1,682 @@
-# web_app/routes/ativos_routes.py
+from __future__ import annotations
 
-# Rotas web do módulo de ativos.
-# Esta camada deve:
-# - receber dados da interface
-# - chamar os services
-# - renderizar templates
-# A regra de negócio permanece nos services e validators.
-
+import csv
+import io
 from pathlib import Path
 
-from flask import (
-    current_app,
-    render_template,
-    request,
-    redirect,
-    url_for,
-    session,
-    send_file
-)
+from flask import jsonify, redirect, render_template, request, send_file, session, url_for
 
-from services.ativos_service import AtivosService, AtivoErro
-from services.ativos_arquivo_service import (
-    AtivosArquivoService,
-    AtivoArquivoErro
-)
 from models.ativos import Ativo
+from services.ativos_arquivo_service import ArquivoNaoEncontrado, TipoDocumentoInvalido
+from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
 from utils.validators import STATUS_VALIDOS
 
 
 def _obter_user_id_logado() -> int | None:
     """
-    Obtém o ID do usuário autenticado a partir da sessão.
+    Obtém o identificador do usuário autenticado na sessão.
     """
     user_id = session.get("user_id")
-
     if user_id is None:
         return None
-
     return int(user_id)
 
 
-def _coletar_filtros_listagem(args) -> tuple[dict, str, str]:
+def _request_data() -> dict:
     """
-    Normaliza os filtros e a ordenação recebidos pela URL.
+    Obtém o payload JSON ou o form-data da requisição.
+    """
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form.to_dict()
 
-    Esta função mantém a rota enxuta e garante que o template receba sempre
-    os mesmos nomes de campos, preservando os valores digitados pelo usuário.
+
+def _json_success(message: str, *, status: int = 200, **payload):
     """
-    filtros = {
-        "id_ativo": args.get("id_ativo", "").strip() or None,
-        "usuario_responsavel": args.get("usuario_responsavel", "").strip() or None,
-        "departamento": args.get("departamento", "").strip() or None,
-        "nota_fiscal": args.get("nota_fiscal", "").strip() or None,
-        "garantia": args.get("garantia", "").strip() or None,
-        "status": args.get("status", "").strip() or None,
-        "data_entrada_inicial": args.get("data_entrada_inicial", "").strip() or None,
-        "data_entrada_final": args.get("data_entrada_final", "").strip() or None,
-        "data_saida_inicial": args.get("data_saida_inicial", "").strip() or None,
-        "data_saida_final": args.get("data_saida_final", "").strip() or None,
+    Padroniza respostas JSON de sucesso.
+    """
+    body = {"ok": True, "mensagem": message}
+    body.update(payload)
+    return jsonify(body), status
+
+
+def _json_error(message: str, status: int = 400, **payload):
+    """
+    Padroniza respostas JSON de erro.
+    """
+    body = {"ok": False, "erro": message}
+    body.update(payload)
+    return jsonify(body), status
+
+
+def _normalizar_flag_presenca(raw_value: str | None) -> str | None:
+    """
+    Normaliza flags de presença recebidas no filtro (sim/nao).
+    """
+    value = (raw_value or "").strip().lower()
+    if value in {"sim", "true", "1", "com"}:
+        return "sim"
+    if value in {"nao", "false", "0", "sem"}:
+        return "nao"
+    return None
+
+
+def _serializar_ativo(ativo: Ativo) -> dict:
+    """
+    Serializa o ativo no contrato mínimo esperado pelo dashboard.
+    """
+    return {
+        "id": ativo.id_ativo,
+        "tipo": ativo.tipo,
+        "marca": ativo.marca,
+        "modelo": ativo.modelo,
+        "usuario_responsavel": ativo.usuario_responsavel or "",
+        "departamento": ativo.departamento or "",
+        "status": ativo.status or "",
+        "data_entrada": ativo.data_entrada or "",
+        "data_saida": ativo.data_saida or "",
+        # Usa getattr para manter compatibilidade com objetos de teste simplificados.
+        "nota_fiscal": getattr(ativo, "nota_fiscal", "") or "",
+        "garantia": getattr(ativo, "garantia", "") or "",
     }
 
-    ordenar_por = args.get("ordenar_por", "id").strip() or "id"
-    ordem = args.get("ordem", "asc").strip().lower() or "asc"
 
-    return filtros, ordenar_por, ordem
-
-
-def _renderizar_lista_ativos(
-    ativos: list[Ativo],
-    user_id: int,
-    *,
-    arquivo_service_factory,
-    erro: str | None,
-    filtros: dict,
-    ordenar_por: str,
-    ordem: str,
-):
+def _serializar_arquivo(arquivo: dict) -> dict:
     """
-    Constrói o contexto visual da listagem de ativos.
-
-    A montagem da contagem de anexos fica aqui para evitar repetição entre
-    a renderização normal e os caminhos de erro.
+    Serializa um registro de arquivo para o frontend.
     """
-    ativos_dict = [ativo.to_dict() for ativo in ativos]
+    return {
+        "id": arquivo["id"],
+        "ativo_id": arquivo["ativo_id"],
+        "tipo_documento": arquivo["tipo_documento"],
+        "nome_original": arquivo["nome_original"],
+        "tamanho_bytes": arquivo["tamanho_bytes"],
+        "mime_type": arquivo["mime_type"],
+        "criado_em": arquivo["criado_em"],
+    }
 
-    if ativos_dict:
-        # Busca a contagem de anexos apenas quando houver ativos para exibir.
-        ativo_ids = [ativo["id_ativo"] for ativo in ativos_dict]
-        contagem_anexos = arquivo_service_factory().contar_por_ativo(ativo_ids, user_id)
 
-        for ativo in ativos_dict:
-            ativo["total_anexos"] = contagem_anexos.get(ativo["id_ativo"], 0)
-
-    return render_template(
-        "ativos.html",
-        ativos=ativos_dict,
-        erro=erro,
-        usuario_email=session.get("user_email"),
-        status_validos=STATUS_VALIDOS,
-        filtros=filtros,
-        ordenar_por=ordenar_por,
-        ordem=ordem,
+def _ativo_do_payload(dados: dict) -> Ativo:
+    """
+    Constrói o domínio Ativo a partir do payload do frontend.
+    """
+    return Ativo(
+        id_ativo=dados.get("id", ""),
+        tipo=dados.get("tipo", ""),
+        marca=dados.get("marca", ""),
+        modelo=dados.get("modelo", ""),
+        usuario_responsavel=dados.get("usuario_responsavel", "") or None,
+        departamento=dados.get("departamento", ""),
+        status=dados.get("status", ""),
+        data_entrada=dados.get("data_entrada", ""),
+        data_saida=dados.get("data_saida", "") or None,
+        nota_fiscal=None,
+        garantia=None,
     )
 
 
-def registrar_rotas_ativos(app):
+def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo_service):
     """
-    Registra as rotas web relacionadas aos ativos.
+    Registra a camada HTTP do dashboard e do CRUD mínimo de ativos.
     """
-    service = AtivosService()
+    service = ativos_service
+    arquivo_service = ativos_arquivo_service
 
-    def _arquivo_service() -> AtivosArquivoService:
+    def _coletar_filtros_e_ordenacao_da_query() -> tuple[dict, str, str, str | None, str | None]:
         """
-        Cria o service de anexos usando a configuração da aplicação.
+        Centraliza leitura de query params para manter consistência entre lista e exportação.
         """
-        return AtivosArquivoService(current_app.config["UPLOAD_FOLDER"])
+        filtros = {
+            "id_ativo": request.args.get("id_ativo", "").strip() or None,
+            "tipo": request.args.get("tipo", "").strip() or None,
+            "marca": request.args.get("marca", "").strip() or None,
+            "modelo": request.args.get("modelo", "").strip() or None,
+            "usuario_responsavel": request.args.get("usuario_responsavel", "").strip() or None,
+            "departamento": request.args.get("departamento", "").strip() or None,
+            "nota_fiscal": request.args.get("nota_fiscal", "").strip() or None,
+            "garantia": request.args.get("garantia", "").strip() or None,
+            "status": request.args.get("status", "").strip() or None,
+            "data_entrada_inicial": request.args.get("data_entrada_inicial", "").strip() or None,
+            "data_entrada_final": request.args.get("data_entrada_final", "").strip() or None,
+            "data_saida_inicial": request.args.get("data_saida_inicial", "").strip() or None,
+            "data_saida_final": request.args.get("data_saida_final", "").strip() or None,
+        }
+        filtros = {k: v for k, v in filtros.items() if v is not None}
 
-    @app.route("/ativos")
-    def listar_ativos():
+        ordenar_por = request.args.get("ordenar_por", "id").strip() or "id"
+        ordem = request.args.get("ordem", "asc").strip().lower() or "asc"
+
+        tem_garantia = _normalizar_flag_presenca(request.args.get("tem_garantia"))
+        tem_nota_fiscal = _normalizar_flag_presenca(request.args.get("tem_nota_fiscal"))
+        return filtros, ordenar_por, ordem, tem_garantia, tem_nota_fiscal
+
+    def _filtrar_presenca_documentos(
+        ativos: list[Ativo],
+        *,
+        tem_garantia: str | None,
+        tem_nota_fiscal: str | None,
+    ) -> list[Ativo]:
         """
-        Lista ou filtra os ativos do usuário autenticado.
+        Aplica filtros de presença documental sem alterar regras de negócio da camada service.
         """
-        user_id = _obter_user_id_logado()
+        filtrados = ativos
 
-        if user_id is None:
-            return redirect(url_for("login"))
+        if tem_garantia == "sim":
+            filtrados = [a for a in filtrados if (a.garantia or "").strip()]
+        elif tem_garantia == "nao":
+            filtrados = [a for a in filtrados if not (a.garantia or "").strip()]
 
-        try:
-            filtros, ordenar_por, ordem = _coletar_filtros_listagem(request.args)
+        if tem_nota_fiscal == "sim":
+            filtrados = [a for a in filtrados if (a.nota_fiscal or "").strip()]
+        elif tem_nota_fiscal == "nao":
+            filtrados = [a for a in filtrados if not (a.nota_fiscal or "").strip()]
 
-            # Detecta se algum filtro foi realmente enviado.
-            ha_filtro = any(valor for valor in filtros.values()) or ordenar_por != "id" or ordem != "asc"
+        return filtrados
 
-            if ha_filtro:
-                ativos = service.filtrar_ativos(
-                    user_id=user_id,
-                    filtros=filtros,
-                    ordenar_por=ordenar_por,
-                    ordem=ordem
-                )
-            else:
-                ativos = service.listar_ativos(user_id)
+    def _buscar_ativos_com_filtros(user_id: int) -> list[Ativo]:
+        """
+        Resolve listagem com reaproveitamento da API atual e filtros complementares de presença.
+        """
+        filtros, ordenar_por, ordem, tem_garantia, tem_nota_fiscal = _coletar_filtros_e_ordenacao_da_query()
 
-            return _renderizar_lista_ativos(
-                ativos,
-                user_id,
-                arquivo_service_factory=_arquivo_service,
-                erro=None,
+        if filtros:
+            ativos = service.filtrar_ativos(
+                user_id=user_id,
                 filtros=filtros,
                 ordenar_por=ordenar_por,
                 ordem=ordem,
             )
+        else:
+            ativos = service.listar_ativos(user_id)
 
-        except AtivoErro as erro:
-            filtros, ordenar_por, ordem = _coletar_filtros_listagem(request.args)
-            return _renderizar_lista_ativos(
-                [],
-                user_id,
-                arquivo_service_factory=_arquivo_service,
-                erro=str(erro),
-                filtros=filtros,
-                ordenar_por=ordenar_por,
-                ordem=ordem,
-            )
-
-        except (ValueError, KeyError, TypeError) as erro:
-            filtros, ordenar_por, ordem = _coletar_filtros_listagem(request.args)
-            return _renderizar_lista_ativos(
-                [],
-                user_id,
-                arquivo_service_factory=_arquivo_service,
-                erro=f"Erro inesperado ao listar ativos: {erro}",
-                filtros=filtros,
-                ordenar_por=ordenar_por,
-                ordem=ordem,
-            )
-
-    @app.route("/ativos/novo", methods=["GET", "POST"])
-    def criar_ativo():
-        """
-        Exibe e processa o cadastro de um novo ativo.
-        """
-        user_id = _obter_user_id_logado()
-
-        if user_id is None:
-            return redirect(url_for("login"))
-
-        if request.method == "POST":
-            dados = request.form.to_dict()
-
-            try:
-                ativo = Ativo(
-                    id_ativo=dados.get("id", ""),
-                    tipo=dados.get("tipo", ""),
-                    marca=dados.get("marca", ""),
-                    modelo=dados.get("modelo", ""),
-                    usuario_responsavel=dados.get("usuario_responsavel", "") or None,
-                    departamento=dados.get("departamento", ""),
-                    nota_fiscal=dados.get("nota_fiscal", "") or None,
-                    garantia=dados.get("garantia", "") or None,
-                    status=dados.get("status", ""),
-                    data_entrada=dados.get("data_entrada", ""),
-                    data_saida=dados.get("data_saida", "") or None
-                )
-
-                service.criar_ativo(ativo, user_id)
-
-                return redirect(url_for("listar_ativos"))
-
-            except AtivoErro as erro:
-                return render_template(
-                    "novo_ativo.html",
-                    erro=str(erro),
-                    dados=dados,
-                    status_validos=STATUS_VALIDOS,
-                    usuario_email=session.get("user_email")
-                )
-
-            except (ValueError, KeyError, TypeError) as erro:
-                return render_template(
-                    "novo_ativo.html",
-                    erro=f"Erro inesperado ao cadastrar ativo: {erro}",
-                    dados=dados,
-                    status_validos=STATUS_VALIDOS,
-                    usuario_email=session.get("user_email")
-                )
-
-        return render_template(
-            "novo_ativo.html",
-            erro=None,
-            dados=None,
-            status_validos=STATUS_VALIDOS,
-            usuario_email=session.get("user_email")
+        return _filtrar_presenca_documentos(
+            ativos,
+            tem_garantia=tem_garantia,
+            tem_nota_fiscal=tem_nota_fiscal,
         )
 
-    @app.route("/ativos/editar/<id_ativo>", methods=["GET", "POST"])
-    def editar_ativo(id_ativo):
+    @app.get("/dashboard")
+    def dashboard():
         """
-        Exibe e processa a edição de um ativo existente.
+        Tela principal do sistema após autenticação.
         """
         user_id = _obter_user_id_logado()
-
         if user_id is None:
-            return redirect(url_for("login"))
+            return redirect(url_for("home"))
 
-        if request.method == "POST":
-            dados = request.form.to_dict()
+        # Mantém o dashboard como visão geral com indicadores leves e atalhos.
+        indicadores = {
+            "total_ativos": 0,
+            "total_em_uso": 0,
+            "total_disponivel": 0,
+            "total_baixado": 0,
+        }
+        try:
+            ativos = service.listar_ativos(user_id)
+            indicadores["total_ativos"] = len(ativos)
+            indicadores["total_em_uso"] = sum(1 for a in ativos if (a.status or "").strip().lower() == "em uso")
+            indicadores["total_disponivel"] = sum(1 for a in ativos if (a.status or "").strip().lower() == "disponível")
+            indicadores["total_baixado"] = sum(1 for a in ativos if (a.status or "").strip().lower() == "baixado")
+        except AtivoErro:
+            # Em caso de falha de leitura, preserva renderização do dashboard sem interromper UX.
+            pass
 
-            try:
-                if "usuario_responsavel" in dados and not dados["usuario_responsavel"].strip():
-                    dados["usuario_responsavel"] = None
+        return render_template(
+            "dashboard.html",
+            usuario_email=session.get("user_email"),
+            status_validos=STATUS_VALIDOS,
+            indicadores=indicadores,
+            show_chrome=True,
+        )
 
-                if "nota_fiscal" in dados and not dados["nota_fiscal"].strip():
-                    dados["nota_fiscal"] = None
+    @app.get("/ativos")
+    def listar_ativos():
+        """
+        Lista os ativos do usuário autenticado em formato JSON.
+        Aceita parâmetros de filtro opcionais.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
-                if "garantia" in dados and not dados["garantia"].strip():
-                    dados["garantia"] = None
+        try:
+            ativos = _buscar_ativos_com_filtros(user_id)
 
-                if "data_saida" in dados and not dados["data_saida"].strip():
-                    dados["data_saida"] = None
+            return _json_success(
+                "Ativos carregados com sucesso.",
+                ativos=[_serializar_ativo(ativo) for ativo in ativos],
+            )
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except (ValueError, KeyError, TypeError):
+            return _json_error("Erro inesperado ao listar ativos.", status=500)
 
-                service.atualizar_ativo(
-                    id_ativo=id_ativo,
-                    dados=dados,
-                    user_id=user_id
-                )
+    @app.post("/ativos")
+    def criar_ativo():
+        """
+        Cria um novo ativo usando o contrato mínimo do dashboard.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
-                return redirect(url_for("editar_ativo", id_ativo=id_ativo))
+        try:
+            ativo = _ativo_do_payload(_request_data())
+            service.criar_ativo(ativo, user_id)
+            criado = service.buscar_ativo(ativo.id_ativo, user_id)
+            return _json_success(
+                "Ativo cadastrado com sucesso.",
+                status=201,
+                ativo=_serializar_ativo(criado),
+            )
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except (ValueError, KeyError, TypeError):
+            return _json_error("Erro inesperado ao cadastrar ativo.", status=500)
 
-            except AtivoErro as erro:
-                arquivos = _arquivo_service().listar_arquivos(id_ativo, user_id)
-
-                return render_template(
-                    "editar_ativo.html",
-                    erro=str(erro),
-                    dados=dados,
-                    arquivos=arquivos,
-                    id_ativo=id_ativo,
-                    status_validos=STATUS_VALIDOS,
-                    usuario_email=session.get("user_email")
-                )
-
-            except (ValueError, KeyError, TypeError) as erro:
-                arquivos = _arquivo_service().listar_arquivos(id_ativo, user_id)
-
-                return render_template(
-                    "editar_ativo.html",
-                    erro=f"Erro inesperado ao editar ativo: {erro}",
-                    dados=dados,
-                    arquivos=arquivos,
-                    id_ativo=id_ativo,
-                    status_validos=STATUS_VALIDOS,
-                    usuario_email=session.get("user_email")
-                )
+    @app.get("/ativos/<id_ativo>")
+    def buscar_ativo(id_ativo):
+        """
+        Retorna um ativo específico em JSON.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
         try:
             ativo = service.buscar_ativo(id_ativo, user_id)
-            dados = ativo.to_dict()
-            arquivos = _arquivo_service().listar_arquivos(id_ativo, user_id)
+            return _json_success("Ativo carregado com sucesso.", ativo=_serializar_ativo(ativo))
+        except AtivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except (PermissaoNegada, AtivoErro) as erro:
+            return _json_error(str(erro), status=400)
+        except (ValueError, KeyError, TypeError):
+            return _json_error("Erro inesperado ao consultar ativo.", status=500)
 
-            return render_template(
-                "editar_ativo.html",
-                erro=None,
-                dados=dados,
-                arquivos=arquivos,
-                id_ativo=id_ativo,
-                status_validos=STATUS_VALIDOS,
-                usuario_email=session.get("user_email")
-            )
-
-        except AtivoErro as erro:
-            ativos = service.listar_ativos(user_id)
-            ativos_dict = [ativo.to_dict() for ativo in ativos]
-
-            return render_template(
-                "ativos.html",
-                ativos=ativos_dict,
-                erro=str(erro),
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros={},
-                ordenar_por="id",
-                ordem="asc"
-            )
-
-        except (ValueError, KeyError, TypeError) as erro:
-            ativos = service.listar_ativos(user_id)
-            ativos_dict = [ativo.to_dict() for ativo in ativos]
-
-            return render_template(
-                "ativos.html",
-                ativos=ativos_dict,
-                erro=f"Erro inesperado ao carregar ativo para edição: {erro}",
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros={},
-                ordenar_por="id",
-                ordem="asc"
-            )
-
-    @app.route("/ativos/<id_ativo>/arquivos/upload", methods=["POST"])
-    def upload_arquivo_ativo(id_ativo):
+    @app.put("/ativos/<id_ativo>")
+    def atualizar_ativo(id_ativo):
         """
-        Faz upload de um novo anexo para o ativo.
+        Atualiza um ativo específico via fetch.
         """
         user_id = _obter_user_id_logado()
-
         if user_id is None:
-            return redirect(url_for("login"))
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
-        tipo_documento = request.form.get("tipo_documento", "")
-        arquivo = request.files.get("arquivo")
+        dados = _request_data()
+        dados_normalizados = {
+            "tipo": dados.get("tipo", ""),
+            "marca": dados.get("marca", ""),
+            "modelo": dados.get("modelo", ""),
+            "usuario_responsavel": dados.get("usuario_responsavel", "") or None,
+            "departamento": dados.get("departamento", ""),
+            "status": dados.get("status", ""),
+            "data_entrada": dados.get("data_entrada", ""),
+            "data_saida": dados.get("data_saida", "") or None,
+            "nota_fiscal": None,
+            "garantia": None,
+        }
 
         try:
-            _arquivo_service().salvar_arquivo(
+            ativo = service.atualizar_ativo(id_ativo=id_ativo, dados=dados_normalizados, user_id=user_id)
+            return _json_success("Ativo atualizado com sucesso.", ativo=_serializar_ativo(ativo))
+        except AtivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except (PermissaoNegada, AtivoErro) as erro:
+            return _json_error(str(erro), status=400)
+        except (ValueError, KeyError, TypeError):
+            return _json_error("Erro inesperado ao atualizar ativo.", status=500)
+
+    @app.delete("/ativos/<id_ativo>")
+    def remover_ativo(id_ativo):
+        """
+        Exclui um ativo específico via fetch.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        try:
+            service.remover_ativo(id_ativo, user_id)
+            return _json_success("Ativo removido com sucesso.")
+        except AtivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except (PermissaoNegada, AtivoErro) as erro:
+            return _json_error(str(erro), status=400)
+        except (ValueError, KeyError, TypeError):
+            return _json_error("Erro inesperado ao remover ativo.", status=500)
+
+    @app.get("/ativos/lista")
+    def listar_ativos_html():
+        """
+        Renderiza a listagem de ativos com filtros em modal e ações por linha.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return redirect(url_for("home"))
+
+        return render_template(
+            "ativos.html",
+            usuario_email=session.get("user_email"),
+            status_validos=STATUS_VALIDOS,
+            show_chrome=True,
+        )
+
+    @app.get("/ativos/novo")
+    def criar_ativo_html():
+        """
+        Renderiza tela dedicada de cadastro com seção de documentos vinculados ao ativo.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return redirect(url_for("home"))
+
+        return render_template(
+            "novo_ativo.html",
+            usuario_email=session.get("user_email"),
+            status_validos=STATUS_VALIDOS,
+            show_chrome=True,
+        )
+
+    @app.get("/ativos/editar/<id_ativo>")
+    def editar_ativo_html(id_ativo):
+        """
+        Renderiza tela dedicada de edição de ativo e gestão de documentos vinculados.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return redirect(url_for("home"))
+
+        return render_template(
+            "editar_ativo.html",
+            usuario_email=session.get("user_email"),
+            status_validos=STATUS_VALIDOS,
+            id_ativo=id_ativo,
+            read_only=False,
+            show_chrome=True,
+        )
+
+    @app.get("/ativos/visualizar/<id_ativo>")
+    def visualizar_ativo_html(id_ativo):
+        """
+        Renderiza visualização somente leitura para consulta rápida do ativo.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return redirect(url_for("home"))
+
+        return render_template(
+            "editar_ativo.html",
+            usuario_email=session.get("user_email"),
+            status_validos=STATUS_VALIDOS,
+            id_ativo=id_ativo,
+            read_only=True,
+            show_chrome=True,
+        )
+
+    @app.post("/ativos/remover/<id_ativo>")
+    def remover_ativo_html(id_ativo):
+        """
+        Mantém compatibilidade com remoções legadas em HTML.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return redirect(url_for("home"))
+
+        try:
+            service.remover_ativo(id_ativo, user_id)
+        except AtivoErro:
+            pass
+
+        return redirect(url_for("listar_ativos_html"))
+
+    # ====== ANEXOS (FILES) ======
+
+    @app.post("/ativos/<id_ativo>/anexos")
+    def upload_anexo(id_ativo):
+        """
+        Faz upload de um anexo para um ativo.
+        Espera: type (nota_fiscal ou garantia), file (arquivo binário)
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        tipo_documento = request.form.get("type", "").strip()
+        arquivo = request.files.get("file")
+
+        if not arquivo:
+            return _json_error("Nenhum arquivo foi enviado.", status=400)
+
+        try:
+            arquivo_id = arquivo_service.salvar_arquivo(
                 ativo_id=id_ativo,
                 tipo_documento=tipo_documento,
                 arquivo=arquivo,
                 user_id=user_id
             )
-            return redirect(url_for("editar_ativo", id_ativo=id_ativo))
-
-        except (AtivoArquivoErro, AtivoErro) as erro:
-            try:
-                ativo = service.buscar_ativo(id_ativo, user_id)
-                dados = ativo.to_dict()
-                arquivos = _arquivo_service().listar_arquivos(id_ativo, user_id)
-            except (AtivoErro, AtivoArquivoErro, ValueError, KeyError, TypeError):
-                dados = {}
-                arquivos = []
-
-            return render_template(
-                "editar_ativo.html",
-                erro=str(erro),
-                dados=dados,
-                arquivos=arquivos,
-                id_ativo=id_ativo,
-                status_validos=STATUS_VALIDOS,
-                usuario_email=session.get("user_email")
+            return _json_success(
+                "Anexo enviado com sucesso.",
+                status=201,
+                arquivo_id=arquivo_id
             )
+        except (TipoDocumentoInvalido, ArquivoNaoEncontrado) as erro:
+            return _json_error(str(erro), status=400)
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao fazer upload do anexo.", status=500)
 
-    @app.route("/ativos/arquivos/<int:arquivo_id>/download")
-    def download_arquivo_ativo(arquivo_id):
+    @app.get("/ativos/<id_ativo>/anexos")
+    def listar_anexos(id_ativo):
         """
-        Faz download controlado de um anexo do ativo.
+        Lista os anexos de um ativo.
         """
         user_id = _obter_user_id_logado()
-
         if user_id is None:
-            return redirect(url_for("login"))
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
         try:
-            arquivo = _arquivo_service().obter_arquivo(arquivo_id, user_id)
-            caminho_fisico = Path(current_app.config["UPLOAD_FOLDER"]) / arquivo["caminho_arquivo"]
+            arquivos = arquivo_service.listar_arquivos(id_ativo, user_id)
+            return _json_success(
+                "Anexos carregados com sucesso.",
+                anexos=[_serializar_arquivo(arquivo) for arquivo in arquivos]
+            )
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao listar anexos.", status=500)
 
+    @app.get("/anexos/<int:arquivo_id>/download")
+    def download_anexo(arquivo_id):
+        """
+        Faz download de um anexo específico.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        try:
+            arquivo = arquivo_service.obter_arquivo(arquivo_id, user_id)
+            caminho_fisico = Path(arquivo_service.upload_base_dir) / arquivo["caminho_arquivo"]
+            
+            if not caminho_fisico.exists():
+                return _json_error("Arquivo não encontrado no servidor.", status=404)
+            
             return send_file(
                 caminho_fisico,
                 as_attachment=True,
-                download_name=arquivo["nome_original"]
+                download_name=arquivo["nome_original"],
+                mimetype=arquivo["mime_type"] or "application/octet-stream"
             )
-
-        except (AtivoArquivoErro, AtivoErro, FileNotFoundError, OSError, ValueError, KeyError, TypeError) as erro:
-            ativos = service.listar_ativos(user_id)
-            ativos_dict = [ativo.to_dict() for ativo in ativos]
-
-            return render_template(
-                "ativos.html",
-                ativos=ativos_dict,
-                erro=str(erro),
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros={},
-                ordenar_por="id",
-                ordem="asc"
-            )
-
-    @app.route("/ativos/arquivos/<int:arquivo_id>/remover", methods=["POST"])
-    def remover_arquivo_ativo(arquivo_id):
-        """
-        Remove um anexo do ativo.
-        """
-        user_id = _obter_user_id_logado()
-
-        if user_id is None:
-            return redirect(url_for("login"))
-
-        try:
-            arquivo = _arquivo_service().obter_arquivo(arquivo_id, user_id)
-            ativo_id = arquivo["ativo_id"]
-
-            _arquivo_service().remover_arquivo(arquivo_id, user_id)
-
-            return redirect(url_for("editar_ativo", id_ativo=ativo_id))
-
-        except (AtivoArquivoErro, AtivoErro) as erro:
-            ativos = service.listar_ativos(user_id)
-            ativos_dict = [ativo.to_dict() for ativo in ativos]
-
-            return render_template(
-                "ativos.html",
-                ativos=ativos_dict,
-                erro=str(erro),
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros={},
-                ordenar_por="id",
-                ordem="asc"
-            )
-
-    @app.route("/ativos/remover/<id_ativo>", methods=["POST"])
-    def remover_ativo(id_ativo):
-        """
-        Remove um ativo existente.
-        """
-        user_id = _obter_user_id_logado()
-
-        if user_id is None:
-            return redirect(url_for("login"))
-
-        try:
-            service.remover_ativo(id_ativo, user_id)
-
-            return redirect(url_for("listar_ativos"))
-
+        except ArquivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
         except AtivoErro as erro:
-            ativos = service.listar_ativos(user_id)
-            ativos_dict = [ativo.to_dict() for ativo in ativos]
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao fazer download.", status=500)
 
-            return render_template(
-                "ativos.html",
-                ativos=ativos_dict,
-                erro=str(erro),
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros={},
-                ordenar_por="id",
-                ordem="asc"
+    @app.delete("/anexos/<int:arquivo_id>")
+    def remover_anexo(arquivo_id):
+        """
+        Remove um anexo específico.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        try:
+            arquivo_service.remover_arquivo(arquivo_id, user_id)
+            return _json_success("Anexo removido com sucesso.")
+        except ArquivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao remover anexo.", status=500)
+
+    # ====== EXPORT / IMPORT ======
+
+    @app.get("/ativos/export/csv")
+    def exportar_ativos_csv():
+        """
+        Exporta a lista de ativos (com filtros opcionais) em formato CSV.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        try:
+            ativos = _buscar_ativos_com_filtros(user_id)
+
+            # Monta CSV em memória
+            output = io.StringIO()
+            writer = csv.DictWriter(
+                output,
+                fieldnames=[
+                    "id", "tipo", "marca", "modelo", "usuario_responsavel",
+                    "departamento", "status", "data_entrada", "data_saida",
+                    "nota_fiscal", "garantia"
+                ]
             )
-
-        except (ValueError, KeyError, TypeError) as erro:
-            ativos = service.listar_ativos(user_id)
-            ativos_dict = [ativo.to_dict() for ativo in ativos]
-
-            return render_template(
-                "ativos.html",
-                ativos=ativos_dict,
-                erro=f"Erro inesperado ao remover ativo: {erro}",
-                usuario_email=session.get("user_email"),
-                status_validos=STATUS_VALIDOS,
-                filtros={},
-                ordenar_por="id",
-                ordem="asc"
+            writer.writeheader()
+            
+            for ativo in ativos:
+                writer.writerow({
+                    "id": ativo.id_ativo,
+                    "tipo": ativo.tipo,
+                    "marca": ativo.marca,
+                    "modelo": ativo.modelo,
+                    "usuario_responsavel": ativo.usuario_responsavel or "",
+                    "departamento": ativo.departamento or "",
+                    "status": ativo.status or "",
+                    "data_entrada": ativo.data_entrada or "",
+                    "data_saida": ativo.data_saida or "",
+                    "nota_fiscal": ativo.nota_fiscal or "",
+                    "garantia": ativo.garantia or "",
+                })
+            
+            csv_bytes = io.BytesIO(output.getvalue().encode("utf-8-sig"))
+            
+            return send_file(
+                csv_bytes,
+                as_attachment=True,
+                download_name="ativos_export.csv",
+                mimetype="text/csv"
             )
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except Exception:
+            return _json_error("Erro ao exportar ativos.", status=500)
+
+    @app.get("/ativos/export/<formato>")
+    def exportar_ativos(formato: str):
+        """
+        Estrutura extensível de exportação com fallback seguro para CSV.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        formato_normalizado = (formato or "").strip().lower()
+
+        if formato_normalizado in {"csv", "xlsx", "xls", "pdf"}:
+            # Mantém fallback em CSV para formatos ainda não implementados no backend.
+            return exportar_ativos_csv()
+
+        if formato_normalizado == "json":
+            try:
+                ativos = _buscar_ativos_com_filtros(user_id)
+                return jsonify(
+                    {
+                        "ok": True,
+                        "formato": "json",
+                        "total": len(ativos),
+                        "ativos": [_serializar_ativo(ativo) for ativo in ativos],
+                    }
+                )
+            except AtivoErro as erro:
+                return _json_error(str(erro), status=400)
+            except Exception:
+                return _json_error("Erro ao exportar ativos.", status=500)
+
+        return _json_error("Formato de exportação não suportado.", status=400)
+
+    @app.post("/ativos/import/csv")
+    def importar_ativos_csv():
+        """
+        Importa ativos a partir de um arquivo CSV.
+        Esperado: file (arquivo CSV com headers: id, tipo, marca, modelo, etc)
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        arquivo = request.files.get("file")
+        if not arquivo:
+            return _json_error("Nenhum arquivo foi enviado.", status=400)
+
+        try:
+            # Lê o arquivo CSV
+            stream = io.TextIOWrapper(arquivo.stream, encoding="utf-8")
+            reader = csv.DictReader(stream)
+            
+            if not reader.fieldnames:
+                return _json_error("Arquivo CSV vazio ou inválido.", status=400)
+            
+            criados = 0
+            erros = []
+            
+            for idx, row in enumerate(reader, start=2):  # start=2 pois header é linha 1
+                try:
+                    ativo = Ativo(
+                        id_ativo=row.get("id", "").strip(),
+                        tipo=row.get("tipo", "").strip(),
+                        marca=row.get("marca", "").strip(),
+                        modelo=row.get("modelo", "").strip(),
+                        usuario_responsavel=row.get("usuario_responsavel", "").strip() or None,
+                        departamento=row.get("departamento", "").strip(),
+                        status=row.get("status", "").strip(),
+                        data_entrada=row.get("data_entrada", "").strip(),
+                        data_saida=row.get("data_saida", "").strip() or None,
+                        nota_fiscal=row.get("nota_fiscal", "").strip() or None,
+                        garantia=row.get("garantia", "").strip() or None,
+                    )
+                    service.criar_ativo(ativo, user_id)
+                    criados += 1
+                except AtivoErro as e:
+                    erros.append(f"Linha {idx}: {str(e)}")
+                except Exception as e:
+                    erros.append(f"Linha {idx}: Erro inesperado - {str(e)}")
+            
+            msg = f"Importação concluída: {criados} ativo(s) criado(s)."
+            if erros:
+                msg += f" {len(erros)} erro(s)."
+            
+            return _json_success(
+                msg,
+                status=201,
+                criados=criados,
+                erros=erros if erros else None
+            )
+        except Exception:
+            return _json_error("Erro ao processar arquivo CSV.", status=500)

@@ -1,284 +1,516 @@
 {% extends 'base.html' %}
 
-{% block title %}Lista de Ativos{% endblock %}
+{% block title %}Ativos - Sistema de Controle de Ativos{% endblock %}
 
 {% block content %}
-    <!-- Cabecalho funcional da tela de ativos com acoes principais -->
-    <section class="page-intro">
-        <div>
-            <h2 class="page-title">Inventário Global de Ativos</h2>
-            <p class="page-subtitle">Gestão técnica de equipamentos, documentação e rastreabilidade operacional.</p>
+<section class="page-intro">
+    <div>
+        <h2 class="page-title">Listagem de Ativos</h2>
+        <p class="page-subtitle">Consulta operacional com filtros, exportação e ações por ativo.</p>
+    </div>
+
+    <div class="page-actions">
+        <button type="button" class="btn btn-secondary" id="open-filter-modal">Filtrar</button>
+        <button type="button" class="btn btn-primary" id="open-export-modal">Exportar</button>
+        <a href="{{ url_for('criar_ativo_html') }}" class="btn btn-secondary">Cadastrar ativo</a>
+    </div>
+</section>
+
+<div id="assets-feedback" class="flash-stack" hidden></div>
+
+<section class="panel list-panel">
+    <div class="panel-header">
+        <h3 class="title-section">Ativos cadastrados</h3>
+    </div>
+
+    <div class="panel-body table-wrapper">
+        <table class="table-premium">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tipo</th>
+                    <th>Marca</th>
+                    <th>Modelo</th>
+                    <th>Responsável</th>
+                    <th>Departamento</th>
+                    <th>Status</th>
+                    <th>Data entrada</th>
+                    <th>Data saída</th>
+                    <th>Anexos</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="asset-table-body">
+                <tr>
+                    <td colspan="11">Carregando ativos...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Modal de filtros -->
+<div id="filter-modal" class="modal" hidden>
+    <div class="modal-content modal-content-small">
+        <div class="modal-header">
+            <h3>Filtrar ativos</h3>
+            <button type="button" class="btn btn-close" data-close-modal="filter-modal">&times;</button>
         </div>
 
-        <div class="page-actions">
-            <a href="{{ url_for('criar_ativo') }}" class="btn btn-primary">
-                <i class="bi bi-plus-square" aria-hidden="true"></i>
-                <span>Cadastrar ativo</span>
-            </a>
-        </div>
-    </section>
-
-    <!-- Painel de filtros mantendo o mesmo formulario GET e os mesmos campos existentes -->
-    <section class="panel list-panel">
-        <div class="panel-header">
-            <h3 class="title-section">
-                <i class="bi bi-funnel-fill" aria-hidden="true"></i>
-                Filtros e ordenação
-            </h3>
-        </div>
-
-        <div class="panel-body">
-            <form method="GET" action="{{ url_for('listar_ativos') }}" class="filter-grid">
+        <div class="modal-body">
+            <form id="filter-form" class="form-grid modal-grid">
                 <div class="field-group">
-                    <label for="id_ativo">ID</label>
-                    <input
-                        type="text"
-                        id="id_ativo"
-                        name="id_ativo"
-                        class="input-control"
-                        value="{{ filtros.get('id_ativo', '') if filtros else '' }}"
-                    >
+                    <label for="filter-id">ID</label>
+                    <input type="text" id="filter-id" class="input-control">
                 </div>
 
                 <div class="field-group">
-                    <label for="usuario_responsavel">Responsável</label>
-                    <input
-                        type="text"
-                        id="usuario_responsavel"
-                        name="usuario_responsavel"
-                        class="input-control"
-                        value="{{ filtros.get('usuario_responsavel', '') if filtros else '' }}"
-                    >
+                    <label for="filter-tipo">Tipo</label>
+                    <input type="text" id="filter-tipo" class="input-control">
                 </div>
 
                 <div class="field-group">
-                    <label for="departamento">Departamento</label>
-                    <input
-                        type="text"
-                        id="departamento"
-                        name="departamento"
-                        class="input-control"
-                        value="{{ filtros.get('departamento', '') if filtros else '' }}"
-                    >
+                    <label for="filter-marca">Marca</label>
+                    <input type="text" id="filter-marca" class="input-control">
                 </div>
 
                 <div class="field-group">
-                    <label for="nota_fiscal">Nota Fiscal</label>
-                    <input
-                        type="text"
-                        id="nota_fiscal"
-                        name="nota_fiscal"
-                        class="input-control"
-                        value="{{ filtros.get('nota_fiscal', '') if filtros else '' }}"
-                    >
+                    <label for="filter-modelo">Modelo</label>
+                    <input type="text" id="filter-modelo" class="input-control">
                 </div>
 
                 <div class="field-group">
-                    <label for="garantia">Garantia</label>
-                    <input
-                        type="text"
-                        id="garantia"
-                        name="garantia"
-                        class="input-control"
-                        value="{{ filtros.get('garantia', '') if filtros else '' }}"
-                    >
+                    <label for="filter-usuario_responsavel">Responsável</label>
+                    <input type="text" id="filter-usuario_responsavel" class="input-control">
                 </div>
 
                 <div class="field-group">
-                    <label for="status">Status</label>
-                    <select id="status" name="status" class="select-control">
-                        <option value="">Todos</option>
+                    <label for="filter-departamento">Departamento</label>
+                    <input type="text" id="filter-departamento" class="input-control">
+                </div>
+
+                <div class="field-group">
+                    <label for="filter-status">Status</label>
+                    <select id="filter-status" class="select-control">
+                        <option value="">Todos os status</option>
                         {% for status in status_validos %}
-                            <option
-                                value="{{ status }}"
-                                {% if filtros and filtros.get('status') == status %}selected{% endif %}
-                            >
-                                {{ status }}
-                            </option>
+                            <option value="{{ status }}">{{ status }}</option>
                         {% endfor %}
                     </select>
                 </div>
 
                 <div class="field-group">
-                    <label for="data_entrada_inicial">Data Entrada Inicial</label>
-                    <input
-                        type="date"
-                        id="data_entrada_inicial"
-                        name="data_entrada_inicial"
-                        class="input-control"
-                        value="{{ filtros.get('data_entrada_inicial', '') if filtros else '' }}"
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="data_entrada_final">Data Entrada Final</label>
-                    <input
-                        type="date"
-                        id="data_entrada_final"
-                        name="data_entrada_final"
-                        class="input-control"
-                        value="{{ filtros.get('data_entrada_final', '') if filtros else '' }}"
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="data_saida_inicial">Data Saída Inicial</label>
-                    <input
-                        type="date"
-                        id="data_saida_inicial"
-                        name="data_saida_inicial"
-                        class="input-control"
-                        value="{{ filtros.get('data_saida_inicial', '') if filtros else '' }}"
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="data_saida_final">Data Saída Final</label>
-                    <input
-                        type="date"
-                        id="data_saida_final"
-                        name="data_saida_final"
-                        class="input-control"
-                        value="{{ filtros.get('data_saida_final', '') if filtros else '' }}"
-                    >
-                </div>
-
-                <div class="field-group">
-                    <label for="ordenar_por">Ordenar por</label>
-                    <select id="ordenar_por" name="ordenar_por" class="select-control">
-                        <option value="id" {% if ordenar_por == 'id' %}selected{% endif %}>ID</option>
-                        <option value="tipo" {% if ordenar_por == 'tipo' %}selected{% endif %}>Tipo</option>
-                        <option value="marca" {% if ordenar_por == 'marca' %}selected{% endif %}>Marca</option>
-                        <option value="modelo" {% if ordenar_por == 'modelo' %}selected{% endif %}>Modelo</option>
-                        <option value="usuario_responsavel" {% if ordenar_por == 'usuario_responsavel' %}selected{% endif %}>Responsável</option>
-                        <option value="departamento" {% if ordenar_por == 'departamento' %}selected{% endif %}>Departamento</option>
-                        <option value="nota_fiscal" {% if ordenar_por == 'nota_fiscal' %}selected{% endif %}>Nota Fiscal</option>
-                        <option value="garantia" {% if ordenar_por == 'garantia' %}selected{% endif %}>Garantia</option>
-                        <option value="status" {% if ordenar_por == 'status' %}selected{% endif %}>Status</option>
-                        <option value="data_entrada" {% if ordenar_por == 'data_entrada' %}selected{% endif %}>Data Entrada</option>
-                        <option value="data_saida" {% if ordenar_por == 'data_saida' %}selected{% endif %}>Data Saída</option>
+                    <label for="filter-tem-garantia">Presença de garantia</label>
+                    <select id="filter-tem-garantia" class="select-control">
+                        <option value="">Todas</option>
+                        <option value="sim">Com garantia</option>
+                        <option value="nao">Sem garantia</option>
                     </select>
                 </div>
 
                 <div class="field-group">
-                    <label for="ordem">Ordem</label>
-                    <select id="ordem" name="ordem" class="select-control">
-                        <option value="asc" {% if ordem == 'asc' %}selected{% endif %}>Crescente</option>
-                        <option value="desc" {% if ordem == 'desc' %}selected{% endif %}>Decrescente</option>
+                    <label for="filter-tem-nota">Presença de nota fiscal</label>
+                    <select id="filter-tem-nota" class="select-control">
+                        <option value="">Todas</option>
+                        <option value="sim">Com nota fiscal</option>
+                        <option value="nao">Sem nota fiscal</option>
                     </select>
                 </div>
 
-                <div class="filter-actions">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-funnel" aria-hidden="true"></i>
-                        <span>Filtrar</span>
-                    </button>
+                <div class="field-group">
+                    <label for="filter-data_entrada_inicial">Data entrada inicial</label>
+                    <input type="date" id="filter-data_entrada_inicial" class="input-control">
+                </div>
 
-                    <a href="{{ url_for('listar_ativos') }}" class="btn btn-secondary">
-                        <i class="bi bi-eraser" aria-hidden="true"></i>
-                        <span>Limpar filtros</span>
-                    </a>
+                <div class="field-group">
+                    <label for="filter-data_entrada_final">Data entrada final</label>
+                    <input type="date" id="filter-data_entrada_final" class="input-control">
+                </div>
+
+                <div class="field-group">
+                    <label for="filter-data_saida_inicial">Data saída inicial</label>
+                    <input type="date" id="filter-data_saida_inicial" class="input-control">
+                </div>
+
+                <div class="field-group">
+                    <label for="filter-data_saida_final">Data saída final</label>
+                    <input type="date" id="filter-data_saida_final" class="input-control">
                 </div>
             </form>
         </div>
-    </section>
 
-    <!-- Tabela de ativos mantendo colunas, dados e acoes existentes -->
-    <section class="panel list-panel table-panel">
-        <div class="panel-header">
-            <h3 class="title-section">
-                <i class="bi bi-hdd-stack" aria-hidden="true"></i>
-                Ativos cadastrados
-            </h3>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="reset-filters">Limpar</button>
+            <button type="button" class="btn btn-primary" id="apply-filters">Aplicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de exportação -->
+<div id="export-modal" class="modal" hidden>
+    <div class="modal-content modal-content-small">
+        <div class="modal-header">
+            <h3>Exportar ativos</h3>
+            <button type="button" class="btn btn-close" data-close-modal="export-modal">&times;</button>
         </div>
 
-        <div class="panel-body table-wrapper">
-            {% if ativos %}
-                <table class="table-premium">
-                    <thead>
+        <div class="modal-body export-actions">
+            <button type="button" class="btn btn-primary" data-export-format="xlsx">Planilha Excel</button>
+            <button type="button" class="btn btn-secondary" data-export-format="csv">CSV</button>
+            <button type="button" class="btn btn-secondary" data-export-format="pdf">PDF</button>
+            <button type="button" class="btn btn-secondary" data-export-format="json">JSON</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de anexos por ativo -->
+<div id="attachment-modal" class="modal" hidden>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="attachment-modal-title">Anexos do ativo</h3>
+            <button type="button" class="btn btn-close" data-close-modal="attachment-modal">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <div id="attachment-list" class="attachment-list">
+                <p>Carregando anexos...</p>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <label class="btn btn-secondary" for="attachment-file">Anexar documento</label>
+            <input type="file" id="attachment-file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp">
+            <select id="attachment-type" class="select-control" style="width: 220px;">
+                <option value="nota_fiscal">Nota fiscal</option>
+                <option value="garantia">Garantia</option>
+                <option value="outro">Documento complementar</option>
+            </select>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const assetTableBody = document.getElementById("asset-table-body");
+    const assetsFeedback = document.getElementById("assets-feedback");
+
+    let currentFilters = {};
+    let currentAttachmentAssetId = null;
+
+    // Usa placeholder inteiro para compor rotas tipadas com validacao local de ID.
+    const INT_URL_PLACEHOLDER = 0;
+    const attachmentUrlTemplates = {
+        listByAsset: "{{ url_for('upload_anexo', id_ativo=0) }}",
+        downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
+        deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
+    };
+
+    function showMessage(type, message) {
+        assetsFeedback.hidden = false;
+        assetsFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${message}</span></div>`;
+    }
+
+    function clearMessage() {
+        assetsFeedback.hidden = true;
+        assetsFeedback.innerHTML = "";
+    }
+
+    function parsePositiveIntId(rawValue) {
+        const value = String(rawValue ?? "").trim();
+        if (!/^\d+$/.test(value)) return null;
+        const parsed = Number(value);
+        if (!Number.isSafeInteger(parsed) || parsed <= 0) return null;
+        return parsed;
+    }
+
+    function buildIntRoute(templateUrl, rawId) {
+        const parsedId = parsePositiveIntId(rawId);
+        if (parsedId === null) return null;
+        return templateUrl.replace(`/${INT_URL_PLACEHOLDER}/`, `/${parsedId}/`);
+    }
+
+    function buildAssetAttachmentsUrl(assetId) {
+        return buildIntRoute(attachmentUrlTemplates.listByAsset, assetId);
+    }
+
+    function buildAttachmentDownloadUrl(attachmentId) {
+        return buildIntRoute(attachmentUrlTemplates.downloadByFile, attachmentId);
+    }
+
+    function buildAttachmentDeleteUrl(attachmentId) {
+        return buildIntRoute(attachmentUrlTemplates.deleteByFile, attachmentId);
+    }
+
+    async function parseJsonSafely(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) return null;
+        return response.json();
+    }
+
+    async function requestJson(url, options = {}) {
+        const response = await fetch(url, {
+            headers: {
+                "Content-Type": "application/json",
+                "X-Requested-With": "fetch",
+                ...(options.headers || {})
+            },
+            ...options
+        });
+
+        const payload = await parseJsonSafely(response);
+        return { response, payload };
+    }
+
+    function collectFiltersFromModal() {
+        return {
+            id_ativo: document.getElementById("filter-id").value || undefined,
+            tipo: document.getElementById("filter-tipo").value || undefined,
+            marca: document.getElementById("filter-marca").value || undefined,
+            modelo: document.getElementById("filter-modelo").value || undefined,
+            usuario_responsavel: document.getElementById("filter-usuario_responsavel").value || undefined,
+            departamento: document.getElementById("filter-departamento").value || undefined,
+            status: document.getElementById("filter-status").value || undefined,
+            tem_garantia: document.getElementById("filter-tem-garantia").value || undefined,
+            tem_nota_fiscal: document.getElementById("filter-tem-nota").value || undefined,
+            data_entrada_inicial: document.getElementById("filter-data_entrada_inicial").value || undefined,
+            data_entrada_final: document.getElementById("filter-data_entrada_final").value || undefined,
+            data_saida_inicial: document.getElementById("filter-data_saida_inicial").value || undefined,
+            data_saida_final: document.getElementById("filter-data_saida_final").value || undefined,
+        };
+    }
+
+    function buildQueryString(filters) {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(filters)) {
+            if (value) params.append(key, value);
+        }
+        return params.toString() ? `?${params.toString()}` : "";
+    }
+
+    function renderAssets(assets) {
+        if (!assets.length) {
+            assetTableBody.innerHTML = `<tr><td colspan="11">Nenhum ativo encontrado para os filtros selecionados.</td></tr>`;
+            return;
+        }
+
+        assetTableBody.innerHTML = assets.map((asset) => `
+            <tr>
+                <td>${asset.id}</td>
+                <td>${asset.tipo || ""}</td>
+                <td>${asset.marca || ""}</td>
+                <td>${asset.modelo || ""}</td>
+                <td>${asset.usuario_responsavel || ""}</td>
+                <td>${asset.departamento || ""}</td>
+                <td>${asset.status || ""}</td>
+                <td>${asset.data_entrada || ""}</td>
+                <td>${asset.data_saida || ""}</td>
+                <td>
+                    <button type="button" class="btn btn-secondary btn-mini" data-attachments="${asset.id}">Documentos</button>
+                </td>
+                <td>
+                    <div class="row-actions">
+                        <a href="{{ url_for('visualizar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Visualizar</a>
+                        <a href="{{ url_for('editar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Editar</a>
+                        <button type="button" class="btn btn-danger btn-mini" data-delete="${asset.id}">Excluir</button>
+                    </div>
+                </td>
+            </tr>
+        `
+        .replaceAll("__ID__", encodeURIComponent(asset.id))
+        ).join("");
+    }
+
+    async function loadAssets(filters = currentFilters) {
+        currentFilters = filters;
+        const queryString = buildQueryString(filters);
+
+        const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}" + queryString, { method: "GET" });
+        if (!response.ok) {
+            showMessage("danger", payload?.erro || "Não foi possível carregar os ativos.");
+            return;
+        }
+
+        clearMessage();
+        renderAssets(payload.ativos || []);
+    }
+
+    function openModal(id) {
+        document.getElementById(id).hidden = false;
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).hidden = true;
+    }
+
+    document.getElementById("open-filter-modal").addEventListener("click", () => openModal("filter-modal"));
+    document.getElementById("open-export-modal").addEventListener("click", () => openModal("export-modal"));
+
+    document.querySelectorAll("[data-close-modal]").forEach((button) => {
+        button.addEventListener("click", () => closeModal(button.getAttribute("data-close-modal")));
+    });
+
+    document.getElementById("apply-filters").addEventListener("click", async () => {
+        await loadAssets(collectFiltersFromModal());
+        closeModal("filter-modal");
+    });
+
+    document.getElementById("reset-filters").addEventListener("click", async () => {
+        document.getElementById("filter-form").reset();
+        await loadAssets({});
+    });
+
+    // Mantém UX de exportação com fallback automático para CSV onde o backend ainda não gera o formato.
+    document.querySelectorAll("[data-export-format]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const format = button.getAttribute("data-export-format");
+            const queryString = buildQueryString(currentFilters);
+            let chosenFormat = format;
+
+            if (format === "xlsx" || format === "pdf") {
+                showMessage("info", `Formato ${format.toUpperCase()} ainda não está implementado no backend. Exportação em CSV foi aplicada.`);
+                chosenFormat = "csv";
+            }
+
+            const exportUrl = "{{ url_for('exportar_ativos', formato='csv') }}".replace("/csv", `/${chosenFormat}`);
+            window.location.href = exportUrl + queryString;
+            closeModal("export-modal");
+        });
+    });
+
+    async function loadAttachments(assetId) {
+        const listUrl = buildAssetAttachmentsUrl(assetId);
+        if (!listUrl) {
+            showMessage("danger", "ID do ativo inválido para listagem de anexos.");
+            return;
+        }
+
+        const { response, payload } = await requestJson(listUrl, { method: "GET" });
+        if (!response.ok) {
+            document.getElementById("attachment-list").innerHTML = "<p>Não foi possível carregar os anexos.</p>";
+            return;
+        }
+
+        const attachments = payload.anexos || [];
+        if (!attachments.length) {
+            document.getElementById("attachment-list").innerHTML = "<p>Nenhum documento vinculado ao ativo.</p>";
+            return;
+        }
+
+        document.getElementById("attachment-list").innerHTML = `
+            <table class="table-mini">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Nome</th>
+                        <th>Tamanho</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${attachments.map((att) => `
                         <tr>
-                            <th>ID</th>
-                            <th>Tipo</th>
-                            <th>Marca</th>
-                            <th>Modelo</th>
-                            <th>Responsável</th>
-                            <th>Departamento</th>
-                            <th>Nota Fiscal</th>
-                            <th>Garantia</th>
-                            <th>Status</th>
-                            <th>Data Entrada</th>
-                            <th>Data Saída</th>
-                            <th>Anexos</th>
-                            <th>Ações</th>
+                            <td>${att.tipo_documento}</td>
+                            <td>${att.nome_original}</td>
+                            <td>${(att.tamanho_bytes / 1024).toFixed(2)} KB</td>
+                            <td>
+                                <button type="button" class="btn btn-secondary btn-mini" data-download="${att.id}">Baixar</button>
+                                <button type="button" class="btn btn-danger btn-mini" data-delete-attachment="${att.id}">Excluir</button>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        {% for ativo in ativos %}
-                            <tr>
-                                <td class="mono-cell">{{ ativo.id_ativo }}</td>
-                                <td>{{ ativo.tipo }}</td>
-                                <td>{{ ativo.marca }}</td>
-                                <td>{{ ativo.modelo }}</td>
-                                <td>{{ ativo.usuario_responsavel or '' }}</td>
-                                <td>{{ ativo.departamento }}</td>
-                                <td>
-                                    <span class="doc-chip">
-                                        <i class="bi bi-receipt-cutoff" aria-hidden="true"></i>
-                                        <span>{{ ativo.nota_fiscal or '' }}</span>
-                                    </span>
-                                </td>
-                                <td>
-                                    <span class="doc-chip">
-                                        <i class="bi bi-shield-check" aria-hidden="true"></i>
-                                        <span>{{ ativo.garantia or '' }}</span>
-                                    </span>
-                                </td>
-                                <td>
-                                    {% set status_normalizado = (ativo.status or '')|lower %}
-                                    <span
-                                        class="badge {% if 'uso' in status_normalizado or 'ativo' in status_normalizado %}badge-ok{% elif 'manuten' in status_normalizado %}badge-warning{% else %}badge-danger{% endif %}"
-                                    >
-                                        {{ ativo.status }}
-                                    </span>
-                                </td>
-                                <td>{{ ativo.data_entrada }}</td>
-                                <td>{{ ativo.data_saida or '' }}</td>
-                                <td>
-                                    <span class="badge badge-warning">
-                                        <i class="bi bi-paperclip" aria-hidden="true"></i>
-                                        <span>{{ ativo.total_anexos or 0 }}</span>
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="row-actions">
-                                        <a href="{{ url_for('editar_ativo', id_ativo=ativo.id_ativo) }}" class="btn btn-secondary btn-mini">
-                                            <i class="bi bi-pencil-square" aria-hidden="true"></i>
-                                            <span>Editar</span>
-                                        </a>
+                    `).join("")}
+                </tbody>
+            </table>
+        `;
+    }
 
-                                        <form
-                                            method="POST"
-                                            action="{{ url_for('remover_ativo', id_ativo=ativo.id_ativo) }}"
-                                            class="inline-form"
-                                            onsubmit="return confirm('Tem certeza que deseja remover este ativo?');"
-                                        >
-                                            <button type="submit" class="btn btn-danger btn-mini">
-                                                <i class="bi bi-trash3" aria-hidden="true"></i>
-                                                <span>Remover</span>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <div class="empty-state">
-                    <i class="bi bi-inbox" aria-hidden="true"></i>
-                    <p>Nenhum ativo encontrado.</p>
-                </div>
-            {% endif %}
-        </div>
-    </section>
+    assetTableBody.addEventListener("click", async (event) => {
+        const deleteButton = event.target.closest("[data-delete]");
+        const attachmentsButton = event.target.closest("[data-attachments]");
+
+        if (deleteButton) {
+            const assetId = deleteButton.getAttribute("data-delete");
+            if (!window.confirm("Confirma a exclusão deste ativo?")) return;
+
+            const { response, payload } = await requestJson(`{{ url_for('listar_ativos') }}/${encodeURIComponent(assetId)}`, { method: "DELETE" });
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível excluir o ativo.");
+                return;
+            }
+
+            showMessage("success", payload?.mensagem || "Ativo removido com sucesso.");
+            await loadAssets();
+            return;
+        }
+
+        if (attachmentsButton) {
+            currentAttachmentAssetId = attachmentsButton.getAttribute("data-attachments");
+            document.getElementById("attachment-modal-title").textContent = `Documentos do ativo ${currentAttachmentAssetId}`;
+            openModal("attachment-modal");
+            await loadAttachments(currentAttachmentAssetId);
+        }
+    });
+
+    document.getElementById("attachment-list").addEventListener("click", async (event) => {
+        const downloadButton = event.target.closest("[data-download]");
+        const deleteAttachmentButton = event.target.closest("[data-delete-attachment]");
+
+        if (downloadButton) {
+            const downloadUrl = buildAttachmentDownloadUrl(downloadButton.getAttribute("data-download"));
+            if (!downloadUrl) {
+                showMessage("danger", "ID do anexo inválido para download.");
+                return;
+            }
+            window.location.href = downloadUrl;
+            return;
+        }
+
+        if (deleteAttachmentButton) {
+            const attachmentId = deleteAttachmentButton.getAttribute("data-delete-attachment");
+            const deleteUrl = buildAttachmentDeleteUrl(attachmentId);
+            if (!deleteUrl) {
+                showMessage("danger", "ID do anexo inválido para exclusão.");
+                return;
+            }
+            if (!window.confirm("Confirma a exclusão deste documento?")) return;
+
+            const { response, payload } = await requestJson(deleteUrl, { method: "DELETE" });
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível excluir o anexo.");
+                return;
+            }
+
+            showMessage("success", "Documento removido com sucesso.");
+            await loadAttachments(currentAttachmentAssetId);
+        }
+    });
+
+    document.getElementById("attachment-file").addEventListener("change", async (event) => {
+        const file = event.target.files[0];
+        if (!file || !currentAttachmentAssetId) return;
+
+        const uploadUrl = buildAssetAttachmentsUrl(currentAttachmentAssetId);
+        if (!uploadUrl) {
+            showMessage("danger", "ID do ativo inválido para upload.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("type", document.getElementById("attachment-type").value);
+
+        const response = await fetch(uploadUrl, { method: "POST", body: formData });
+        const payload = await parseJsonSafely(response);
+        if (!response.ok) {
+            showMessage("danger", payload?.erro || "Não foi possível enviar o documento.");
+            return;
+        }
+
+        showMessage("success", "Documento anexado com sucesso.");
+        event.target.value = "";
+        await loadAttachments(currentAttachmentAssetId);
+    });
+
+    loadAssets();
+</script>
 {% endblock %}

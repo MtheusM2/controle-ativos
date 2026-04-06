@@ -383,6 +383,19 @@ body.app-body {
     outline: none;
 }
 
+.btn.-primary {
+    background: linear-gradient(135deg, var(--wine-1), var(--wine-2));
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(168, 25, 54, 0.32);
+}
+
+.btn.-primary:hover,
+.btn.-primary:focus-visible {
+    background: linear-gradient(135deg, var(--wine-2), #c92649);
+    box-shadow: 0 10px 24px rgba(168, 25, 54, 0.46);
+    outline: none;
+}
+
 .btn-secondary {
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-0);
@@ -483,6 +496,18 @@ body.app-body {
     border-color: rgba(111, 124, 179, 0.5);
     color: #d3dbff;
     background: rgba(111, 124, 179, 0.14);
+}
+
+.flash-message.-danger {
+    border-color: rgba(179, 38, 71, 0.5);
+    color: #ffd4de;
+    background: rgba(179, 38, 71, 0.14);
+}
+
+.flash-message.-success {
+    border-color: rgba(21, 143, 106, 0.5);
+    color: #a8edd3;
+    background: rgba(21, 143, 106, 0.14);
 }
 
 /* Layout de autenticacao para aplicacao futura no login */
@@ -629,6 +654,77 @@ body.app-body {
     min-width: 860px;
 }
 
+.table-mini {
+    min-width: 680px;
+}
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(4, 5, 9, 0.72);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    width: min(960px, 100%);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(165deg, rgba(28, 31, 40, 0.94), rgba(18, 20, 28, 0.98));
+    box-shadow: var(--shadow-card), var(--shadow-inner);
+}
+
+.modal-content-small {
+    width: min(760px, 100%);
+}
+
+.modal-header,
+.modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 0.86rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.modal-body {
+    padding: 16px;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--line-soft);
+    border-bottom: none;
+}
+
+.modal-grid {
+    grid-template-columns: repeat(3, minmax(170px, 1fr));
+}
+
+.btn-close {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+    font-size: 1rem;
+}
+
+.export-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+    gap: 10px;
+}
+
 /* ================================== */
 /* Tela de ativos: filtros e listagem */
 /* ================================== */
@@ -673,6 +769,65 @@ body.app-body {
     gap: 8px;
 }
 
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.kpi-card .panel-body {
+    display: grid;
+    gap: 6px;
+}
+
+.kpi-value {
+    margin: 0;
+    font-size: 1.9rem;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: #f4f5f7;
+}
+
+.shortcut-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.shortcut-card {
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line-soft);
+    background: rgba(255, 255, 255, 0.02);
+    text-decoration: none;
+    color: var(--text-0);
+    transition: all 0.2s ease;
+}
+
+.shortcut-card h4 {
+    margin: 0;
+    font-size: 0.86rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.shortcut-card p {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 0.8rem;
+}
+
+.shortcut-card:hover,
+.shortcut-card:focus-visible {
+    border-color: rgba(168, 25, 54, 0.42);
+    box-shadow: 0 0 0 2px rgba(168, 25, 54, 0.14);
+    outline: none;
+}
+
 .list-panel {
     margin-bottom: 16px;
 }
@@ -694,6 +849,35 @@ body.app-body {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     font-weight: 700;
+}
+
+.field-label {
+    font-size: 0.74rem;
+    color: var(--text-1);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.field-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line-strong);
+    color: var(--text-0);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    transition: all 0.2s ease;
+}
+
+.field-input:focus {
+    outline: none;
+    border-color: var(--wine-2);
+    box-shadow: 0 0 0 3px rgba(168, 25, 54, 0.22);
+}
+
+.content_dashboard {
+    display: grid;
+    gap: 16px;
 }
 
 .field-display {
@@ -845,6 +1029,18 @@ body.app-body {
     .upload-grid {
         grid-template-columns: 1fr;
     }
+
+    .kpi-grid {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+
+    .shortcut-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-grid {
+        grid-template-columns: repeat(2, minmax(170px, 1fr));
+    }
 }
 
 /* Ajuste para telas menores preservando usabilidade */
@@ -883,6 +1079,14 @@ body.app-body {
     }
 
     .filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-grid {
         grid-template-columns: 1fr;
     }
 

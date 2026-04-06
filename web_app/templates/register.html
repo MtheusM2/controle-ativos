@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastro - Sistema de Controle de Ativos{% endblock %}
+
+{% block content %}
+<section class="auth-card panel">
+    <div class="panel-header auth-header">
+        <h2 class="title-section">Cadastro de Usuário</h2>
+        <p class="text-muted">Preencha os dados abaixo para criar seu acesso.</p>
+    </div>
+
+    <div class="panel-body">
+        <div id="register-feedback" class="flash-stack" hidden></div>
+
+        <form id="register-form" method="POST" action="{{ url_for('register') }}" class="auth-form">
+            <div class="field-group">
+                <label for="email">E-mail</label>
+                <input type="email" id="email" name="email" class="input-control" required>
+            </div>
+
+            <div class="field-group">
+                <label for="empresa_id">Empresa</label>
+                <select id="empresa_id" name="empresa_id" class="select-control" required>
+                    <option value="">Selecione a empresa</option>
+                    {% for empresa in empresas %}
+                        <option value="{{ empresa.id }}">{{ empresa.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label for="senha">Senha</label>
+                <input type="password" id="senha" name="senha" class="input-control" required>
+            </div>
+
+            <div class="field-group">
+                <label for="senha_confirmacao">Confirmar senha</label>
+                <input type="password" id="senha_confirmacao" name="senha_confirmacao" class="input-control" required>
+            </div>
+
+            <div class="field-group">
+                <label for="pergunta">Pergunta de recuperação</label>
+                <input type="text" id="pergunta" name="pergunta" class="input-control" required>
+            </div>
+
+            <div class="field-group">
+                <label for="resposta">Resposta de recuperação</label>
+                <input type="text" id="resposta" name="resposta" class="input-control" required>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Cadastrar</button>
+                <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ url_for('home') }}'">Voltar</button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const registerForm = document.getElementById("register-form");
+    const registerFeedback = document.getElementById("register-feedback");
+
+    function showRegisterMessage(type, message) {
+        registerFeedback.hidden = false;
+        registerFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${message}</span></div>`;
+    }
+
+    function buildRegisterMessage(status, payload) {
+        if (payload && payload.erro) return payload.erro;
+        if (status === 400) return "Revise os dados do cadastro e tente novamente.";
+        if (status === 409) return "Já existe um usuário cadastrado com este e-mail.";
+        if (status >= 500) return "O servidor encontrou um problema inesperado.";
+        return "Não foi possível concluir o cadastro.";
+    }
+
+    async function parseJsonSafely(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+            return null;
+        }
+        return response.json();
+    }
+
+    registerForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        registerFeedback.hidden = true;
+
+        const body = Object.fromEntries(new FormData(registerForm).entries());
+
+        try {
+            const response = await fetch(registerForm.action, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "fetch"
+                },
+                body: JSON.stringify(body)
+            });
+
+            const payload = await parseJsonSafely(response);
+
+            if (!response.ok) {
+                showRegisterMessage("danger", buildRegisterMessage(response.status, payload));
+                return;
+            }
+
+            window.location.href = payload.redirect_url || "{{ url_for('home') }}";
+        } catch (error) {
+            showRegisterMessage("danger", "Não foi possível conectar ao servidor. Tente novamente.");
+        }
+    });
+</script>
+{% endblock %}

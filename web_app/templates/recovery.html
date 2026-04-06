@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Recuperar Senha - Sistema de Controle de Ativos{% endblock %}
+
+{% block content %}
+<section class="auth-card panel">
+    <div class="panel-header auth-header">
+        <h2 class="title-section">Recuperação de Senha</h2>
+        <p class="text-muted">Busque sua pergunta de segurança e redefina o acesso.</p>
+    </div>
+
+    <div class="panel-body">
+        <div id="recovery-feedback" class="flash-stack" hidden></div>
+
+        <form id="recovery-form" method="POST" action="{{ url_for('forgot_password') }}" class="auth-form">
+            <input type="hidden" id="acao" name="acao" value="buscar_pergunta">
+
+            <div class="field-group">
+                <label for="email">E-mail</label>
+                <input type="email" id="email" name="email" class="input-control" required>
+            </div>
+
+            <div class="field-group" id="question-group" hidden>
+                <label>Pergunta de recuperação</label>
+                <div id="question-display" class="field-display"></div>
+            </div>
+
+            <div class="field-group" id="answer-group" hidden>
+                <label for="resposta">Resposta</label>
+                <input type="text" id="resposta" name="resposta" class="input-control">
+            </div>
+
+            <div class="field-group" id="password-group" hidden>
+                <label for="nova_senha">Nova senha</label>
+                <input type="password" id="nova_senha" name="nova_senha" class="input-control">
+            </div>
+
+            <div class="field-group" id="confirm-group" hidden>
+                <label for="confirmar_nova_senha">Confirmar nova senha</label>
+                <input type="password" id="confirmar_nova_senha" name="confirmar_nova_senha" class="input-control">
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" id="recovery-submit" class="btn btn-primary">Buscar pergunta</button>
+                <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ url_for('home') }}'">Voltar</button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const recoveryForm = document.getElementById("recovery-form");
+    const recoveryFeedback = document.getElementById("recovery-feedback");
+    const actionInput = document.getElementById("acao");
+    const questionGroup = document.getElementById("question-group");
+    const answerGroup = document.getElementById("answer-group");
+    const passwordGroup = document.getElementById("password-group");
+    const confirmGroup = document.getElementById("confirm-group");
+    const questionDisplay = document.getElementById("question-display");
+    const recoverySubmit = document.getElementById("recovery-submit");
+
+    function showRecoveryMessage(type, message) {
+        recoveryFeedback.hidden = false;
+        recoveryFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${message}</span></div>`;
+    }
+
+    function buildRecoveryMessage(status, payload) {
+        if (payload && payload.erro) return payload.erro;
+        if (status === 400) return "Revise os dados informados e tente novamente.";
+        if (status === 401) return "A resposta de recuperação não confere.";
+        if (status === 404) return "Usuário não encontrado.";
+        if (status >= 500) return "O servidor encontrou um problema inesperado.";
+        return "Não foi possível concluir a recuperação de senha.";
+    }
+
+    async function parseJsonSafely(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+            return null;
+        }
+        return response.json();
+    }
+
+    function enableResetMode(question) {
+        actionInput.value = "redefinir_senha";
+        questionGroup.hidden = false;
+        answerGroup.hidden = false;
+        passwordGroup.hidden = false;
+        confirmGroup.hidden = false;
+        questionDisplay.textContent = question;
+        recoverySubmit.textContent = "Redefinir senha";
+    }
+
+    recoveryForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        recoveryFeedback.hidden = true;
+
+        const body = Object.fromEntries(new FormData(recoveryForm).entries());
+
+        try {
+            const response = await fetch(recoveryForm.action, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "fetch"
+                },
+                body: JSON.stringify(body)
+            });
+
+            const payload = await parseJsonSafely(response);
+
+            if (!response.ok) {
+                showRecoveryMessage("danger", buildRecoveryMessage(response.status, payload));
+                return;
+            }
+
+            if (actionInput.value === "buscar_pergunta") {
+                enableResetMode(payload.pergunta || "");
+                showRecoveryMessage("info", payload.mensagem || "Pergunta carregada com sucesso.");
+                return;
+            }
+
+            window.location.href = payload.redirect_url || "{{ url_for('home') }}";
+        } catch (error) {
+            showRecoveryMessage("danger", "Não foi possível conectar ao servidor. Tente novamente.");
+        }
+    });
+</script>
+{% endblock %}

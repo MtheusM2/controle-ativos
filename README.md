@@ -108,9 +108,22 @@ The system follows a **layered architecture** for maintainability and scalabilit
    python main.py
    
    # Or web mode
+   python app.py
+   # Compatibility entrypoint
    python web_app/app.py
    # Access at http://localhost:5000
    ```
+
+### Environment note
+
+If `.venv` stops working on Windows with an error pointing to `WindowsApps`, recreate it from a valid local Python installation:
+
+```bash
+rmdir /s /q .venv
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
 ---
 
@@ -162,21 +175,36 @@ opus-assets/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/cadastro` | Register new user |
+| `GET` | `/` | Login page |
+| `GET` | `/register` | Registration page |
+| `GET` | `/recovery` | Password recovery page |
 | `POST` | `/login` | Authenticate user |
-| `GET` | `/logout` | End session |
-| `POST` | `/recuperar-senha` | Initiate password recovery |
-| `POST` | `/redefinir-senha` | Reset password |
+| `POST` | `/register` | Register new user |
+| `POST` | `/logout` | End session |
+| `POST` | `/forgot-password` | Initiate password recovery and reset password |
+| `GET` | `/session` | Return current authenticated session context |
 
 ### Asset Routes
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/ativos` | List all assets (with filters) |
-| `POST` | `/ativos/novo` | Create new asset |
-| `GET` | `/ativos/editar/<id>` | Get asset details |
-| `POST` | `/ativos/editar/<id>` | Update asset |
-| `POST` | `/ativos/deletar/<id>` | Delete asset |
+| `GET` | `/dashboard` | Main authenticated dashboard |
+| `GET` | `/ativos` | List assets in JSON |
+| `POST` | `/ativos` | Create asset |
+| `GET` | `/ativos/<id>` | Get asset details |
+| `PUT` | `/ativos/<id>` | Update asset |
+| `DELETE` | `/ativos/<id>` | Delete asset |
+| `GET` | `/ativos/lista` | Legacy compatibility redirect |
+| `GET` | `/ativos/novo` | Legacy compatibility redirect |
+| `GET` | `/ativos/editar/<id>` | Legacy compatibility redirect |
+| `POST` | `/ativos/remover/<id>` | Legacy compatibility redirect |
+
+### Current Scope
+
+- The main presentation flow is now centered on the dashboard page.
+- Authentication screens use fetch with JSON responses.
+- Asset CRUD is executed from the dashboard using the HTTP endpoints above.
+- The attachment service exists in the services layer, but attachment HTTP routes are not wired in the current web flow.
 
 ---
 
@@ -207,8 +235,7 @@ opus-assets/
 ### Running Tests
 
 ```bash
-# [To be implemented] Run test suite
-# pytest tests/
+pytest
 ```
 
 ### Database Migrations
@@ -233,10 +260,40 @@ mysql -u <user> -p <database> < database/migrations/001_initial.sql
 
 ```bash
 # Enable Flask debug mode
-export FLASK_ENV=development
 export FLASK_DEBUG=1
-python web_app/app.py
+python app.py
 ```
+
+## 🚢 Deployment
+
+### Local production simulation on Windows
+
+```powershell
+scripts\simulate_production.ps1
+```
+
+### Local production simulation on Linux
+
+```bash
+chmod +x scripts/*.sh
+scripts/simulate_production.sh
+```
+
+### Production on Ubuntu with Gunicorn
+
+```bash
+scripts/setup_server.sh
+source .venv/bin/activate
+gunicorn -c gunicorn.conf.py wsgi:app
+```
+
+### Main production artifacts
+
+- [wsgi.py](wsgi.py)
+- [gunicorn.conf.py](gunicorn.conf.py)
+- [deploy/nginx/controle_ativos.conf](deploy/nginx/controle_ativos.conf)
+- [deploy/systemd/controle_ativos.service](deploy/systemd/controle_ativos.service)
+- [.env.example](.env.example)
 
 ---
 
