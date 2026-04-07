@@ -273,28 +273,52 @@ python web_app/app.py
 
 ## Deployment
 
-### Main Production Flow
+### Production Stack
 
-1. Prepare host and secrets (`.env` from `.env.example`)
-2. Install dependencies and initialize database (`python database/init_db.py`)
-3. Configure Nginx and systemd from `deploy/`
-4. Run Gunicorn with WSGI target:
-   ```bash
-   gunicorn -c gunicorn.conf.py wsgi:application
+| Component        | Technology                                      |
+|------------------|-------------------------------------------------|
+| OS               | Windows Server 2019+                           |
+| WSGI Server      | Waitress 3.0                                   |
+| Windows Service  | NSSM (Non-Sucking Service Manager)             |
+| Reverse Proxy    | IIS (URL Rewrite + Application Request Routing)|
+| Database         | MySQL 8                                        |
+| TLS              | Managed by IIS                                 |
+
+### Main Production Flow (Windows Server)
+
+1. Clone repository to `C:\controle_ativos`
+2. Run bootstrap as Administrator:
+   ```powershell
+   .\scripts\setup_server.ps1
    ```
+3. Fill in `.env` with real credentials and secrets
+4. Apply database schema:
+   ```powershell
+   mysql -u root -p < database\schema.sql
+   ```
+5. Install Windows service (as Administrator):
+   ```powershell
+   .\deploy\nssm\install_service.ps1 -ProjectDir "C:\controle_ativos"
+   ```
+6. Configure IIS as reverse proxy using `deploy\iis\web.config`
+7. Verify: `Invoke-WebRequest http://127.0.0.1:8000/health`
 
 ### Local Production Simulation
 
-- Windows: `scripts/simulate_production.ps1`
-- Linux/macOS: `scripts/simulate_production.sh`
+```powershell
+# Runs Waitress on port 8001 without debug mode
+scripts\simulate_production.ps1
+```
 
 ### Deployment Artifacts
 
-- `wsgi.py`
-- `gunicorn.conf.py`
-- `deploy/nginx/controle_ativos.conf`
-- `deploy/systemd/controle_ativos.service`
-- `docs/DEPLOYMENT.md`
+- `wsgi.py` — WSGI entrypoint (`wsgi:application`)
+- `waitress_conf.py` — Waitress configuration (threads, limits, identity)
+- `deploy/iis/web.config` — IIS reverse proxy + security headers
+- `deploy/nssm/install_service.ps1` — Windows service installer
+- `scripts/setup_server.ps1` — Bootstrap for new Windows Server
+- `docs/DEPLOYMENT.md` — Full step-by-step deployment guide
+- `docs/SETUP_SERVIDOR_ZERADO.md` — Complete guide from zero to HTTPS
 
 ---
 
@@ -326,4 +350,4 @@ This software is confidential and intended for authorized internal use. Unauthor
 
 ---
 
-**Last Updated:** April 6, 2026
+**Last Updated:** April 7, 2026
