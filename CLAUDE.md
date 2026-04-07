@@ -10,8 +10,8 @@
 **Nome:** controle-ativos
 **Tipo:** Sistema corporativo interno de gestão de ativos de TI
 **Repositório:** MtheusM2/controle-ativos
-**Stack:** Python 3.11 · Flask 2.3 · MySQL 8 · Jinja2 · HTML/CSS/JS · Gunicorn · Nginx · systemd
-**Ambiente de desenvolvimento:** Windows 11 com WSL2 ou Git Bash; produção em Ubuntu Linux
+**Stack:** Python 3.11 · Flask 2.3 · MySQL 8 · Jinja2 · HTML/CSS/JS · Waitress · IIS · NSSM
+**Ambiente de desenvolvimento:** Windows 11; produção em Windows Server
 
 ---
 
@@ -20,10 +20,10 @@
 ```
 controle_ativos/
 ├── app.py                  # Entry point de desenvolvimento
-├── wsgi.py                 # Entry point de produção (Gunicorn target: wsgi:application)
+├── wsgi.py                 # Entry point de produção (Waitress target: wsgi:application)
 ├── main.py                 # Alias de entry point
 ├── config.py               # Leitura centralizada de variáveis de ambiente
-├── gunicorn.conf.py        # Configuração do Gunicorn
+├── waitress_conf.py        # Configuração do Waitress (host, porta, threads)
 │
 ├── web_app/
 │   ├── app.py              # create_app() — factory pattern com injeção de services
@@ -52,16 +52,17 @@ controle_ativos/
 │   └── security/           # Scripts de segurança do banco
 │
 ├── utils/
-│   ├── crypto.py           # Hash de senha com pepper (bcrypt)
+│   ├── crypto.py           # Hash de senha com pepper (PBKDF2)
+│   ├── csrf.py             # Geração e validação de tokens CSRF (itsdangerous)
 │   ├── validators.py       # Validação de campos de ativo
 │   ├── validacoes.py       # Validação de campos de usuário
 │   └── logging_config.py   # Configuração de logging estruturado
 │
 ├── deploy/
-│   ├── nginx/controle_ativos.conf
-│   └── systemd/controle_ativos.service
+│   ├── iis/web.config      # Reverse proxy IIS + headers de segurança
+│   └── nssm/install_service.ps1  # Instala Waitress como serviço Windows
 │
-├── scripts/                # Scripts operacionais (setup, diagnóstico, simulação)
+├── scripts/                # Scripts PowerShell (setup, diagnóstico, simulação)
 ├── tests/                  # pytest — conftest.py com injeção de services mockados
 └── docs/                   # Documentação pública do deploy e segurança
 ```
@@ -89,7 +90,7 @@ controle_ativos/
 
 | Mecanismo                | Implementação                                               |
 |--------------------------|-------------------------------------------------------------|
-| Hash de senha            | bcrypt + pepper via `utils/crypto.py`                       |
+| Hash de senha            | PBKDF2 + pepper via `utils/crypto.py`                       |
 | Sessão Flask             | `SESSION_COOKIE_HTTPONLY=True`, `SAMESITE=Lax`, `SECURE` em prod |
 | Bloqueio de login        | `tentativas_login_falhas` + `bloqueado_ate` na tabela usuarios |
 | Usuário de banco         | `opus_app` — permissões mínimas (sem GRANT, sem DROP)       |
@@ -132,12 +133,12 @@ controle_ativos/
 
 ## Comandos Frequentes
 
-```bash
-# Desenvolvimento local (Windows)
+```powershell
+# Desenvolvimento local
 scripts/start_local.ps1
 
-# Desenvolvimento local (Linux/WSL)
-bash scripts/start_local.sh
+# Simular produção (Waitress, sem debug)
+scripts/simulate_production.ps1
 
 # Testes
 pytest tests/ -v
@@ -148,19 +149,19 @@ python scripts/diagnose_runtime_config.py
 # Testar conexão com banco
 python scripts/test_db_connection.py
 
-# Simular produção (Linux)
-bash scripts/simulate_production.sh
+# Setup inicial no servidor Windows
+scripts/setup_server.ps1
 ```
 
 ---
 
 ## Deploy em Produção
 
-- **Servidor:** Ubuntu Linux
-- **Process manager:** systemd → `deploy/systemd/controle_ativos.service`
-- **Reverse proxy:** Nginx → `deploy/nginx/controle_ativos.conf`
-- **WSGI server:** Gunicorn → `gunicorn.conf.py` (target: `wsgi:application`)
-- **Path de instalação:** `/opt/controle_ativos`
+- **Servidor:** Windows Server 2019+
+- **Process manager:** NSSM → `deploy/nssm/install_service.ps1`
+- **Reverse proxy:** IIS (ARR + URL Rewrite) → `deploy/iis/web.config`
+- **WSGI server:** Waitress → `waitress_conf.py` (target: `wsgi:application`)
+- **Path de instalação:** `C:\controle_ativos`
 - **Documentação completa:** `docs/DEPLOYMENT.md`
 - **Rotação de credenciais DB:** `docs/SECURITY_DB_ROTATION_GUIDE.md`
 
@@ -174,7 +175,7 @@ bash scripts/simulate_production.sh
 | `frontend-engineer`    | Templates Jinja2, CSS, JavaScript, UX/UI de telas           |
 | `security-auditor`     | Revisão de segurança, hardening, análise de vulnerabilidades |
 | `db-architect`         | Schema, migrações SQL, queries, índices, performance         |
-| `deploy-engineer`      | Nginx, systemd, Gunicorn, scripts de deploy, ambiente Linux  |
+| `deploy-engineer`      | IIS, NSSM, Waitress, scripts de deploy, ambiente Windows Server |
 | `qa-engineer`          | Escrita e revisão de testes, cobertura, qualidade de código  |
 
 ---
