@@ -20,11 +20,22 @@ from config import (  # noqa: E402
     LOG_LEVEL,
     SESSION_COOKIE_SECURE,
     SESSION_LIFETIME_MINUTES,
+    STORAGE_TYPE,
+    S3_BUCKET,
+    S3_REGION,
+    S3_ACCESS_KEY_ID,
+    S3_SECRET_ACCESS_KEY,
+    S3_ENDPOINT_URL,
 )
 from services.ativos_arquivo_service import AtivosArquivoService  # noqa: E402
 from services.ativos_service import AtivosService  # noqa: E402
 from services.auth_service import AuthService  # noqa: E402
 from services.empresa_service import EmpresaService  # noqa: E402
+from services.storage_backend import (  # noqa: E402
+    LocalStorageBackend,
+    S3StorageBackend,
+    StorageBackendError,
+)
 from utils.csrf import gerar_token_csrf  # noqa: E402
 from utils.logging_config import configure_logging  # noqa: E402
 from web_app.routes.ativos_routes import registrar_rotas_ativos  # noqa: E402
@@ -60,21 +71,45 @@ def create_app(
     if config_overrides:
         flask_app.config.update(config_overrides)
 
-    # Garante que os diretórios operacionais existam antes do primeiro request.
-    Path(flask_app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
+    # Cria diretório de logs se necessário.
     Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+
+    # Se usar storage local, cria diretório de uploads (não é usado em S3).
+    # Em Render, este diretório será ephemeral e não será persistido.
+    if STORAGE_TYPE == "local":
+        Path(flask_app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
 
     configure_logging(flask_app, level_name=LOG_LEVEL, log_dir=LOG_DIR)
 
     # Disponibiliza gerar_token_csrf() em todos os templates Jinja sem importação explícita.
     flask_app.jinja_env.globals["csrf_token"] = gerar_token_csrf
 
+    # Instancia o backend de armazenamento correto.
+    if STORAGE_TYPE == "s3":
+        flask_app.logger.info("Inicializando backend S3 para armazenamento de arquivos.")
+        try:
+            storage_backend = S3StorageBackend(
+                bucket_name=S3_BUCKET,
+                region=S3_REGION,
+                access_key_id=S3_ACCESS_KEY_ID,
+                secret_access_key=S3_SECRET_ACCESS_KEY,
+                endpoint_url=S3_ENDPOINT_URL,
+            )
+        except StorageBackendError as e:
+            flask_app.logger.error(f"Falha ao inicializar S3: {e}")
+            raise
+    else:
+        flask_app.logger.info("Inicializando backend local para armazenamento de arquivos.")
+        storage_backend = LocalStorageBackend(
+            base_dir=flask_app.config["UPLOAD_FOLDER"]
+        )
+
     services = service_overrides or {}
     auth_service = services.get("auth_service") or AuthService()
     ativos_service = services.get("ativos_service") or AtivosService()
     empresa_service = services.get("empresa_service") or EmpresaService()
     ativos_arquivo_service = services.get("ativos_arquivo_service") or AtivosArquivoService(
-        upload_base_dir=flask_app.config["UPLOAD_FOLDER"]
+        storage_backend=storage_backend
     )
 
     registrar_rotas_auth(

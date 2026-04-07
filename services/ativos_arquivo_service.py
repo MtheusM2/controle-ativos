@@ -5,8 +5,10 @@
 # - nota_fiscal
 # - garantia
 #
-# O arquivo físico é salvo localmente no projeto e os metadados
-# são persistidos no banco de dados.
+# O arquivo é salvo via backend plugável (local filesystem ou S3)
+# e os metadados são persistidos no banco de dados.
+# Isso permite que a aplicação funcione tanto em Windows Server
+# (com storage local) quanto no Render (com S3).
 
 from pathlib import Path
 from uuid import uuid4
@@ -15,6 +17,7 @@ from werkzeug.utils import secure_filename
 
 from database.connection import cursor_mysql
 from services.ativos_service import AtivosService
+from services.storage_backend import StorageBackend, StorageBackendError
 
 
 class AtivoArquivoErro(Exception):
@@ -57,11 +60,14 @@ class AtivosArquivoService:
     # Extensões aceitas nesta fase.
     EXTENSOES_PERMITIDAS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 
-    def __init__(self, upload_base_dir: str):
+    def __init__(self, storage_backend: StorageBackend):
         """
-        Inicializa o serviço com o diretório-base de uploads.
+        Inicializa o serviço com um backend de armazenamento.
+
+        Args:
+            storage_backend: instância de StorageBackend (local ou S3).
         """
-        self.upload_base_dir = Path(upload_base_dir)
+        self.storage_backend = storage_backend
         self.ativos_service = AtivosService()
 
     def _validar_tipo_documento(self, tipo_documento: str) -> str:
@@ -102,11 +108,17 @@ class AtivosArquivoService:
         token = uuid4().hex
         return f"{tipo_documento}_{token}{extensao}"
 
-    def _diretorio_ativo(self, ativo_id: str) -> Path:
+    def _caminho_relativo_arquivo(
+        self, ativo_id: str, tipo_documento: str, nome_original: str
+    ) -> str:
         """
-        Retorna a pasta física onde os anexos do ativo serão salvos.
+        Monta o caminho relativo para armazenamento.
+
+        Retorna: 'ativos/{ativo_id}/{tipo_documento}_{uuid}.{ext}'
         """
-        return self.upload_base_dir / "ativos" / ativo_id
+        nome_armazenado = self._montar_nome_armazenado(tipo_documento, nome_original)
+        caminho = str(Path("ativos") / ativo_id / nome_armazenado).replace("\\", "/")
+        return caminho
 
     def salvar_arquivo(
         self,
@@ -116,7 +128,16 @@ class AtivosArquivoService:
         user_id: int
     ) -> int:
         """
-        Salva um novo anexo para o ativo informado.
+        Salva um novo anexo para o ativo informado via backend de armazenamento.
+
+        Args:
+            ativo_id: ID do ativo
+            tipo_documento: tipo documental (nota_fiscal, garantia, outro)
+            arquivo: Flask FileStorage com .stream (BinaryIO) e .filename
+            user_id: ID do usuário autenticado
+
+        Returns:
+            ID da linha criada em ativos_arquivos
         """
         # Garante que o usuário tem acesso ao ativo.
         self.ativos_service.buscar_ativo(ativo_id, user_id)
@@ -125,24 +146,27 @@ class AtivosArquivoService:
         self._validar_arquivo(arquivo)
 
         nome_original = secure_filename(arquivo.filename)
-        nome_armazenado = self._montar_nome_armazenado(tipo, nome_original)
 
-        pasta_ativo = self._diretorio_ativo(ativo_id)
-        pasta_ativo.mkdir(parents=True, exist_ok=True)
+        # Monta caminho relativo: ativos/{ativo_id}/{tipo}_{uuid}.{ext}
+        caminho_relativo = self._caminho_relativo_arquivo(
+            ativo_id, tipo, nome_original
+        )
 
-        caminho_fisico = pasta_ativo / nome_armazenado
+        # Salva no backend (local ou S3).
+        try:
+            self.storage_backend.save(caminho_relativo, arquivo.stream)
+        except StorageBackendError as e:
+            raise AtivoArquivoErro(f"Falha ao salvar arquivo: {e}")
 
-        # Salva o arquivo em disco.
-        arquivo.save(caminho_fisico)
-
-        tamanho_bytes = caminho_fisico.stat().st_size
+        # Obtém metadados do arquivo original.
+        tamanho_bytes = len(arquivo.read())
+        arquivo.seek(0)
         mime_type = getattr(arquivo, "mimetype", None)
 
-        # Caminho relativo salvo no banco.
-        caminho_relativo = str(
-            Path("ativos") / ativo_id / nome_armazenado
-        ).replace("\\", "/")
+        # Extrai nome_armazenado do caminho relativo (último componente).
+        nome_armazenado = Path(caminho_relativo).name
 
+        # Persiste metadados no banco.
         with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(
                 """
@@ -236,12 +260,15 @@ class AtivosArquivoService:
 
     def remover_arquivo(self, arquivo_id: int, user_id: int) -> None:
         """
-        Remove o anexo do banco e do disco.
+        Remove o anexo do banco e do backend de armazenamento.
+
+        Args:
+            arquivo_id: ID do arquivo em ativos_arquivos
+            user_id: ID do usuário autenticado
         """
         arquivo = self.obter_arquivo(arquivo_id, user_id)
 
-        caminho_fisico = self.upload_base_dir / arquivo["caminho_arquivo"]
-
+        # Remove do banco primeiro (transacional).
         with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(
                 "DELETE FROM ativos_arquivos WHERE id = %s",
@@ -251,8 +278,17 @@ class AtivosArquivoService:
             if cur.rowcount == 0:
                 raise ArquivoNaoEncontrado("Não foi possível remover o arquivo.")
 
-        if caminho_fisico.exists():
-            caminho_fisico.unlink(missing_ok=True)
+        # Remove do backend de armazenamento.
+        caminho_relativo = arquivo["caminho_arquivo"]
+        try:
+            self.storage_backend.delete(caminho_relativo)
+        except StorageBackendError as e:
+            # Já deletou do banco, mas falhou no storage.
+            # Log the error mas não levanta exceção (arquivo já saiu do sistema).
+            import logging
+            logging.warning(
+                f"Falha ao deletar arquivo {arquivo_id} do backend: {e}"
+            )
 
     def contar_por_ativo(self, ativo_ids: list[str], user_id: int) -> dict[str, int]:
         """

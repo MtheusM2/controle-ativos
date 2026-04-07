@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import jsonify, redirect, render_template, request, send_file, session, url_for
+from services.storage_backend import LocalStorageBackend, S3StorageBackend
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font
@@ -869,6 +870,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     def download_anexo(arquivo_id):
         """
         Faz download de um anexo específico.
+
+        Comportamento:
+        - Se storage local: retorna arquivo via send_file
+        - Se storage S3: redireciona para URL assinada de presigned
         """
         user_id = _obter_user_id_logado()
         if user_id is None:
@@ -876,17 +881,24 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         try:
             arquivo = arquivo_service.obter_arquivo(arquivo_id, user_id)
-            caminho_fisico = Path(arquivo_service.upload_base_dir) / arquivo["caminho_arquivo"]
-            
-            if not caminho_fisico.exists():
-                return _json_error("Arquivo não encontrado no servidor.", status=404)
-            
+            storage_backend = arquivo_service.storage_backend
+            caminho_relativo = arquivo["caminho_arquivo"]
+
+            # Para S3 (presigned URL), redireciona direto para o S3.
+            # Para local, carrega arquivo em memória e serve via Flask.
+            if isinstance(storage_backend, S3StorageBackend):
+                url_assinada = storage_backend.get_download_url(caminho_relativo)
+                return redirect(url_assinada)
+
+            # Storage local: carrega arquivo do backend.
+            arquivo_bytes = storage_backend.load(caminho_relativo)
             return send_file(
-                caminho_fisico,
+                arquivo_bytes,
                 as_attachment=True,
                 download_name=arquivo["nome_original"],
                 mimetype=arquivo["mime_type"] or "application/octet-stream"
             )
+
         except ArquivoNaoEncontrado as erro:
             return _json_error(str(erro), status=404)
         except AtivoErro as erro:

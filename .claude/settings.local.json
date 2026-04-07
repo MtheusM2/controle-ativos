@@ -19,7 +19,9 @@
       "Bash(.venv/Scripts/python -m waitress --listen=127.0.0.1:8099 wsgi:application)",
       "Bash(curl -s http://127.0.0.1:8099/health)",
       "Bash(kill %1)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(wait)"
     ]
   }
 }

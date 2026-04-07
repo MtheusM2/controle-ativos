@@ -65,3 +65,24 @@ AUTH_LOCKOUT_MINUTES = _get_int("AUTH_LOCKOUT_MINUTES", 15)
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper() or "INFO"
 LOG_DIR = os.getenv("LOG_DIR", str(BASE_DIR / "logs")).strip()
+
+# Configuração de armazenamento de arquivos.
+# STORAGE_TYPE: "local" (padrão, para Windows/desenvolvimento) ou "s3" (para Render/cloud).
+STORAGE_TYPE = os.getenv("STORAGE_TYPE", "local").strip().lower()
+
+# Parâmetros de S3 (usados apenas se STORAGE_TYPE="s3").
+S3_BUCKET = os.getenv("S3_BUCKET", "").strip()
+S3_REGION = os.getenv("S3_REGION", "us-east-1").strip()
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID", "").strip()
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY", "").strip()
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip() or None
+
+# Validação: se STORAGE_TYPE="s3", bucket deve estar definido.
+if STORAGE_TYPE == "s3" and not S3_BUCKET:
+    raise ValueError(
+        "Se STORAGE_TYPE='s3', a variavel obrigatoria 'S3_BUCKET' deve ser definida."
+    )
+
+# Timeout para conexão com banco de dados (em segundos).
+# Render pode ter latência inicial maior; aumentar se necessário.
+DB_CONNECTION_TIMEOUT = _get_int("DB_CONNECTION_TIMEOUT", 30)
