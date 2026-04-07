@@ -25,6 +25,7 @@ from services.ativos_arquivo_service import AtivosArquivoService  # noqa: E402
 from services.ativos_service import AtivosService  # noqa: E402
 from services.auth_service import AuthService  # noqa: E402
 from services.empresa_service import EmpresaService  # noqa: E402
+from utils.csrf import gerar_token_csrf  # noqa: E402
 from utils.logging_config import configure_logging  # noqa: E402
 from web_app.routes.ativos_routes import registrar_rotas_ativos  # noqa: E402
 from web_app.routes.auth_routes import registrar_rotas_auth  # noqa: E402
@@ -64,6 +65,9 @@ def create_app(
     Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 
     configure_logging(flask_app, level_name=LOG_LEVEL, log_dir=LOG_DIR)
+
+    # Disponibiliza gerar_token_csrf() em todos os templates Jinja sem importação explícita.
+    flask_app.jinja_env.globals["csrf_token"] = gerar_token_csrf
 
     services = service_overrides or {}
     auth_service = services.get("auth_service") or AuthService()

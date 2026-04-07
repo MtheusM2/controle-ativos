@@ -206,3 +206,15 @@ def authenticated_client(request):
         session_data["user_empresa_id"] = 10
         session_data["user_empresa_nome"] = "Empresa Demo"
     return test_client
+
+
+def gerar_csrf_token_para_teste(flask_app, user_id: int) -> str:
+    """
+    Gera um token CSRF válido no contexto da aplicação para uso em testes.
+    O token é derivado da chave secreta e da identidade do usuário.
+    """
+    from itsdangerous import URLSafeTimedSerializer
+
+    with flask_app.app_context():
+        serializer = URLSafeTimedSerializer(flask_app.config["SECRET_KEY"], salt="csrf")
+        return serializer.dumps(f"user:{user_id}")

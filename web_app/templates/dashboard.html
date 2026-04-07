@@ -110,7 +110,15 @@
                     <td>{{ ativo.tipo }}</td>
                     <td>{{ ativo.marca }}</td>
                     <td>{{ ativo.modelo }}</td>
-                    <td>{{ ativo.status }}</td>
+                    <td>
+                        {% set sl = ativo.status | lower if ativo.status else '' %}
+                        {% if sl == 'disponível' %}<span class="status-badge status-disponivel">{{ ativo.status }}</span>
+                        {% elif sl == 'em uso' %}<span class="status-badge status-em-uso">{{ ativo.status }}</span>
+                        {% elif sl == 'em manutenção' %}<span class="status-badge status-em-manutencao">{{ ativo.status }}</span>
+                        {% elif sl == 'reservado' %}<span class="status-badge status-reservado">{{ ativo.status }}</span>
+                        {% elif sl == 'baixado' %}<span class="status-badge status-baixado">{{ ativo.status }}</span>
+                        {% else %}{{ ativo.status }}{% endif %}
+                    </td>
                     <td>{{ ativo.data_entrada }}</td>
                     <td class="action-cell">
                         <div class="row-actions">

@@ -327,6 +327,28 @@
         return params.toString() ? `?${params.toString()}` : "";
     }
 
+    // Mapeia status para a classe CSS semântica correspondente.
+    const STATUS_CSS_MAP = {
+        "disponível":      "status-disponivel",
+        "em uso":          "status-em-uso",
+        "em manutenção":   "status-em-manutencao",
+        "reservado":       "status-reservado",
+        "baixado":         "status-baixado",
+    };
+
+    function renderStatusBadge(status) {
+        const key = (status || "").trim().toLowerCase();
+        const cssClass = STATUS_CSS_MAP[key] || "";
+        return `<span class="status-badge ${cssClass}">${status || ""}</span>`;
+    }
+
+    // Sanitiza texto simples para exibição segura como texto em células da tabela.
+    function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.appendChild(document.createTextNode(text || ""));
+        return div.innerHTML;
+    }
+
     function renderAssets(assets) {
         if (!assets.length) {
             assetTableBody.innerHTML = `<tr><td colspan="11">Nenhum ativo encontrado para os filtros selecionados.</td></tr>`;
@@ -335,15 +357,15 @@
 
         assetTableBody.innerHTML = assets.map((asset) => `
             <tr>
-                <td>${asset.id}</td>
-                <td>${asset.tipo || ""}</td>
-                <td>${asset.marca || ""}</td>
-                <td>${asset.modelo || ""}</td>
-                <td>${asset.usuario_responsavel || ""}</td>
-                <td>${asset.departamento || ""}</td>
-                <td>${asset.status || ""}</td>
-                <td>${asset.data_entrada || ""}</td>
-                <td>${asset.data_saida || ""}</td>
+                <td>${escapeHtml(asset.id)}</td>
+                <td>${escapeHtml(asset.tipo)}</td>
+                <td>${escapeHtml(asset.marca)}</td>
+                <td>${escapeHtml(asset.modelo)}</td>
+                <td>${escapeHtml(asset.usuario_responsavel)}</td>
+                <td>${escapeHtml(asset.departamento)}</td>
+                <td>${renderStatusBadge(asset.status)}</td>
+                <td>${escapeHtml(asset.data_entrada)}</td>
+                <td>${escapeHtml(asset.data_saida)}</td>
                 <td class="attachment-cell">
                     <button type="button" class="btn btn-secondary btn-mini" data-attachments="${asset.id}">Documentos</button>
                 </td>

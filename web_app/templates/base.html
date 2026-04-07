@@ -9,6 +9,14 @@
     <!-- Folha de estilo global reutilizável da interface Flask/Jinja -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
+    <!-- Bootstrap Icons: ícones vetoriais usados na sidebar e topbar -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+        integrity="sha256-9kPW/n5nn53j4WMne1K/8dnMetFpti14WerkHkT2G5c="
+        crossorigin="anonymous"
+    >
+
     <!-- Bloco opcional para estilos adicionais por template -->
     {% block extra_head %}{% endblock %}
 </head>

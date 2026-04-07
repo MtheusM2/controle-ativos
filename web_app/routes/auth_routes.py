@@ -12,6 +12,7 @@ from services.auth_service import (
     UsuarioNaoEncontrado,
 )
 from services.empresa_service import EmpresaService
+from utils.csrf import validar_token_csrf
 
 REMEMBER_EMAIL_COOKIE = "remember_email"
 REMEMBER_ACTIVE_COOKIE = "remember_active"
@@ -349,6 +350,11 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
         if user_id is None:
             return redirect(url_for("home"))
 
+        # Proteção CSRF: rejeita requisições sem token válido (cross-site form attacks).
+        if not validar_token_csrf(request.form.get("csrf_token")):
+            flash("Requisição inválida. Tente novamente.", "danger")
+            return redirect(url_for("configuracoes_page"))
+
         nome = (request.form.get("nome") or "").strip()
         email = (request.form.get("email") or "").strip()
 
@@ -383,6 +389,11 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
         if user_id is None:
             return redirect(url_for("home"))
 
+        # Proteção CSRF: rejeita requisições sem token válido (cross-site form attacks).
+        if not validar_token_csrf(request.form.get("csrf_token")):
+            flash("Requisição inválida. Tente novamente.", "danger")
+            return redirect(url_for("configuracoes_page"))
+
         senha_atual = request.form.get("senha_atual", "")
         nova_senha = request.form.get("nova_senha", "")
         confirmar = request.form.get("confirmar_nova_senha", "")
@@ -407,6 +418,11 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
         user_id = _obter_user_id_logado()
         if user_id is None:
             return redirect(url_for("home"))
+
+        # Proteção CSRF: rejeita requisições sem token válido (cross-site form attacks).
+        if not validar_token_csrf(request.form.get("csrf_token")):
+            flash("Requisição inválida. Tente novamente.", "danger")
+            return redirect(url_for("configuracoes_page"))
 
         lembrar_me_ativo = _parse_bool_flag(request.form.get("lembrar_me_ativo"))
 

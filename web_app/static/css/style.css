@@ -460,6 +460,66 @@ body.app-body {
     background: rgba(179, 38, 71, 0.16);
 }
 
+/* ============================================================= */
+/* Badges semanticos de status de ativo (uso nas tabelas e cards) */
+/* ============================================================= */
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+/* Disponível: verde — ativo pronto para uso */
+.status-disponivel {
+    color: #8ae5c3;
+    border-color: rgba(21, 143, 106, 0.5);
+    background: rgba(21, 143, 106, 0.14);
+}
+
+/* Em Uso: vermelho/vinho — ativo alocado */
+.status-em-uso {
+    color: #ffd4de;
+    border-color: rgba(168, 25, 54, 0.5);
+    background: rgba(168, 25, 54, 0.16);
+    box-shadow: 0 0 8px rgba(168, 25, 54, 0.14);
+}
+
+/* Em Manutenção: âmbar — ativo fora de operação temporária */
+.status-em-manutencao {
+    color: #ffd89d;
+    border-color: rgba(187, 122, 27, 0.55);
+    background: rgba(187, 122, 27, 0.14);
+}
+
+/* Reservado: azul frio — ativo agendado */
+.status-reservado {
+    color: #c2d0ff;
+    border-color: rgba(111, 124, 179, 0.55);
+    background: rgba(111, 124, 179, 0.14);
+}
+
+/* Baixado: cinza — ativo fora de inventário ativo */
+.status-baixado {
+    color: var(--text-2);
+    border-color: var(--line-strong);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* Estado de carregamento para botões com ação assíncrona */
+.btn.is-loading {
+    opacity: 0.6;
+    cursor: wait;
+    pointer-events: none;
+}
+
 /* Mensagens de feedback para erro/sucesso/informacao */
 .flash-stack {
     display: grid;

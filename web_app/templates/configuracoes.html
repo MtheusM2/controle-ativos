@@ -53,6 +53,8 @@
 
     <div class="panel-body">
         <form method="POST" action="{{ url_for('atualizar_configuracoes_perfil') }}" class="form-grid">
+            <!-- Token CSRF para proteger contra submissões cross-site -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="field-group">
                 <label for="nome">Nome</label>
                 <input
@@ -100,6 +102,8 @@
 
     <div class="panel-body">
         <form method="POST" action="{{ url_for('atualizar_configuracoes_senha') }}" class="form-grid">
+            <!-- Token CSRF para proteger contra submissões cross-site -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="field-group">
                 <label for="senha_atual">Senha atual</label>
                 <input id="senha_atual" name="senha_atual" type="password" class="input-control" required>
@@ -129,6 +133,8 @@
 
     <div class="panel-body">
         <form method="POST" action="{{ url_for('atualizar_preferencia_lembrar_me') }}" class="form-grid">
+            <!-- Token CSRF para proteger contra submissões cross-site -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="field-group settings-toggle-group">
                 <label class="auth-check" for="lembrar_me_ativo">
                     <input

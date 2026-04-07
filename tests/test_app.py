@@ -228,10 +228,12 @@ def test_settings_page_authenticated(authenticated_client):
     assert "Dados de Perfil" in html
 
 
-def test_settings_user_cannot_change_email(authenticated_client):
+def test_settings_user_cannot_change_email(authenticated_client, app_fixture):
+    from tests.conftest import gerar_csrf_token_para_teste
+    csrf = gerar_csrf_token_para_teste(app_fixture, user_id=1)
     response = authenticated_client.post(
         "/configuracoes/perfil",
-        data={"nome": "Novo Nome", "email": "novo-email@example.com"},
+        data={"nome": "Novo Nome", "email": "novo-email@example.com", "csrf_token": csrf},
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -239,10 +241,12 @@ def test_settings_user_cannot_change_email(authenticated_client):
     assert "Apenas administradores podem alterar o e-mail." in html
 
 
-def test_settings_user_can_change_name(authenticated_client):
+def test_settings_user_can_change_name(authenticated_client, app_fixture):
+    from tests.conftest import gerar_csrf_token_para_teste
+    csrf = gerar_csrf_token_para_teste(app_fixture, user_id=1)
     response = authenticated_client.post(
         "/configuracoes/perfil",
-        data={"nome": "Nome Atualizado", "email": "user@example.com"},
+        data={"nome": "Nome Atualizado", "email": "user@example.com", "csrf_token": csrf},
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -250,7 +254,7 @@ def test_settings_user_can_change_name(authenticated_client):
 
 
 def test_settings_admin_can_change_email():
-    from tests.conftest import FakeArquivosService, FakeAtivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import FakeArquivosService, FakeAtivosService, FakeAuthService, FakeEmpresaService, gerar_csrf_token_para_teste
 
     auth = FakeAuthService()
     auth.user_data["perfil"] = "admin"
@@ -272,19 +276,22 @@ def test_settings_admin_can_change_email():
         session_data["user_empresa_id"] = 10
         session_data["user_empresa_nome"] = "Empresa Demo"
 
+    csrf = gerar_csrf_token_para_teste(app, user_id=1)
     response = client.post(
         "/configuracoes/perfil",
-        data={"nome": "Admin", "email": "admin@empresa.com"},
+        data={"nome": "Admin", "email": "admin@empresa.com", "csrf_token": csrf},
         follow_redirects=True,
     )
     assert response.status_code == 200
     assert "Perfil atualizado com sucesso." in response.get_data(as_text=True)
 
 
-def test_settings_can_disable_remember_me(authenticated_client):
+def test_settings_can_disable_remember_me(authenticated_client, app_fixture):
+    from tests.conftest import gerar_csrf_token_para_teste
+    csrf = gerar_csrf_token_para_teste(app_fixture, user_id=1)
     response = authenticated_client.post(
         "/configuracoes/lembrar-me",
-        data={},
+        data={"csrf_token": csrf},
         follow_redirects=False,
     )
     assert response.status_code in {301, 302}
@@ -292,13 +299,16 @@ def test_settings_can_disable_remember_me(authenticated_client):
     assert "remember_active=;" in set_cookie
 
 
-def test_settings_can_change_password(authenticated_client):
+def test_settings_can_change_password(authenticated_client, app_fixture):
+    from tests.conftest import gerar_csrf_token_para_teste
+    csrf = gerar_csrf_token_para_teste(app_fixture, user_id=1)
     response = authenticated_client.post(
         "/configuracoes/senha",
         data={
             "senha_atual": "secret",
             "nova_senha": "secretNova123",
             "confirmar_nova_senha": "secretNova123",
+            "csrf_token": csrf,
         },
         follow_redirects=True,
     )
@@ -824,6 +834,35 @@ def test_invalid_date_interval_in_filters_returns_400(authenticated_client):
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["ok"] is False
+
+
+def test_csrf_missing_token_blocks_profile_update(authenticated_client):
+    """Requisição sem csrf_token deve ser rejeitada com mensagem de erro."""
+    response = authenticated_client.post(
+        "/configuracoes/perfil",
+        data={"nome": "Atacante", "email": "user@example.com"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Requisição inválida" in html
+
+
+def test_csrf_invalid_token_blocks_password_change(authenticated_client):
+    """Token CSRF adulterado deve ser rejeitado."""
+    response = authenticated_client.post(
+        "/configuracoes/senha",
+        data={
+            "senha_atual": "secret",
+            "nova_senha": "novasenha123",
+            "confirmar_nova_senha": "novasenha123",
+            "csrf_token": "token.invalido.aqui",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Requisição inválida" in html
 
 
 def test_debug_error_is_re_raised(app_fixture):

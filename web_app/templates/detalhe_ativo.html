@@ -62,7 +62,22 @@
 
                 <div class="field-group">
                     <label class="field-label">Status</label>
-                    <div class="field-display detail-value">{{ ativo.status or '-' }}</div>
+                    <div class="field-display detail-value">
+                        {% set status_lower = ativo.status | lower if ativo.status else '' %}
+                        {% if status_lower == 'disponível' %}
+                            <span class="status-badge status-disponivel">{{ ativo.status }}</span>
+                        {% elif status_lower == 'em uso' %}
+                            <span class="status-badge status-em-uso">{{ ativo.status }}</span>
+                        {% elif status_lower == 'em manutenção' %}
+                            <span class="status-badge status-em-manutencao">{{ ativo.status }}</span>
+                        {% elif status_lower == 'reservado' %}
+                            <span class="status-badge status-reservado">{{ ativo.status }}</span>
+                        {% elif status_lower == 'baixado' %}
+                            <span class="status-badge status-baixado">{{ ativo.status }}</span>
+                        {% else %}
+                            {{ ativo.status or '-' }}
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </article>
@@ -111,7 +126,7 @@
                     <tr>
                         <th>Categoria</th>
                         <th>Arquivo</th>
-                        <th>Tamanho (bytes)</th>
+                        <th>Tamanho</th>
                         <th>Acao</th>
                     </tr>
                 </thead>
@@ -120,7 +135,7 @@
                     <tr>
                         <td>Nota fiscal</td>
                         <td>{{ arquivo.nome_original }}</td>
-                        <td>{{ arquivo.tamanho_bytes }}</td>
+                        <td>{{ "%.1f KB" | format(arquivo.tamanho_bytes / 1024) }}</td>
                         <td><a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a></td>
                     </tr>
                     {% endfor %}
@@ -129,7 +144,7 @@
                     <tr>
                         <td>Garantia</td>
                         <td>{{ arquivo.nome_original }}</td>
-                        <td>{{ arquivo.tamanho_bytes }}</td>
+                        <td>{{ "%.1f KB" | format(arquivo.tamanho_bytes / 1024) }}</td>
                         <td><a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a></td>
                     </tr>
                     {% endfor %}
@@ -138,7 +153,7 @@
                     <tr>
                         <td>Documento complementar</td>
                         <td>{{ arquivo.nome_original }}</td>
-                        <td>{{ arquivo.tamanho_bytes }}</td>
+                        <td>{{ "%.1f KB" | format(arquivo.tamanho_bytes / 1024) }}</td>
                         <td><a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a></td>
                     </tr>
                     {% endfor %}

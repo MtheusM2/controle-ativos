@@ -101,3 +101,35 @@ CREATE TABLE IF NOT EXISTS ativos (
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 );
+
+-- =========================================================
+-- TABELA: ativos_arquivos
+-- Armazena anexos físicos vinculados a um ativo.
+-- Suporta múltiplos documentos por ativo com tipo categorizado.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS ativos_arquivos (
+    id INT NOT NULL AUTO_INCREMENT,
+    ativo_id VARCHAR(20) NOT NULL,
+    tipo_documento VARCHAR(30) NOT NULL DEFAULT 'outro',
+    nome_original VARCHAR(255) NOT NULL,
+    nome_armazenado VARCHAR(255) NOT NULL,
+    caminho_arquivo VARCHAR(512) NOT NULL,
+    mime_type VARCHAR(127) NULL,
+    tamanho_bytes INT NOT NULL DEFAULT 0,
+    enviado_por INT NOT NULL,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_ativos_arquivos_ativo_id (ativo_id),
+    KEY idx_ativos_arquivos_tipo (tipo_documento),
+    KEY idx_ativos_arquivos_enviado_por (enviado_por),
+    CONSTRAINT fk_ativos_arquivos_ativo
+        FOREIGN KEY (ativo_id)
+        REFERENCES ativos (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_ativos_arquivos_usuario
+        FOREIGN KEY (enviado_por)
+        REFERENCES usuarios (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+);

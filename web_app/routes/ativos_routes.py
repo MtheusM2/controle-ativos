@@ -772,11 +772,18 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 show_chrome=True,
             )
         except AtivoNaoEncontrado as erro:
-            return _json_error(str(erro), status=404)
+            # Redireciona com flash para evitar JSON bruto em navegação GET.
+            from flask import flash
+            flash(str(erro), "danger")
+            return redirect(url_for("listar_ativos_html"))
         except (PermissaoNegada, AtivoErro) as erro:
-            return _json_error(str(erro), status=400)
+            from flask import flash
+            flash(str(erro), "danger")
+            return redirect(url_for("listar_ativos_html"))
         except Exception:
-            return _json_error("Erro ao carregar detalhes do ativo.", status=500)
+            from flask import flash
+            flash("Erro ao carregar detalhes do ativo.", "danger")
+            return redirect(url_for("listar_ativos_html"))
 
     @app.get("/ativos/<id_ativo>/detalhes")
     def detalhar_ativo_html_alias(id_ativo):

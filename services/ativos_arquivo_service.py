@@ -256,15 +256,12 @@ class AtivosArquivoService:
 
     def contar_por_ativo(self, ativo_ids: list[str], user_id: int) -> dict[str, int]:
         """
-        Retorna a quantidade de anexos por ativo.
-        Útil para exibir contagem na listagem web.
+        Retorna a quantidade de anexos por ativo em uma única query.
+        O escopo de acesso é garantido pela query que filtra pelo contexto do usuário
+        via JOIN com a tabela de ativos — evitando o N+1 anterior.
         """
         if not ativo_ids:
             return {}
-
-        # Validação simples de escopo por ativo.
-        for ativo_id in ativo_ids:
-            self.ativos_service.buscar_ativo(ativo_id, user_id)
 
         placeholders = ", ".join(["%s"] * len(ativo_ids))
 

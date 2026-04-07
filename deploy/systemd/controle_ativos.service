@@ -1,6 +1,8 @@
 [Unit]
-Description=Controle de Ativos Flask App
-After=network.target
+Description=Controle de Ativos — Flask/Gunicorn
+Documentation=file:/opt/controle_ativos/docs/DEPLOYMENT.md
+After=network.target mysql.service
+Wants=mysql.service
 
 [Service]
 Type=simple
@@ -8,10 +10,43 @@ User=www-data
 Group=www-data
 WorkingDirectory=/opt/controle_ativos
 EnvironmentFile=/opt/controle_ativos/.env
-ExecStart=/opt/controle_ativos/.venv/bin/gunicorn -c /opt/controle_ativos/gunicorn.conf.py wsgi:app
+
+ExecStart=/opt/controle_ativos/.venv/bin/gunicorn \
+    -c /opt/controle_ativos/gunicorn.conf.py \
+    wsgi:app
+
 Restart=always
 RestartSec=5
+
+# =========================================================
+# Hardening de segurança do processo
+# =========================================================
+
+# Proíbe aquisição de privilégios adicionais (setuid/setgid).
+NoNewPrivileges=true
+
+# Fornece /tmp e /var/tmp privados e isolados para o processo.
 PrivateTmp=true
+
+# Torna o sistema de arquivos raiz somente leitura, exceto /opt e /var.
+ProtectSystem=strict
+ReadWritePaths=/opt/controle_ativos/logs
+ReadWritePaths=/opt/controle_ativos/web_app/static/uploads
+
+# Impede acesso ao diretório home de outros usuários.
+ProtectHome=true
+
+# Impede modificação de parâmetros do kernel.
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+
+# Isola namespace de rede para evitar criação de interfaces.
+ProtectControlGroups=true
+
+# Restringe chamadas de sistema não necessárias ao Python WSGI.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
