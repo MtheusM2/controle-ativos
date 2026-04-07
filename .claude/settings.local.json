@@ -13,7 +13,13 @@
       "Bash(python:*)",
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
-      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)"
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)",
+      "Bash(.venv/Scripts/pip list:*)",
+      "Bash(.venv/Scripts/python -c \"from web_app.app import application; print\\('wsgi:application OK -', type\\(application\\)\\)\")",
+      "Bash(.venv/Scripts/python -m waitress --listen=127.0.0.1:8099 wsgi:application)",
+      "Bash(curl -s http://127.0.0.1:8099/health)",
+      "Bash(kill %1)",
+      "Bash(echo \"exit:$?\")"
     ]
   }
 }
