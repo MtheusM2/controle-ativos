@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/ti2/AppData/Roaming/npm//**)",
+      "Bash(/c/Users/ti2/AppData/Roaming/npm/claude --version)",
+      "Read(//c/Users/ti2/**)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(export PATH=\"/c/Users/ti2/AppData/Roaming/npm:$PATH\")",
+      "Bash(claude --version)",
+      "Bash(mkdir -p /c/Users/ti2/OneDrive/Documentos/controle_ativos/.claude/agents)",
+      "Bash(mkdir -p /c/Users/ti2/OneDrive/Documentos/controle_ativos/.claude/commands)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
+    ]
+  }
+}
