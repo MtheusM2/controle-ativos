@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime
 from typing import Iterable
 
@@ -67,11 +68,13 @@ def _normalizar_email(email: str) -> str:
     return (email or "").strip().lower()
 
 
-def _agora_utc() -> datetime:
+def _agora_local() -> datetime:
     """
-    Retorna o horario atual em UTC para comparacoes locais.
+    Retorna o horario local do servidor para comparacao com valores gravados pelo MySQL.
+    O CURRENT_TIMESTAMP do MySQL grava a hora local do servidor (nao UTC).
+    Em producao Windows Server (fuso America/Sao_Paulo), ambos devem estar sincronizados.
     """
-    return datetime.utcnow()
+    return datetime.now()
 
 
 def _nome_padrao_por_email(email: str) -> str:
@@ -90,6 +93,8 @@ class AuthService:
     def __init__(self) -> None:
         # Cacheia colunas da tabela usuarios para reduzir custo em consultas repetidas.
         self._usuarios_columns_cache: set[str] | None = None
+        # Lock para garantir que apenas uma thread inicializa o cache simultaneamente.
+        self._cache_lock = threading.Lock()
 
     def _carregar_colunas_usuarios(self, cur) -> set[str]:
         """
@@ -113,10 +118,14 @@ class AuthService:
 
     def _usuarios_tem_colunas(self, cur, nomes: Iterable[str]) -> bool:
         """
-        Verifica de forma retrocompatível se todas as colunas exigidas ja existem no schema.
+        Verifica de forma retrocompativel se todas as colunas exigidas ja existem no schema.
+        Protegido por lock para evitar condicao de corrida na inicializacao em ambiente multi-thread.
         """
         if self._usuarios_columns_cache is None:
-            self._carregar_colunas_usuarios(cur)
+            with self._cache_lock:
+                # Verificacao dupla: outra thread pode ter inicializado enquanto aguardava o lock.
+                if self._usuarios_columns_cache is None:
+                    self._carregar_colunas_usuarios(cur)
 
         return all(nome in (self._usuarios_columns_cache or set()) for nome in nomes)
 
@@ -326,7 +335,7 @@ class AuthService:
                 raise UsuarioNaoEncontrado("Usuario nao encontrado.")
 
             bloqueado_ate = row.get("bloqueado_ate")
-            if bloqueado_ate is not None and bloqueado_ate > _agora_utc():
+            if bloqueado_ate is not None and bloqueado_ate > _agora_local():
                 raise UsuarioBloqueado(
                     "Usuario temporariamente bloqueado por excesso de tentativas invalidas."
                 )

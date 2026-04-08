@@ -1,4 +1,4 @@
-"""Test fixtures para bootstrap, smoke test e isolamento da app Flask."""
+"""Configurações de teste para inicialização, verificação básica e isolamento da aplicação Flask."""
 
 # pyright: reportUnusedImport=false, reportRedeclaration=false, reportMissingImports=false
 
@@ -114,7 +114,7 @@ class FakeAtivosService:
                 modelo="XPS",
                 usuario_responsavel="Ana",
                 departamento="TI",
-                status="Ativo",
+                status="Em Uso",
                 data_entrada="2026-04-01",
                 data_saida=None,
             )
@@ -174,6 +174,10 @@ class FakeArquivosService:
 
     def remover_arquivo(self, _arquivo_id, _user_id):
         return None
+
+    def contar_por_ativo(self, ativo_ids: list[str], _user_id: int) -> dict[str, int]:
+        """Retorna contagem simulada de anexos por ativo (1 por ativo)."""
+        return {ativo_id: 1 for ativo_id in ativo_ids}
 
 
 @pytest.fixture()

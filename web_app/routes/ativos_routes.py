@@ -5,8 +5,8 @@ import io
 from datetime import datetime
 from pathlib import Path
 
-from flask import jsonify, redirect, render_template, request, send_file, session, url_for
-from services.storage_backend import LocalStorageBackend, S3StorageBackend
+from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from services.storage_backend import S3StorageBackend
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font
@@ -16,7 +16,11 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from models.ativos import Ativo
-from services.ativos_arquivo_service import ArquivoNaoEncontrado, TipoDocumentoInvalido
+from services.ativos_arquivo_service import (
+    ArquivoInvalido,
+    ArquivoNaoEncontrado,
+    TipoDocumentoInvalido,
+)
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
 from utils.validators import STATUS_VALIDOS
 
@@ -774,15 +778,12 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
         except AtivoNaoEncontrado as erro:
             # Redireciona com flash para evitar JSON bruto em navegação GET.
-            from flask import flash
             flash(str(erro), "danger")
             return redirect(url_for("listar_ativos_html"))
         except (PermissaoNegada, AtivoErro) as erro:
-            from flask import flash
             flash(str(erro), "danger")
             return redirect(url_for("listar_ativos_html"))
         except Exception:
-            from flask import flash
             flash("Erro ao carregar detalhes do ativo.", "danger")
             return redirect(url_for("listar_ativos_html"))
 
@@ -815,7 +816,17 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     def upload_anexo(id_ativo):
         """
         Faz upload de um anexo para um ativo.
-        Espera: type (nota_fiscal ou garantia), file (arquivo binário)
+        Espera: type (nota_fiscal, garantia ou outro), file (arquivo binário)
+
+        Validações (primeira linha de defesa):
+        - Arquivo presente
+        - Tipo de documento válido
+
+        Validações no serviço:
+        - Tamanho máximo (10 MB)
+        - Extensão permitida
+        - Mimetype vs extensão (integridade)
+        - Arquivo não vazio
         """
         user_id = _obter_user_id_logado()
         if user_id is None:
@@ -824,8 +835,18 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         tipo_documento = request.form.get("type", "").strip()
         arquivo = request.files.get("file")
 
-        if not arquivo:
+        # Primeira linha de defesa: validar presença de arquivo
+        if not arquivo or not arquivo.filename:
             return _json_error("Nenhum arquivo foi enviado.", status=400)
+
+        # Primeira linha de defesa: validar tipo de documento
+        tipo_valido = tipo_documento.lower() if tipo_documento else ""
+        tipos_permitidos = {"nota_fiscal", "garantia", "outro"}
+        if tipo_valido not in tipos_permitidos:
+            return _json_error(
+                "Tipo de documento inválido. Use: nota_fiscal, garantia ou outro.",
+                status=400
+            )
 
         try:
             arquivo_id = arquivo_service.salvar_arquivo(
@@ -839,8 +860,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 status=201,
                 arquivo_id=arquivo_id
             )
-        except (TipoDocumentoInvalido, ArquivoNaoEncontrado) as erro:
+        except (TipoDocumentoInvalido, ArquivoInvalido) as erro:
             return _json_error(str(erro), status=400)
+        except ArquivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
         except Exception:

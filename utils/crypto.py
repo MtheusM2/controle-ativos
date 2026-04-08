@@ -5,7 +5,6 @@ import os
 import base64
 import hashlib
 import hmac
-import secrets
 
 
 # Algoritmo usado no hash de senha.
@@ -82,19 +81,3 @@ def verificar_hash(segredo: str, hash_armazenado: str) -> bool:
     dk_calculado = hashlib.pbkdf2_hmac(alg, segredo_bytes, salt, iteracoes)
 
     return hmac.compare_digest(dk_calculado, dk_esperado)
-
-
-def gerar_token_reset() -> str:
-    """
-    Gera um token seguro para redefinição de senha.
-    Esse token é o valor puro enviado por e-mail ao usuário.
-    """
-    return secrets.token_urlsafe(32)
-
-
-def gerar_hash_token_reset(token: str) -> str:
-    """
-    Gera o hash SHA-256 do token de redefinição.
-    No banco salvamos apenas o hash, nunca o token puro.
-    """
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()

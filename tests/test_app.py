@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from openpyxl import load_workbook
-from services.ativos_arquivo_service import AtivosArquivoService
 from web_app.app import create_app
 
 def test_healthcheck(http_client):
@@ -463,6 +462,10 @@ def test_attachment_delete_route_uses_correct_attachment_id():
 
 
 def test_service_delete_keeps_db_cleanup_when_physical_file_is_missing(tmp_path):
+    from unittest.mock import MagicMock
+    from services.ativos_arquivo_service import AtivosArquivoService
+    from services.storage_backend import StorageBackendError
+
     class FakeCursor:
         def __init__(self):
             self.rowcount = 1
@@ -481,7 +484,9 @@ def test_service_delete_keeps_db_cleanup_when_physical_file_is_missing(tmp_path)
             return False
 
     fake_cursor = FakeCursor()
-    service = AtivosArquivoService(str(tmp_path))
+    fake_storage = MagicMock()
+    fake_storage.delete.side_effect = StorageBackendError("Arquivo não encontrado no storage")
+    service = AtivosArquivoService(fake_storage)
 
     with patch("services.ativos_arquivo_service.cursor_mysql", return_value=FakeCursorContext(fake_cursor)):
         service.obter_arquivo = lambda _arquivo_id, _user_id: {

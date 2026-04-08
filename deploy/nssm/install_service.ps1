@@ -89,11 +89,15 @@ $waitressArgs = "-m waitress --listen=${Host}:${Port} --threads=$Threads --ident
 
 # Carrega variaveis de ambiente do arquivo .env
 # NSSM nao le .env nativamente — usamos o bloco de variaveis de ambiente
-$envContent = Get-Content $envFile | Where-Object { $_ -match "^\s*[^#].*=.*" }
+# Split apenas no primeiro '=' para suportar valores que contenham '='
 $envVars = @()
-foreach ($line in $envContent) {
-    $line = $line.Trim()
-    if ($line -and -not $line.StartsWith("#")) {
+foreach ($rawLine in (Get-Content $envFile)) {
+    $line = $rawLine.Trim()
+    # Ignora linhas em branco e comentarios
+    if (-not $line -or $line.StartsWith("#")) { continue }
+    # Exige que a linha tenha formato CHAVE=VALOR com chave nao vazia
+    $partes = $line -split "=", 2
+    if ($partes.Count -eq 2 -and $partes[0].Trim() -ne "") {
         $envVars += $line
     }
 }

@@ -37,7 +37,7 @@ from services.storage_backend import (  # noqa: E402
     StorageBackendError,
 )
 from utils.csrf import gerar_token_csrf  # noqa: E402
-from utils.logging_config import configure_logging  # noqa: E402
+from utils.logging_config import configurar_logging  # noqa: E402
 from web_app.routes.ativos_routes import registrar_rotas_ativos  # noqa: E402
 from web_app.routes.auth_routes import registrar_rotas_auth  # noqa: E402
 
@@ -79,7 +79,7 @@ def create_app(
     if STORAGE_TYPE == "local":
         Path(flask_app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
 
-    configure_logging(flask_app, level_name=LOG_LEVEL, log_dir=LOG_DIR)
+    configurar_logging(flask_app, level_name=LOG_LEVEL, log_dir=LOG_DIR)
 
     # Disponibiliza gerar_token_csrf() em todos os templates Jinja sem importação explícita.
     flask_app.jinja_env.globals["csrf_token"] = gerar_token_csrf

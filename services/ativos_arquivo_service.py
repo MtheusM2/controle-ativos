@@ -60,6 +60,18 @@ class AtivosArquivoService:
     # Extensões aceitas nesta fase.
     EXTENSOES_PERMITIDAS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 
+    # Tamanho máximo de arquivo em bytes (10 MB).
+    MAX_TAMANHO_BYTES = 10 * 1024 * 1024
+
+    # Mimetypes esperados por extensão para validação de integridade.
+    MIMETYPES_ESPERADOS = {
+        ".pdf": {"application/pdf"},
+        ".png": {"image/png"},
+        ".jpg": {"image/jpeg"},
+        ".jpeg": {"image/jpeg"},
+        ".webp": {"image/webp"},
+    }
+
     def __init__(self, storage_backend: StorageBackend):
         """
         Inicializa o serviço com um backend de armazenamento.
@@ -81,9 +93,13 @@ class AtivosArquivoService:
 
         return tipo
 
-    def _validar_arquivo(self, arquivo) -> None:
+    def _validar_arquivo(self, arquivo) -> int:
         """
         Valida o arquivo recebido via formulário.
+        Verifica: presença, nome, extensão, tamanho e mimetype.
+
+        Returns:
+            Tamanho do arquivo em bytes
         """
         if arquivo is None:
             raise ArquivoInvalido("Nenhum arquivo foi enviado.")
@@ -99,6 +115,32 @@ class AtivosArquivoService:
             raise ArquivoInvalido(
                 "Formato inválido. Envie apenas PDF, PNG, JPG, JPEG ou WEBP."
             )
+
+        # Valida tamanho do arquivo.
+        arquivo.seek(0, 2)  # Vai para o final do arquivo
+        tamanho_bytes = arquivo.tell()
+        arquivo.seek(0)  # Volta para o início
+
+        if tamanho_bytes == 0:
+            raise ArquivoInvalido("Arquivo vazio. Envie um arquivo com conteúdo.")
+
+        if tamanho_bytes > self.MAX_TAMANHO_BYTES:
+            tamanho_mb = self.MAX_TAMANHO_BYTES / (1024 * 1024)
+            raise ArquivoInvalido(
+                f"Arquivo muito grande. Tamanho máximo: {tamanho_mb:.0f} MB."
+            )
+
+        # Valida mimetype contra extensão (defesa contra upload disfarçado).
+        mime_type = getattr(arquivo, "mimetype", None) or ""
+        mime_type = mime_type.lower().strip()
+        tipos_esperados = self.MIMETYPES_ESPERADOS.get(extensao, set())
+
+        if mime_type and tipos_esperados and mime_type not in tipos_esperados:
+            raise ArquivoInvalido(
+                f"Tipo de arquivo inválido. Esperado {', '.join(tipos_esperados)}."
+            )
+
+        return tamanho_bytes
 
     def _montar_nome_armazenado(self, tipo_documento: str, nome_original: str) -> str:
         """
@@ -143,7 +185,7 @@ class AtivosArquivoService:
         self.ativos_service.buscar_ativo(ativo_id, user_id)
 
         tipo = self._validar_tipo_documento(tipo_documento)
-        self._validar_arquivo(arquivo)
+        tamanho_bytes = self._validar_arquivo(arquivo)
 
         nome_original = secure_filename(arquivo.filename)
 
@@ -159,8 +201,6 @@ class AtivosArquivoService:
             raise AtivoArquivoErro(f"Falha ao salvar arquivo: {e}")
 
         # Obtém metadados do arquivo original.
-        tamanho_bytes = len(arquivo.read())
-        arquivo.seek(0)
         mime_type = getattr(arquivo, "mimetype", None)
 
         # Extrai nome_armazenado do caminho relativo (último componente).
@@ -284,7 +324,7 @@ class AtivosArquivoService:
             self.storage_backend.delete(caminho_relativo)
         except StorageBackendError as e:
             # Já deletou do banco, mas falhou no storage.
-            # Log the error mas não levanta exceção (arquivo já saiu do sistema).
+            # Registra o erro mas não levanta exceção (arquivo já saiu do sistema).
             import logging
             logging.warning(
                 f"Falha ao deletar arquivo {arquivo_id} do backend: {e}"

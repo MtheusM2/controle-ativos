@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import Flask
 
 
-def configure_logging(app: Flask, *, level_name: str, log_dir: str) -> None:
+def configurar_logging(app: Flask, *, level_name: str, log_dir: str) -> None:
     """
     Configura logging em arquivo rotativo e console.
     """

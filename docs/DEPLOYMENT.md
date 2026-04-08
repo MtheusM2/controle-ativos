@@ -106,6 +106,14 @@ mysql -u root -p controle_ativos < database\migrations\003_seguro_para_garantia.
 mysql -u root -p controle_ativos < database\migrations\004_usuarios_nome_lembrar_me.sql
 ```
 
+> **ATENÇÃO — Go-Live:** A migration 002 cria uma empresa padrão chamada `OPUS-BASE`.
+> Antes de disponibilizar o sistema para usuários reais, renomeie-a ou crie uma nova empresa:
+> ```sql
+> UPDATE empresas SET nome = 'Nome Real da Sua Empresa' WHERE codigo = 'OPUS-BASE';
+> ```
+> Ou cadastre uma nova empresa pelo sistema e desative a `OPUS-BASE` via TINYINT ativa=0.
+> Deixar a empresa padrão com nome de demonstração em produção é um risco de imagem.
+
 ### 5. Instalar o servico Windows (NSSM)
 
 Execute como **Administrador**:
@@ -226,7 +234,9 @@ Restart-Service controle_ativos
 - [ ] `SESSION_COOKIE_SECURE=1` habilitado (exige HTTPS)
 - [ ] `FLASK_DEBUG=0`
 - [ ] `LOG_LEVEL=WARNING` ou `ERROR`
+- [ ] Python 3.11+ instalado no servidor (obrigatório — ver `runtime.txt`)
 - [ ] Banco de dados criado com schema completo + migracoes aplicadas
+- [ ] Empresa padrão `OPUS-BASE` renomeada ou desativada antes do go-live
 - [ ] Usuario `opus_app` criado com permissoes minimas (`SELECT, INSERT, UPDATE, DELETE`)
 - [ ] Servico Windows instalado e iniciando automaticamente
 - [ ] IIS configurado com URL Rewrite + ARR habilitado

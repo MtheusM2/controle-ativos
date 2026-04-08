@@ -8,6 +8,7 @@ from services.auth_service import (
     CredenciaisInvalidas,
     PermissaoAuthNegada,
     RecuperacaoInvalida,
+    UsuarioBloqueado,
     UsuarioJaExiste,
     UsuarioNaoEncontrado,
 )
@@ -193,6 +194,9 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
             return response
         except (UsuarioNaoEncontrado, CredenciaisInvalidas):
             return _json_error("E-mail ou senha inválidos.", status=401)
+        except UsuarioBloqueado as erro:
+            # HTTP 429 Too Many Requests — indica bloqueio temporario por tentativas excessivas.
+            return _json_error(str(erro), status=429)
         except AuthErro as erro:
             return _json_error(str(erro), status=400)
 
