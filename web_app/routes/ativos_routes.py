@@ -798,6 +798,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     def remover_ativo_html(id_ativo):
         """
         Mantém compatibilidade com remoções legadas em HTML.
+        A interface atual usa DELETE /ativos/<id> via fetch; esta rota é código legado.
+        Erros de remoção agora chegam ao usuário via flash para evitar falhas silenciosas.
         """
         user_id = _obter_user_id_logado()
         if user_id is None:
@@ -805,8 +807,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         try:
             service.remover_ativo(id_ativo, user_id)
-        except AtivoErro:
-            pass
+        except AtivoNaoEncontrado as erro:
+            flash(str(erro), "danger")
+        except (PermissaoNegada, AtivoErro) as erro:
+            flash(str(erro), "danger")
 
         return redirect(url_for("listar_ativos_html"))
 

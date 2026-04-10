@@ -242,6 +242,11 @@ class AtivosService:
     def buscar_ativo(self, id_ativo: str, user_id: int) -> Ativo:
         """
         Busca um ativo respeitando o escopo do usuário.
+
+        Para usuários comuns, o filtro de empresa é aplicado diretamente no SQL
+        para evitar que IDs de outras empresas sejam enumeráveis via mensagem de erro
+        diferenciada (information disclosure em contexto multi-tenant).
+        Admin acessa qualquer ativo sem restrição de empresa.
         """
         ok, msg = validar_id_ativo(id_ativo)
         if not ok:
@@ -250,24 +255,36 @@ class AtivosService:
         contexto = self._obter_contexto_acesso(user_id)
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
-            cur.execute(
-                """
-                SELECT id, tipo, marca, modelo, usuario_responsavel,
-                      departamento, nota_fiscal, garantia, status,
-                       data_entrada, data_saida, criado_por, empresa_id
-                FROM ativos
-                WHERE id = %s
-                """,
-                (id_ativo.strip(),)
-            )
+            if self._usuario_eh_admin(contexto):
+                # Admin: busca sem restrição de empresa.
+                cur.execute(
+                    """
+                    SELECT id, tipo, marca, modelo, usuario_responsavel,
+                          departamento, nota_fiscal, garantia, status,
+                           data_entrada, data_saida, criado_por, empresa_id
+                    FROM ativos
+                    WHERE id = %s
+                    """,
+                    (id_ativo.strip(),)
+                )
+            else:
+                # Usuário comum: restringe ao escopo da própria empresa no SQL.
+                # Não diferencia "inexistente" de "pertence a outra empresa" para
+                # evitar enumeração de IDs entre unidades.
+                cur.execute(
+                    """
+                    SELECT id, tipo, marca, modelo, usuario_responsavel,
+                          departamento, nota_fiscal, garantia, status,
+                           data_entrada, data_saida, criado_por, empresa_id
+                    FROM ativos
+                    WHERE id = %s AND empresa_id = %s
+                    """,
+                    (id_ativo.strip(), int(contexto["empresa_id"]))
+                )
             row = cur.fetchone()
 
         if row is None:
             raise AtivoNaoEncontrado("Ativo não encontrado.")
-
-        if not self._usuario_eh_admin(contexto):
-            if int(row["empresa_id"]) != int(contexto["empresa_id"]):
-                raise PermissaoNegada("Você não tem permissão para acessar este ativo.")
 
         return _row_para_ativo(row)
 
