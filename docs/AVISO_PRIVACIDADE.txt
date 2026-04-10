@@ -1,0 +1,134 @@
+═══════════════════════════════════════════════════════════════════════════════
+AVISO DE PRIVACIDADE — Sistema de Gestão de Ativos de TI
+═══════════════════════════════════════════════════════════════════════════════
+
+Este aviso está disponível sob Lei 13.709/2018 (Lei Geral de Proteção de Dados).
+
+───────────────────────────────────────────────────────────────────────────────
+1. DADOS PESSOAIS TRATADOS
+───────────────────────────────────────────────────────────────────────────────
+
+O sistema trata os seguintes dados pessoais:
+
+• Nome do usuário
+• Endereço de email corporativo
+• Endereço IP (apenas para segurança e auditoria)
+• Data e hora de acesso
+• Ações realizadas no sistema (auditoria)
+
+───────────────────────────────────────────────────────────────────────────────
+2. FINALIDADE DO TRATAMENTO
+───────────────────────────────────────────────────────────────────────────────
+
+Os dados são tratados exclusivamente para:
+
+✓ Autenticação e controle de acesso
+✓ Gestão e rastreamento de ativos corporativos
+✓ Segurança do sistema e detecção de uso indevido
+✓ Cumprimento de obrigações legais
+✓ Investigação de incidentes de segurança
+
+───────────────────────────────────────────────────────────────────────────────
+3. BASE LEGAL
+───────────────────────────────────────────────────────────────────────────────
+
+Tratamento autorizado sob:
+
+• Artigo 7°, II da LGPD: Cumprimento de obrigação legal
+• Artigo 7°, VI da LGPD: Legítimo interesse da empresa
+• Artigo 17 da LGPD: Contexto de relação contratual/laboral
+
+───────────────────────────────────────────────────────────────────────────────
+4. RETENÇÃO DE DADOS
+───────────────────────────────────────────────────────────────────────────────
+
+Período de retenção por tipo:
+
+• Dados de usuário ativo: enquanto ativo + 30 dias após desativação
+• Logs de auditoria: 90 dias (exceção: logs de segurança, 180 dias)
+• Hashes de senha: armazenado permanentemente (dados técnicos)
+• Dados de recuperação: 24 horas (tokens expiram automaticamente)
+
+───────────────────────────────────────────────────────────────────────────────
+5. SEGURANÇA
+───────────────────────────────────────────────────────────────────────────────
+
+Medidas técnicas de proteção:
+
+✓ Senhas armazenadas em hash irreversível (PBKDF2 + pepper)
+✓ Transmissão segura via HTTPS
+✓ Cookies com proteção HTTPONLY e SECURE
+✓ Isolamento de dados por empresa
+✓ Controle de acesso por perfil
+✓ Rastreabilidade completa de ações
+
+───────────────────────────────────────────────────────────────────────────────
+6. DIREITOS DOS USUÁRIOS
+───────────────────────────────────────────────────────────────────────────────
+
+Conforme LGPD (artigos 18-21), você tem direito a:
+
+→ ACESSO: Solicitar cópia de seus dados pessoais
+→ CORREÇÃO: Corrigir informações incorretas
+→ EXCLUSÃO: Solicitar remoção (quando aplicável)
+→ PORTABILIDADE: Receber dados em formato portável
+→ OPOSIÇÃO: Rejeitar uso para fins específicos
+
+Para exercer direitos, contate:
+
+📧 Email: [RESPONSAVEL_DADOS@empresa.com]
+☎️  Ramal: [RAMAL_TI]
+📍 Localização: [DEPARTAMENTO_TI]
+
+Prazo de atendimento: até 10 dias úteis
+
+───────────────────────────────────────────────────────────────────────────────
+7. RESPONSÁVEL PELOS DADOS
+───────────────────────────────────────────────────────────────────────────────
+
+Responsável pelo tratamento de dados pessoais:
+
+👤 Nome: [Nome do Gestor de TI / Administrador]
+   Cargo: Gestor de Infraestrutura / Segurança de Sistemas
+   Email: [email@empresa.com]
+
+───────────────────────────────────────────────────────────────────────────────
+8. INCIDENTES DE SEGURANÇA
+───────────────────────────────────────────────────────────────────────────────
+
+Em caso de vazamento ou comprometimento de dados:
+
+→ Investigação imediata
+→ Notificação ao responsável de dados
+→ Comunicação aos afetados (conforme necessário)
+→ Relatório à autoridade competente (se obrigatório)
+
+───────────────────────────────────────────────────────────────────────────────
+9. COMPARTILHAMENTO DE DADOS
+───────────────────────────────────────────────────────────────────────────────
+
+Seus dados são compartilhados apenas com:
+
+• Administradores de sistema (acesso técnico)
+• Gestor de segurança (investigação de incidentes)
+• Autoridades legais (se determinado por lei)
+
+NÃO são compartilhados com terceiros externos.
+
+───────────────────────────────────────────────────────────────────────────────
+10. CONTATO E DÚVIDAS
+───────────────────────────────────────────────────────────────────────────────
+
+Dúvidas ou preocupações sobre privacidade?
+
+📧 Email: [RESPONSAVEL_DADOS@empresa.com]
+📞 Telefone: [RAMAL_TI]
+
+───────────────────────────────────────────────────────────────────────────────
+
+Última atualização: 2026-04-10
+Versão: 1.0
+
+Este aviso é válido para sistemas internos de gestão de ativos corporativos.
+
+═══════════════════════════════════════════════════════════════════════════════

@@ -180,9 +180,24 @@ class AtivosArquivoService:
 
         Returns:
             ID da linha criada em ativos_arquivos
+
+        Permissões: admin, gestor_unidade, operador (não: consulta)
         """
         # Garante que o usuário tem acesso ao ativo.
         self.ativos_service.buscar_ativo(ativo_id, user_id)
+
+        # Validação de permissão: consulta não pode fazer upload
+        from database.connection import cursor_mysql
+        with cursor_mysql(dictionary=True) as (_conn, cur):
+            cur.execute(
+                "SELECT perfil FROM usuarios WHERE id = %s",
+                (user_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                perfil = (row.get("perfil") or "").strip().lower()
+                if perfil == "consulta":
+                    raise AtivoArquivoErro("Perfil 'consulta' não tem permissão para fazer upload.")
 
         tipo = self._validar_tipo_documento(tipo_documento)
         tamanho_bytes = self._validar_arquivo(arquivo)

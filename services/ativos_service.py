@@ -202,9 +202,16 @@ class AtivosService:
         sequência por empresa — o usuário não define o ID.
 
         Retorna o ID gerado (str) para que a rota possa buscar o ativo recém-criado.
+
+        Permissões: admin, gestor_unidade, operador (não: consulta)
         """
         contexto = self._obter_contexto_acesso(user_id)
         empresa_id = int(contexto["empresa_id"])
+        perfil = contexto.get("perfil", "").strip().lower()
+
+        # Validação de permissão: apenas usuários que podem criar (não consulta)
+        if perfil not in {"admin", "adm", "gestor_unidade", "operador", "usuario"}:
+            raise PermissaoNegada(f"Perfil '{perfil}' não tem permissão para criar ativos.")
 
         ativo.criado_por = user_id
         ativo_norm = _padronizar_ativo(ativo)
@@ -568,12 +575,19 @@ class AtivosService:
     def remover_ativo(self, id_ativo: str, user_id: int) -> None:
         """
         Remove um ativo conforme o escopo do usuário autenticado.
+
+        Permissões: admin, gestor_unidade (não: operador, consulta)
         """
         ok, msg = validar_id_ativo(id_ativo)
         if not ok:
             raise AtivoErro(msg)
 
         contexto = self._obter_contexto_acesso(user_id)
+        perfil = contexto.get("perfil", "").strip().lower()
+
+        # Validação de permissão: apenas admin e gestor podem remover
+        if perfil not in {"admin", "adm", "gestor_unidade"}:
+            raise PermissaoNegada(f"Perfil '{perfil}' não tem permissão para remover ativos.")
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
             if self._usuario_eh_admin(contexto):

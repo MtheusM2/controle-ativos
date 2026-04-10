@@ -608,3 +608,52 @@ class AuthService:
                 """,
                 (nova_hash, row["id"]),
             )
+
+    # ================================================================
+    # METODOS DE PERMISSAO (PARTE 2)
+    # Fonte centralizada de verdade para decisões de autorização
+    # ================================================================
+
+    def eh_admin(self, perfil: str | None) -> bool:
+        """
+        Verifica se o perfil é de administrador.
+        Normaliza 'adm' e 'admin' para tratamento unificado.
+        """
+        perfil_norm = (perfil or "").strip().lower()
+        return perfil_norm in {"admin", "adm"}
+
+    def normalizar_perfil(self, perfil: str | None) -> str:
+        """
+        Normaliza um perfil para um valor canônico.
+        Parte 1 usava 'usuario'; Parte 2 mapeia como 'operador'.
+        """
+        perfil_norm = (perfil or "").strip().lower()
+
+        # Mapeamento de compatibilidade
+        if perfil_norm == "usuario":
+            return "operador"
+        if perfil_norm == "adm":
+            return "admin"
+
+        # Validar que é um perfil conhecido
+        if perfil_norm in {"admin", "gestor_unidade", "operador", "consulta"}:
+            return perfil_norm
+
+        # Padrão seguro (nunca deveria chegar aqui)
+        return "operador"
+
+    def obter_contexto_permissao(
+        self, user_id: int, empresa_id: int, perfil: str
+    ):
+        """
+        Cria um contexto de permissões para validações.
+        Retorna objeto Usuario (de utils.permissions) com métodos de check.
+
+        Uso na service:
+            ctx = auth_service.obter_contexto_permissao(user_id, empresa_id, perfil)
+            if not ctx.pode_criar_ativo(ativo_empresa_id):
+                raise PermissaoNegada("...")
+        """
+        from utils.permissions import Usuario
+
+        return Usuario(id=user_id, empresa_id=empresa_id, perfil=perfil)
