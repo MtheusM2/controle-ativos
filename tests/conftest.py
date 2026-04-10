@@ -124,7 +124,8 @@ class FakeAtivosService:
         return self.listar_ativos(kwargs.get("user_id"))
 
     def criar_ativo(self, _ativo, _user_id):
-        return None
+        # Simula retorno de ID gerado automaticamente pelo backend
+        return "OPU-000001"
 
     def buscar_ativo(self, id_ativo, _user_id):
         return SimpleNamespace(

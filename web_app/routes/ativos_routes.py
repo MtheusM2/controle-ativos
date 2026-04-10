@@ -112,9 +112,10 @@ def _serializar_arquivo(arquivo: dict) -> dict:
 def _ativo_do_payload(dados: dict) -> Ativo:
     """
     Constrói o domínio Ativo a partir do payload do frontend.
+    O campo id não é lido do payload — o ID é gerado automaticamente no backend.
     """
     return Ativo(
-        id_ativo=dados.get("id", ""),
+        id_ativo=None,  # gerado pelo service no momento do cadastro
         tipo=dados.get("tipo", ""),
         marca=dados.get("marca", ""),
         modelo=dados.get("modelo", ""),
@@ -589,8 +590,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         try:
             ativo = _ativo_do_payload(_request_data())
-            service.criar_ativo(ativo, user_id)
-            criado = service.buscar_ativo(ativo.id_ativo, user_id)
+            id_gerado = service.criar_ativo(ativo, user_id)
+            criado = service.buscar_ativo(id_gerado, user_id)
             return _json_success(
                 "Ativo cadastrado com sucesso.",
                 status=201,

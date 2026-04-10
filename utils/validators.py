@@ -250,13 +250,15 @@ def validar_regras_ativo(
     return True, ""
 
 
-def validar_ativo(ativo) -> None:
+def validar_ativo(ativo, *, validar_id: bool = True) -> None:
     """
     Valida o objeto Ativo completo.
+    validar_id=False é usado na criação quando o ID ainda não foi gerado pelo backend.
     """
-    ok, msg = validar_id_ativo(ativo.id_ativo)
-    if not ok:
-        raise ValueError(msg)
+    if validar_id:
+        ok, msg = validar_id_ativo(ativo.id_ativo)
+        if not ok:
+            raise ValueError(msg)
 
     for valor, nome in [
         (ativo.tipo, "tipo"),

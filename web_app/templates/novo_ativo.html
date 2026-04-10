@@ -24,10 +24,7 @@
     <div class="panel-body">
         <form id="create-asset-form" class="form-grid asset-form-grid">
             <div class="form-block-title">Identificação e classificação</div>
-            <div class="field-group">
-                <label for="id">ID</label>
-                <input type="text" id="id" name="id" class="input-control" required>
-            </div>
+            <!-- ID é gerado automaticamente no backend — remover campo manual de entrada -->
 
             <div class="field-group">
                 <label for="tipo">Tipo</label>
@@ -254,10 +251,10 @@
             return;
         }
 
-        currentAssetId = payload?.ativo?.id || body.id;
+        // O ID vem exclusivamente da resposta da API — não existe mais campo no formulário
+        currentAssetId = payload?.ativo?.id ?? null;
         documentsPanel.hidden = false;
         documentsCaption.textContent = `Documentos vinculados ao ativo ${currentAssetId}.`;
-        document.getElementById("id").readOnly = true;
 
         showMessage("success", payload?.mensagem || "Ativo cadastrado com sucesso.");
         setAttachmentLoading();

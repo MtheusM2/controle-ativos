@@ -147,25 +147,79 @@ class AtivosService:
         # Aceita perfis administrativo legado e novo para evolucao sem quebra.
         return (contexto.get("perfil") or "").strip().lower() in {"adm", "admin"}
 
-    def criar_ativo(self, ativo: Ativo, user_id: int) -> None:
+    def _gerar_id_sequencial(self, empresa_id: int, conn, cur) -> str:
         """
-        Cria um novo ativo vinculado à empresa do usuário logado.
+        Gera o próximo ID de ativo para a empresa de forma transacionalmente segura.
+        Usa SELECT FOR UPDATE na tabela sequencias_ativo para evitar colisão em
+        ambientes com requisições concorrentes.
+
+        Deve ser chamado dentro do bloco 'with cursor_mysql()' do chamador —
+        o commit e rollback são controlados pelo context manager externo.
+        """
+        # Obtém o prefixo configurado para a empresa
+        cur.execute(
+            "SELECT prefixo_ativo FROM empresas WHERE id = %s AND ativa = 1",
+            (empresa_id,)
+        )
+        row = cur.fetchone()
+        if row is None or not (row.get("prefixo_ativo") or "").strip():
+            raise AtivoErro(
+                "Empresa sem prefixo de ativo configurado. "
+                "Configure o campo prefixo_ativo na tabela empresas e "
+                "adicione a linha correspondente em sequencias_ativo."
+            )
+        prefixo = row["prefixo_ativo"].strip().upper()
+
+        # Trava a linha para esta empresa — impede leitura concorrente do mesmo número
+        cur.execute(
+            "SELECT proximo_numero FROM sequencias_ativo "
+            "WHERE empresa_id = %s FOR UPDATE",
+            (empresa_id,)
+        )
+        seq_row = cur.fetchone()
+        if seq_row is None:
+            raise AtivoErro(
+                "Sequência de ativo não inicializada para esta empresa. "
+                "Execute a migration 005 ou insira a linha manualmente em sequencias_ativo."
+            )
+
+        numero = seq_row["proximo_numero"]
+
+        # Incrementa o contador — será commitado junto com o INSERT do ativo
+        cur.execute(
+            "UPDATE sequencias_ativo "
+            "SET proximo_numero = proximo_numero + 1, updated_at = NOW() "
+            "WHERE empresa_id = %s",
+            (empresa_id,)
+        )
+
+        # Formato: PREFIX-000001 (6 dígitos com zero-padding, compatível com VARCHAR(20))
+        return f"{prefixo}-{numero:06d}"
+
+    def criar_ativo(self, ativo: Ativo, user_id: int) -> str:
+        """
+        Cria novo ativo. O ID é gerado automaticamente pelo backend via
+        sequência por empresa — o usuário não define o ID.
+
+        Retorna o ID gerado (str) para que a rota possa buscar o ativo recém-criado.
         """
         contexto = self._obter_contexto_acesso(user_id)
+        empresa_id = int(contexto["empresa_id"])
 
         ativo.criado_por = user_id
         ativo_norm = _padronizar_ativo(ativo)
 
         try:
-            validar_ativo(ativo_norm)
+            # validar_id=False pois o ID ainda não foi gerado neste ponto
+            validar_ativo(ativo_norm, validar_id=False)
         except ValueError as erro:
             raise AtivoErro(str(erro))
 
-        with cursor_mysql(dictionary=True) as (_conn, cur):
-            # Nesta fase, o ID continua globalmente único entre todas as empresas.
-            cur.execute("SELECT id FROM ativos WHERE id = %s", (ativo_norm.id_ativo,))
-            if cur.fetchone() is not None:
-                raise AtivoJaExiste("Já existe um ativo cadastrado com este ID.")
+        with cursor_mysql(dictionary=True) as (conn, cur):
+            # Gera o ID dentro da mesma transação do INSERT — atomicidade garantida.
+            # Se o INSERT falhar, o rollback automático desfaz também o incremento.
+            id_gerado = self._gerar_id_sequencial(empresa_id, conn, cur)
+            ativo_norm.id_ativo = id_gerado
 
             cur.execute(
                 """
@@ -199,9 +253,11 @@ class AtivosService:
                     ativo_norm.data_entrada,
                     ativo_norm.data_saida,
                     user_id,
-                    int(contexto["empresa_id"])
+                    empresa_id,
                 )
             )
+
+        return id_gerado
 
     def listar_ativos(self, user_id: int) -> list[Ativo]:
         """

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS empresas (
     id INT NOT NULL AUTO_INCREMENT,
     nome VARCHAR(150) NOT NULL,
     codigo VARCHAR(50) NOT NULL,
+    prefixo_ativo VARCHAR(10) NULL,
     ativa TINYINT(1) NOT NULL DEFAULT 1,
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -133,3 +134,19 @@ CREATE TABLE IF NOT EXISTS ativos_arquivos (
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 );
+
+-- =========================================================
+-- TABELA: sequencias_ativo
+-- Controla a geração automática de ID para ativos por empresa.
+-- Usa SELECT FOR UPDATE para garantir atomicidade em ambiente concorrente.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS sequencias_ativo (
+    empresa_id     INT          NOT NULL,
+    proximo_numero INT UNSIGNED NOT NULL DEFAULT 1,
+    updated_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (empresa_id),
+    CONSTRAINT fk_seq_empresa
+        FOREIGN KEY (empresa_id) REFERENCES empresas (id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
