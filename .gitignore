@@ -130,8 +130,7 @@ obj/
 *.ps1~
 
 # ==================================================
-# Temporary Audit/Debug Files
+# Temporary Debug Files (not audit reports - those are versioned)
 # ==================================================
-AUDIT_REPORT_*.md
 DEBUG_*.txt
 TEMP_*.log
