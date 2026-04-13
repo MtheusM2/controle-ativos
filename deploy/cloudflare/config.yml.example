@@ -1,0 +1,108 @@
+# Cloudflare Tunnel — Configuração de Exemplo
+# ============================================
+#
+# Este arquivo é um template. Você DEVE editá-lo com seus valores reais
+# antes de iniciar o serviço cloudflared.
+#
+# Localização em produção: C:\cloudflared\config.yml
+#
+# Documentação: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/local/
+
+# ID único do tunnel criado com: cloudflared tunnel create nome-do-tunnel
+# Execute esse comando e copie o <TUNNEL_ID> abaixo.
+# Exemplo: 550e8400-e29b-41d4-a716-446655440000
+tunnel: <ID-DO-TUNNEL>
+
+# Arquivo de credenciais gerado automaticamente após autenticação.
+# Localização padrão: C:\Users\<SeuUsuario>\.cloudflared\<TUNNEL_ID>.json
+# Copie o caminho exato para cá (certifique-se que a barra invertida está correta em YAML).
+credentials-file: C:\cloudflared\<ID-DO-TUNNEL>.json
+
+# Protocolo de conexão para o daemon (padrão: auto, detecta IPv6/IPv4)
+protocol: auto
+
+# Definições de "origin" — mapeamento de hostname → serviço local
+# Quando alguém acessa seu domínio público via Cloudflare, o tunnel encaminha
+# para o destino correspondente.
+ingress:
+  # Regra primária: seu hostname público
+  # Substitua "sistema.empresa.com" pelo seu domínio real
+  - hostname: sistema.empresa.com
+    # Destino local onde a aplicação Flask (Waitress) está rodando
+    # Formato: http://localhost:PORTA (Port 8000 é o padrão do controle-ativos)
+    service: http://localhost:8000
+
+  # Regras adicionais (opcional)
+  # Exemplos:
+  # - hostname: admin.empresa.com
+  #   service: http://localhost:8001
+  # - hostname: api.empresa.com
+  #   service: http://localhost:3000
+
+  # Fallback para hosts não mapeados (retorna 404)
+  - service: http_status:404
+
+
+# Configurações de logging (opcional)
+# Aumentar verbosidade para diagnóstico:
+# Valores: debug, info, warn, error
+loglevel: info
+
+# Arquivo de log (opcional)
+# logfile: C:\cloudflared\tunnel.log
+
+
+# ============================================================================
+# INSTRUÇÕES DE SETUP
+# ============================================================================
+#
+# 1. AUTENTICAR
+#    $ cloudflared tunnel login
+#    (Abrirá navegador para OAuth; selecione seu domínio)
+#
+# 2. CRIAR TUNNEL (executar UMA VEZ)
+#    $ cloudflared tunnel create seu-tunnel-name
+#    (Guarde o TUNNEL_ID exibido)
+#
+# 3. EDITAR ESTE ARQUIVO
+#    - Substitua <ID-DO-TUNNEL> pelo ID obtido
+#    - Substitua <ID-DO-TUNNEL> no caminho de credentials-file
+#    - Substitua "sistema.empresa.com" pelo seu hostname real
+#    - Verifique que "service: http://localhost:8000" está correto
+#
+# 4. CONFIGURAR DNS NO DASHBOARD CLOUDFLARE
+#    - Acesse seu domínio em dashboard.cloudflare.com
+#    - Vá para DNS settings
+#    - Crie um registro CNAME:
+#      Nome: sistema.empresa.com
+#      Valor: <TUNNEL_ID>.cfargotunnel.com
+#    - Salve
+#
+# 5. REGISTRAR COMO SERVIÇO WINDOWS (se não fez já)
+#    $ cloudflared service install --config C:\cloudflared\config.yml
+#
+# 6. INICIAR SERVIÇO
+#    $ net start cloudflared
+#
+# 7. VALIDAR
+#    $ .\scripts\validar_tunnel.ps1
+#    $ curl https://sistema.empresa.com/health
+#
+
+
+# ============================================================================
+# TROUBLESHOOTING
+# ============================================================================
+#
+# Q: O tunnel conecta mas meu domínio retorna 404
+# A: Verifique o hostname no CNAME do Cloudflare. Deve ser exato ao acima.
+#
+# Q: Erro "permission denied" ao ler credentials-file
+# A: Verifique permissões. Seu usuário Windows deve ter acesso de leitura.
+#
+# Q: Erro "context deadline exceeded"
+# A: Aumentar connection timeout no túnel ou revisar rede local.
+#
+# Q: Como desabilitar comentários/regras?
+# A: Use "#" no início da linha (YAML syntax).
+#
