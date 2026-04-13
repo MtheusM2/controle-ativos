@@ -103,3 +103,35 @@ node_modules/
 # Internal Local Documentation (Private)
 # ==================================================
 docs_interno_local/
+
+# ==================================================
+# Cloudflare Tunnel (Tunneled Process)
+# ==================================================
+cloudflared
+cloudflared.exe
+.cloudflared/
+*.tunnel
+
+# ==================================================
+# Windows Server Specific
+# ==================================================
+*.lnk
+*.bak.*
+*.old
+bin/
+obj/
+.vs/
+.vscode/settings.json
+
+# ==================================================
+# PowerShell History and Artifacts
+# ==================================================
+.PowerShell_History
+*.ps1~
+
+# ==================================================
+# Temporary Audit/Debug Files
+# ==================================================
+AUDIT_REPORT_*.md
+DEBUG_*.txt
+TEMP_*.log
