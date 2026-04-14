@@ -36,7 +36,8 @@
                         <input type="text" id="codigo_interno" name="codigo_interno" class="input-control" maxlength="50" {% if read_only %}disabled{% endif %}>
                     </div>
 
-                    <div class="field-group">
+                    <!-- Removido em Fase 3 Round 2: descricao e categoria são auto-gerados no backend -->
+                    <!-- <div class="field-group">
                         <label for="descricao">Descrição</label>
                         <input type="text" id="descricao" name="descricao" class="input-control" maxlength="255" {% if read_only %}disabled{% endif %} required>
                     </div>
@@ -44,7 +45,7 @@
                     <div class="field-group">
                         <label for="categoria">Categoria</label>
                         <input type="text" id="categoria" name="categoria" class="input-control" maxlength="100" {% if read_only %}disabled{% endif %} required>
-                    </div>
+                    </div> -->
 
                     <div class="field-group">
                         <label for="tipo_ativo">Tipo de ativo</label>
@@ -84,10 +85,7 @@
                         </select>
                     </div>
 
-                    <div class="field-group">
-                        <label for="localizacao">Localização / Unidade</label>
-                        <input type="text" id="localizacao" name="localizacao" class="input-control" {% if read_only %}disabled{% endif %}>
-                    </div>
+                    <!-- Removido em Fase 3 Round 2 Correction: localizacao movido para seção "Responsabilidade e alocação" para melhor distribuição de campos -->
                 </div>
             </section>
 
@@ -110,6 +108,18 @@
                             <option value="">Selecione um setor</option>
                             {% for setor in setores_validos %}
                                 <option value="{{ setor }}">{{ setor }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Movido em Fase 3 Round 2 Correction: de "Cadastro base" para melhor distribuição (6 + 4 campos) -->
+                    <!-- Fase 3 Round 2.1: Localização padronizada em select -->
+                    <div class="field-group">
+                        <label for="localizacao">Localização / Unidade</label>
+                        <select id="localizacao" name="localizacao" class="select-control" {% if read_only %}disabled{% endif %} required>
+                            <option value="">Selecione uma unidade</option>
+                            {% for unidade in unidades_validas %}
+                                <option value="{{ unidade }}">{{ unidade }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -308,9 +318,15 @@
                         </select>
                     </div>
 
+                    <!-- Fase 3 Round 2.1: Localização padronizada em select -->
                     <div class="field-group">
                         <label for="movement_localizacao">Localização</label>
-                        <input type="text" id="movement_localizacao" class="input-control" maxlength="120" placeholder="Ex.: Matriz, CD-01">
+                        <select id="movement_localizacao" class="select-control" required>
+                            <option value="">Selecione uma unidade</option>
+                            {% for unidade in unidades_validas %}
+                                <option value="{{ unidade }}">{{ unidade }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div class="field-group" style="grid-column: 1 / -1;">
@@ -319,6 +335,24 @@
                         <small class="field-help">Esta observação será anexada ao histórico operacional do ativo.</small>
                     </div>
                 </div>
+            </div>
+
+            <!-- Seção de upload — Anexos desta movimentação (opcional) — Fase 3 Round 2 -->
+            <div class="movement-modal-section" id="movement-upload-section">
+                <h4 class="asset-section-title">Anexos desta movimentação</h4>
+                <p class="movement-modal-hint">Opcional. Termos de entrega, fotos, ordens de serviço ou comprovantes.</p>
+                <div class="upload-row">
+                    <select id="movement-attachment-type" class="select-control select-control-small">
+                        <option value="outro">Documento complementar</option>
+                        <option value="nota_fiscal">Nota fiscal</option>
+                        <option value="garantia">Garantia</option>
+                    </select>
+                    <label for="movement-attachment-file" class="btn btn-secondary btn-mini upload-label">
+                        Selecionar arquivo
+                    </label>
+                    <input type="file" id="movement-attachment-file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp" multiple>
+                </div>
+                <ul id="movement-selected-files" class="file-preview-list"></ul>
             </div>
         </div>
         <div class="modal-footer movement-modal-footer">
@@ -847,6 +881,46 @@
             }
         });
 
+        // Gerencia seleção de arquivos na seção de upload do modal de confirmação — Fase 3 Round 2
+        const movementAttachmentFileInput = document.getElementById("movement-attachment-file");
+        const movementSelectedFilesList = document.getElementById("movement-selected-files");
+
+        function updateMovementFilesList() {
+            movementSelectedFilesList.innerHTML = "";
+            if (!movementAttachmentFileInput.files.length) return;
+            Array.from(movementAttachmentFileInput.files).forEach(file => {
+                const li = document.createElement("li");
+                li.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                movementSelectedFilesList.appendChild(li);
+            });
+        }
+
+        movementAttachmentFileInput.addEventListener("change", updateMovementFilesList);
+
+        // Upload de arquivos após confirmação da movimentação
+        async function uploadMovementFiles(ativoId) {
+            if (!movementAttachmentFileInput || !movementAttachmentFileInput.files.length) return;
+
+            const tipoAttachment = document.getElementById("movement-attachment-type").value;
+            try {
+                for (const file of movementAttachmentFileInput.files) {
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    formData.append("type", tipoAttachment);
+
+                    const uploadUrl = buildAssetAttachmentsUrl(ativoId);
+                    if (!uploadUrl) continue;
+
+                    const response = await fetch(uploadUrl, { method: "POST", body: formData });
+                    if (!response.ok) {
+                        console.warn(`Falha ao anexar ${file.name}:`, response.statusText);
+                    }
+                }
+            } catch (error) {
+                console.error("Erro ao fazer upload de arquivo da movimentação:", error);
+            }
+        }
+
         // Fecha o modal sem persistir e mantém o formulário exatamente como o usuário deixou.
         movementBackEditButton.addEventListener("click", () => closeMovementModal());
         movementModalClose.addEventListener("click", () => closeMovementModal({ clearPending: true }));
@@ -883,6 +957,12 @@
             showMessage("success", payload?.mensagem || "Ativo atualizado com sucesso.");
             renderMovementSummary(payload?.resumo_movimentacao || pendingMovementPreview);
             await loadAsset();
+
+            // Upload de arquivos anexados no modal de confirmação — Fase 3 Round 2
+            await uploadMovementFiles(assetId);
+            // Limpar lista de arquivos selecionados após upload
+            movementAttachmentFileInput.value = "";
+            updateMovementFilesList();
         });
     }
 

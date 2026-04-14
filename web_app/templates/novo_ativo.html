@@ -31,7 +31,8 @@
                 <input type="text" id="codigo_interno" name="codigo_interno" class="input-control" maxlength="50">
             </div>
 
-            <div class="field-group">
+            <!-- Removido em Fase 3 Round 2: descricao e categoria são auto-gerados no backend -->
+            <!-- <div class="field-group">
                 <label for="descricao">Descrição</label>
                 <input type="text" id="descricao" name="descricao" class="input-control" maxlength="255" required>
             </div>
@@ -39,7 +40,7 @@
             <div class="field-group">
                 <label for="categoria">Categoria</label>
                 <input type="text" id="categoria" name="categoria" class="input-control" maxlength="100" required>
-            </div>
+            </div> -->
 
             <div class="field-group">
                 <label for="tipo_ativo">Tipo de ativo</label>
@@ -94,9 +95,15 @@
                 </select>
             </div>
 
+            <!-- Fase 3 Round 2.1: Localização padronizada em select -->
             <div class="field-group">
                 <label for="localizacao">Localização / Unidade</label>
-                <input type="text" id="localizacao" name="localizacao" class="input-control" maxlength="120">
+                <select id="localizacao" name="localizacao" class="select-control" required>
+                    <option value="">Selecione uma unidade</option>
+                    {% for unidade in unidades_validas %}
+                        <option value="{{ unidade }}">{{ unidade }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="field-group">

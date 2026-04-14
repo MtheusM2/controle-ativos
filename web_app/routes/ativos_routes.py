@@ -22,7 +22,7 @@ from services.ativos_arquivo_service import (
     TipoDocumentoInvalido,
 )
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
-from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS
+from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS, UNIDADES_VALIDAS
 
 
 def _obter_user_id_logado() -> int | None:
@@ -894,6 +894,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             status_validos=STATUS_VALIDOS,
             setores_validos=SETORES_VALIDOS,
             condicoes_validas=CONDICOES_VALIDAS,
+            unidades_validas=UNIDADES_VALIDAS,  # Fase 3 Round 2.1
             show_chrome=True,
         )
 
@@ -912,6 +913,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             status_validos=STATUS_VALIDOS,
             setores_validos=SETORES_VALIDOS,
             condicoes_validas=CONDICOES_VALIDAS,
+            unidades_validas=UNIDADES_VALIDAS,  # Fase 3 Round 2.1
             id_ativo=id_ativo,
             read_only=False,
             show_chrome=True,

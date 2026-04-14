@@ -32,7 +32,7 @@ def make_valid_ativo(**overrides):
         "categoria": "Computadores",
         "tipo_ativo": "Notebook",
         "condicao": "Novo",
-        "localizacao": "Matriz",
+        "localizacao": "Opus Medical",  # Fase 3 Round 2.1: deve ser unidade válida
         "setor": "T.I",
         "email_responsavel": None,
         "data_compra": date.today().isoformat(),
@@ -276,9 +276,9 @@ def test_analisar_movimentacao_ativo_classifica_casos_principais(cenario, espera
     """
     service = AtivosService()
 
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")  # Fase 3 Round 2.1: unidade válida
     if cenario in {"devolucao", "troca"}:
-        atual = make_valid_ativo(status="Em Uso", usuario_responsavel="Ana Silva", setor="T.I", localizacao="Matriz")
+        atual = make_valid_ativo(status="Em Uso", usuario_responsavel="Ana Silva", setor="T.I", localizacao="Opus Medical")  # Fase 3 Round 2.1: unidade válida
 
     if cenario == "entrega":
         novo = _atualizar_fechas_ativo(atual, usuario_responsavel="Ana Silva", status="Disponível")
@@ -287,7 +287,7 @@ def test_analisar_movimentacao_ativo_classifica_casos_principais(cenario, espera
     elif cenario == "troca":
         novo = _atualizar_fechas_ativo(atual, usuario_responsavel="Beatriz Costa", status="Disponível")
     elif cenario == "transferencia":
-        novo = _atualizar_fechas_ativo(atual, setor="Logística", departamento="Logística", localizacao="Filial 2")
+        novo = _atualizar_fechas_ativo(atual, setor="Logística", departamento="Logística", localizacao="Vicente Martins")  # Fase 3 Round 2.1: unidade válida
     else:
         novo = _atualizar_fechas_ativo(atual, status="Em Manutenção")
 
@@ -304,7 +304,7 @@ def test_analisar_movimentacao_ativo_retorna_resumo_com_antes_depois():
     O contrato do resumo precisa carregar o comparativo para o modal da próxima fase.
     """
     service = AtivosService()
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")  # Fase 3 Round 2.1: unidade válida
     novo = _atualizar_fechas_ativo(atual, usuario_responsavel="Ana Silva", status="Disponível")
 
     resumo = service.analisar_movimentacao_ativo(atual, novo)
@@ -321,8 +321,8 @@ def test_analisar_movimentacao_ativo_lista_apenas_campos_realmente_alterados():
     O resumo de movimentação não deve incluir campos que permaneceram iguais.
     """
     service = AtivosService()
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
-    novo = _atualizar_fechas_ativo(atual, localizacao="Filial 2")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")  # Fase 3 Round 2.1: unidade válida
+    novo = _atualizar_fechas_ativo(atual, localizacao="Vicente Martins")  # Fase 3 Round 2.1: unidade válida
 
     resumo = service.analisar_movimentacao_ativo(atual, novo)
     campos = [item["campo"] for item in resumo["campos_alterados"]]
@@ -340,7 +340,7 @@ def test_atualizar_ativo_simple_nao_altera_movimentacao(monkeypatch):
     service = AtivosService()
     cursor = FakeCursor()
 
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")  # Fase 3 Round 2.1: unidade válida
     atualizado = _atualizar_fechas_ativo(atual, processador="Intel Core i7")
     cursor.fetchone_queue = [
         _row_db_from_ativo(atual, created_at="2026-04-01 10:00:00", updated_at="2026-04-01 10:00:00", data_ultima_movimentacao=None),
@@ -369,7 +369,7 @@ def test_atualizar_ativo_preenche_responsavel_sugere_em_uso(monkeypatch):
     service = AtivosService()
     cursor = FakeCursor()
 
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")  # Fase 3 Round 2.1: unidade válida
     cursor.fetchone_queue = [
         _row_db_from_ativo(atual, created_at="2026-04-01 10:00:00", updated_at="2026-04-01 10:00:00", data_ultima_movimentacao=None),
         _row_db_from_ativo(

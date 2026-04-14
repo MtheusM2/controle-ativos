@@ -35,7 +35,7 @@
                 <col class="col-status">
                 <col class="col-date">
                 <col class="col-date">
-                <col class="col-attachments">
+                <!-- Removido em Fase 3 Round 2 Correction: col-attachments era fantasma (130px sem th correspondente) -->
                 <col class="col-actions">
             </colgroup>
             <thead>
@@ -49,13 +49,14 @@
                     <th>Status</th>
                     <th>Data entrada</th>
                     <th>Data saída</th>
-                    <th>Anexos</th>
-                    <th class="sticky-col-right">Ações</th>
+                    <!-- Removido em Fase 3 Round 2: coluna Anexos — indicador agora aparece junto às ações -->
+                    <!-- Removido em Fase 3 Round 2 Correction: sticky-col-right removido — scroll horizontal limpo -->
+                    <th>Ações</th>
                 </tr>
             </thead>
             <tbody id="asset-table-body">
                 <tr>
-                    <td colspan="11">Carregando ativos...</td>
+                    <td colspan="10">Carregando ativos...</td>
                 </tr>
             </tbody>
         </table>
@@ -176,7 +177,7 @@
     </div>
 </div>
 
-<!-- Modal de anexos por ativo -->
+<!-- Removido em Fase 3 Round 2: Modal de anexos da listagem — gestão centralizada em detalhe_ativo.html
 <div id="attachment-modal" class="modal" hidden>
     <div class="modal-content">
         <div class="modal-header">
@@ -203,29 +204,32 @@
         </div>
     </div>
 </div>
+-->
 {% endblock %}
 
 {% block scripts %}
 <script>
     const assetTableBody = document.getElementById("asset-table-body");
     const assetsFeedback = document.getElementById("assets-feedback");
-    const attachmentModal = document.getElementById("attachment-modal");
-    const attachmentList = document.getElementById("attachment-list");
-    const attachmentFileInput = document.getElementById("attachment-file");
-    const attachmentTypeSelect = document.getElementById("attachment-type");
-    const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
+    // Removido em Fase 3 Round 2: attachment modal desativado
+    // const attachmentModal = document.getElementById("attachment-modal");
+    // const attachmentList = document.getElementById("attachment-list");
+    // const attachmentFileInput = document.getElementById("attachment-file");
+    // const attachmentTypeSelect = document.getElementById("attachment-type");
+    // const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
 
     let currentFilters = {};
-    let currentAttachmentAssetId = null;
+    // let currentAttachmentAssetId = null;
 
     // Usa placeholder textual para preservar IDs de ativo como string (ex.: 001, A-001).
     const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
-    const attachmentUrlTemplates = {
-        listByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
-        downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
-        deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
-    };
+    // Removido em Fase 3 Round 2: attachment modal desativado
+    // const attachmentUrlTemplates = {
+    //     listByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
+    //     downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
+    //     deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
+    // };
 
     function showMessage(type, message) {
         assetsFeedback.hidden = false;
@@ -237,16 +241,17 @@
         assetsFeedback.innerHTML = "";
     }
 
-    function setAttachmentLoading(message = "Carregando anexos...") {
-        attachmentList.innerHTML = `<p>${message}</p>`;
-    }
-
-    function resetAttachmentModalState() {
-        currentAttachmentAssetId = null;
-        attachmentFileInput.value = "";
-        attachmentTypeSelect.value = "nota_fiscal";
-        setAttachmentLoading("Selecione um ativo para visualizar anexos.");
-    }
+    // Removido em Fase 3 Round 2: attachment modal desativado
+    // function setAttachmentLoading(message = "Carregando anexos...") {
+    //     attachmentList.innerHTML = `<p>${message}</p>`;
+    // }
+    //
+    // function resetAttachmentModalState() {
+    //     currentAttachmentAssetId = null;
+    //     attachmentFileInput.value = "";
+    //     attachmentTypeSelect.value = "nota_fiscal";
+    //     setAttachmentLoading("Selecione um ativo para visualizar anexos.");
+    // }
 
     function parsePositiveIntId(rawValue) {
         const value = String(rawValue ?? "").trim();
@@ -269,13 +274,14 @@
         return attachmentUrlTemplates.listByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
     }
 
-    function buildAttachmentDownloadUrl(attachmentId) {
-        return buildIntRoute(attachmentUrlTemplates.downloadByFile, attachmentId);
-    }
-
-    function buildAttachmentDeleteUrl(attachmentId) {
-        return buildIntRoute(attachmentUrlTemplates.deleteByFile, attachmentId);
-    }
+    // Removido em Fase 3 Round 2: attachment modal desativado
+    // function buildAttachmentDownloadUrl(attachmentId) {
+    //     return buildIntRoute(attachmentUrlTemplates.downloadByFile, attachmentId);
+    // }
+    //
+    // function buildAttachmentDeleteUrl(attachmentId) {
+    //     return buildIntRoute(attachmentUrlTemplates.deleteByFile, attachmentId);
+    // }
 
     async function parseJsonSafely(response) {
         const contentType = response.headers.get("content-type") || "";
@@ -351,7 +357,7 @@
 
     function renderAssets(assets) {
         if (!assets.length) {
-            assetTableBody.innerHTML = `<tr><td colspan="11">Nenhum ativo encontrado para os filtros selecionados.</td></tr>`;
+            assetTableBody.innerHTML = `<tr><td colspan="10">Nenhum ativo encontrado para os filtros selecionados.</td></tr>`;
             return;
         }
 
@@ -366,14 +372,13 @@
                 <td>${renderStatusBadge(asset.status)}</td>
                 <td>${escapeHtml(asset.data_entrada)}</td>
                 <td>${escapeHtml(asset.data_saida)}</td>
-                <td class="attachment-cell">
-                    <button type="button" class="btn btn-secondary btn-mini" data-attachments="${asset.id}">Documentos</button>
-                </td>
-                <td class="action-cell sticky-col-right">
+                <!-- Removido em Fase 3 Round 2: coluna de anexos — indicador agora junto às ações -->
+                <!-- Redesenhado em Fase 3 Round 2 Correction: remover sticky, redesenhar com btn-icon -->
+                <td class="action-cell">
                     <div class="row-actions">
                         <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Visualizar</a>
                         <a href="{{ url_for('editar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Editar</a>
-                        <button type="button" class="btn btn-danger btn-mini" data-delete="${asset.id}">Excluir</button>
+                        <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn-icon" title="Ver documentos e detalhes">📋</a>
                     </div>
                 </td>
             </tr>
@@ -407,9 +412,10 @@
         if (!modal) return;
         modal.hidden = true;
 
-        if (id === "attachment-modal") {
-            resetAttachmentModalState();
-        }
+        // Removido em Fase 3 Round 2: attachment modal desativado
+        // if (id === "attachment-modal") {
+        //     resetAttachmentModalState();
+        // }
     }
 
     document.getElementById("open-filter-modal").addEventListener("click", () => openModal("filter-modal"));
@@ -454,160 +460,44 @@
         });
     });
 
-    async function loadAttachments(assetId) {
-        const listUrl = buildAssetAttachmentsUrl(assetId);
-        if (!listUrl) {
-            showMessage("danger", "ID do ativo inválido para listagem de anexos.");
-            attachmentList.innerHTML = "<p>Não foi possível carregar os anexos para este ativo.</p>";
-            return;
-        }
+    // Removido em Fase 3 Round 2: attachment modal desativado
+    // async function loadAttachments(assetId) { ... }
 
-        setAttachmentLoading();
+    // Removido em Fase 3 Round 2: Excluir e Documentos saem da listagem
+    // assetTableBody.addEventListener("click", async (event) => {
+    //     const deleteButton = event.target.closest("[data-delete]");
+    //     const attachmentsButton = event.target.closest("[data-attachments]");
+    //
+    //     if (deleteButton) {
+    //         const assetId = deleteButton.getAttribute("data-delete");
+    //         if (!window.confirm("Confirma a exclusão deste ativo?")) return;
+    //
+    //         const { response, payload } = await requestJson(`{{ url_for('listar_ativos') }}/${encodeURIComponent(assetId)}`, { method: "DELETE" });
+    //         if (!response.ok) {
+    //             showMessage("danger", payload?.erro || "Não foi possível excluir o ativo.");
+    //             return;
+    //         }
+    //
+    //         showMessage("success", payload?.mensagem || "Ativo removido com sucesso.");
+    //         await loadAssets();
+    //         return;
+    //     }
+    //
+    //     if (attachmentsButton) {
+    //         currentAttachmentAssetId = attachmentsButton.getAttribute("data-attachments");
+    //         document.getElementById("attachment-modal-title").textContent = `Documentos do ativo ${currentAttachmentAssetId}`;
+    //         openModal("attachment-modal");
+    //         setAttachmentLoading();
+    //         await loadAttachments(currentAttachmentAssetId);
+    //     }
+    // });
 
-        try {
-            const { response, payload } = await requestJson(listUrl, { method: "GET" });
-            if (!response.ok) {
-                attachmentList.innerHTML = `<p>${payload?.erro || "Não foi possível carregar os anexos."}</p>`;
-                return;
-            }
+    // Removido em Fase 3 Round 2: Modal de anexos desativado — gestão centralizada em detalhe_ativo.html
+    // attachmentList.addEventListener("click", async (event) => { ... });
+    // attachmentFileInput.addEventListener("change", async (event) => { ... });
 
-            const attachments = Array.isArray(payload?.anexos) ? payload.anexos : [];
-            if (!attachments.length) {
-                attachmentList.innerHTML = "<p>Nenhum documento vinculado ao ativo.</p>";
-                return;
-            }
-
-            attachmentList.innerHTML = `
-            <table class="table-mini">
-                <thead>
-                    <tr>
-                        <th>Tipo</th>
-                        <th>Nome</th>
-                        <th>Tamanho</th>
-                        <th>Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${attachments.map((att) => `
-                        <tr>
-                            <td>${att.tipo_documento}</td>
-                            <td>${att.nome_original}</td>
-                            <td>${(att.tamanho_bytes / 1024).toFixed(2)} KB</td>
-                            <td>
-                                <button type="button" class="btn btn-secondary btn-mini" data-download="${att.id}">Baixar</button>
-                                <button type="button" class="btn btn-danger btn-mini" data-delete-attachment="${att.id}">Excluir</button>
-                            </td>
-                        </tr>
-                    `).join("")}
-                </tbody>
-            </table>
-        `;
-        } catch (error) {
-            console.error("Falha ao carregar anexos:", error);
-            attachmentList.innerHTML = "<p>Não foi possível carregar os anexos no momento. Tente novamente.</p>";
-        }
-    }
-
-    assetTableBody.addEventListener("click", async (event) => {
-        const deleteButton = event.target.closest("[data-delete]");
-        const attachmentsButton = event.target.closest("[data-attachments]");
-
-        if (deleteButton) {
-            const assetId = deleteButton.getAttribute("data-delete");
-            if (!window.confirm("Confirma a exclusão deste ativo?")) return;
-
-            const { response, payload } = await requestJson(`{{ url_for('listar_ativos') }}/${encodeURIComponent(assetId)}`, { method: "DELETE" });
-            if (!response.ok) {
-                showMessage("danger", payload?.erro || "Não foi possível excluir o ativo.");
-                return;
-            }
-
-            showMessage("success", payload?.mensagem || "Ativo removido com sucesso.");
-            await loadAssets();
-            return;
-        }
-
-        if (attachmentsButton) {
-            currentAttachmentAssetId = attachmentsButton.getAttribute("data-attachments");
-            document.getElementById("attachment-modal-title").textContent = `Documentos do ativo ${currentAttachmentAssetId}`;
-            openModal("attachment-modal");
-            setAttachmentLoading();
-            await loadAttachments(currentAttachmentAssetId);
-        }
-    });
-
-    attachmentList.addEventListener("click", async (event) => {
-        const downloadButton = event.target.closest("[data-download]");
-        const deleteAttachmentButton = event.target.closest("[data-delete-attachment]");
-
-        if (downloadButton) {
-            const downloadUrl = buildAttachmentDownloadUrl(downloadButton.getAttribute("data-download"));
-            if (!downloadUrl) {
-                showMessage("danger", "ID do anexo inválido para download.");
-                return;
-            }
-            window.location.href = downloadUrl;
-            return;
-        }
-
-        if (deleteAttachmentButton) {
-            const attachmentId = deleteAttachmentButton.getAttribute("data-delete-attachment");
-            const deleteUrl = buildAttachmentDeleteUrl(attachmentId);
-            if (!deleteUrl) {
-                showMessage("danger", "ID do anexo inválido para exclusão.");
-                return;
-            }
-            if (!window.confirm("Confirma a exclusão deste documento?")) return;
-
-            const { response, payload } = await requestJson(deleteUrl, { method: "DELETE" });
-            if (!response.ok) {
-                showMessage("danger", payload?.erro || "Não foi possível excluir o anexo.");
-                return;
-            }
-
-            showMessage("success", "Documento removido com sucesso.");
-            await loadAttachments(currentAttachmentAssetId);
-        }
-    });
-
-    attachmentFileInput.addEventListener("change", async (event) => {
-        const file = event.target.files[0];
-        if (!file || !currentAttachmentAssetId) return;
-
-        const uploadUrl = buildAssetAttachmentsUrl(currentAttachmentAssetId);
-        if (!uploadUrl) {
-            showMessage("danger", "ID do ativo inválido para upload.");
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("type", attachmentTypeSelect.value);
-
-        try {
-            attachmentUploadTrigger.classList.add("is-loading");
-            attachmentUploadTrigger.style.pointerEvents = "none";
-
-            const response = await fetch(uploadUrl, { method: "POST", body: formData });
-            const payload = await parseJsonSafely(response);
-            if (!response.ok) {
-                showMessage("danger", payload?.erro || "Não foi possível enviar o documento.");
-                return;
-            }
-
-            showMessage("success", "Documento anexado com sucesso.");
-            await loadAttachments(currentAttachmentAssetId);
-        } catch (error) {
-            console.error("Falha no upload de anexo:", error);
-            showMessage("danger", "Falha de comunicação ao enviar documento.");
-        } finally {
-            event.target.value = "";
-            attachmentUploadTrigger.classList.remove("is-loading");
-            attachmentUploadTrigger.style.pointerEvents = "";
-        }
-    });
-
-    resetAttachmentModalState();
+    // Removido em Fase 3 Round 2: attachment modal desativado
+    // resetAttachmentModalState();
     loadAssets();
 </script>
 {% endblock %}

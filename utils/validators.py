@@ -58,6 +58,12 @@ CONDICOES_VALIDAS = [
     "Inativo",
 ]
 
+# Fase 3 Round 2.1: Unidades oficiais padronizadas
+UNIDADES_VALIDAS = [
+    "Opus Medical",
+    "Vicente Martins",
+]
+
 PERFIS_VALIDOS = [
     "usuario",
     # Mantem compatibilidade com legado (adm) e novo rotulo (admin).
@@ -196,6 +202,25 @@ def validar_condicao(condicao: str | None) -> tuple[bool, str]:
 
     if condicao not in CONDICOES_VALIDAS:
         return False, f"Condição inválida. Use uma delas: {', '.join(CONDICOES_VALIDAS)}."
+
+    return True, ""
+
+
+# Fase 3 Round 2.1: Validação de unidade/localização padronizada
+def validar_unidade(unidade: str | None) -> tuple[bool, str]:
+    """
+    Valida se a unidade/localização informada está na lista oficial.
+    Normaliza com title() para comparação case-insensitive.
+    Campo opcional — retorna OK se vazio (compatibilidade com dados legados).
+    """
+    unidade = (unidade or "").strip().title()
+
+    # Permite vazio para compatibilidade com dados legados que possam não ter unidade
+    if not unidade:
+        return True, ""
+
+    if unidade not in UNIDADES_VALIDAS:
+        return False, f"Unidade inválida. Use uma delas: {', '.join(UNIDADES_VALIDAS)}."
 
     return True, ""
 
@@ -416,6 +441,11 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
         raise ValueError(msg)
 
     ok, msg = validar_condicao(getattr(ativo, "condicao", None))
+    if not ok:
+        raise ValueError(msg)
+
+    # Fase 3 Round 2.1: Validar unidade/localização
+    ok, msg = validar_unidade(getattr(ativo, "localizacao", None))
     if not ok:
         raise ValueError(msg)
 

@@ -857,8 +857,12 @@ body.app-body {
     display: none !important;
 }
 
+/* Fase 3 Round 2.1: Correção de overflow do modal */
 .modal-content {
     width: min(960px, 100%);
+    max-height: 90vh;               /* Impede modal crescer além viewport */
+    display: flex;                  /* Flex container para rolar body */
+    flex-direction: column;         /* Stack: header, body (scroll), footer */
     border: 1px solid var(--line-soft);
     border-radius: var(--radius-lg);
     background: linear-gradient(165deg, rgba(28, 31, 40, 0.94), rgba(18, 20, 28, 0.98));
@@ -886,8 +890,12 @@ body.app-body {
     text-transform: uppercase;
 }
 
+/* Fase 3 Round 2.1: Correção de overflow do modal */
 .modal-body {
     padding: 16px;
+    overflow-y: auto;               /* Permitir scroll vertical quando necessário */
+    flex: 1;                        /* Ocupar espaço disponível entre header e footer */
+    min-height: 0;                  /* Evitar flex grow infinito */
 }
 
 .modal-footer {
@@ -1302,37 +1310,49 @@ body.app-body {
     min-width: 820px;
 }
 
+/* Fase 3 Round 2 Correction: reduzido de 1320px para 1080px (soma das colunas otimizada) */
 .table-assets-main {
-    min-width: 1320px;
+    min-width: 1080px;
 }
 
-/* Colunas fixas evitam deslocamento do corpo em relacao ao cabecalho. */
+/* Colunas fixas evitam deslocamento do corpo em relacao ao cabecalho.
+   Fase 3 Round 2 Correction: larguras otimizadas para soma = 1080px */
 .table-aligned col.col-id {
-    width: 80px;
+    width: 70px;   /* 80 → 70 */
 }
 
-.table-aligned col.col-type,
-.table-aligned col.col-brand,
-.table-aligned col.col-model,
-.table-aligned col.col-owner,
+.table-aligned col.col-type {
+    width: 100px;  /* 120 → 100 */
+}
+
+.table-aligned col.col-brand {
+    width: 100px;  /* 120 → 100 */
+}
+
+.table-aligned col.col-model {
+    width: 110px;  /* 120 → 110 */
+}
+
+.table-aligned col.col-owner {
+    width: 120px;  /* sem mudança */
+}
+
 .table-aligned col.col-department {
-    width: 120px;
+    width: 100px;  /* 120 → 100 */
 }
 
 .table-aligned col.col-status {
-    width: 100px;
+    width: 90px;   /* 100 → 90 */
 }
 
 .table-aligned col.col-date {
-    width: 100px;
+    width: 90px;   /* 100 → 90 */
 }
 
-.table-aligned col.col-attachments {
-    width: 130px;
-}
+/* Removido col.col-attachments (era fantasma, 130px sem coluna visual) */
 
 .table-aligned col.col-actions {
-    width: 220px;
+    width: 210px;  /* 220 → 210 */
 }
 
 .table-premium th,
@@ -1355,11 +1375,12 @@ body.app-body {
     z-index: 1;
 }
 
-.table-premium th.sticky-col-right {
+/* Removido em Fase 3 Round 2 Correction: sticky-col-right não mais necessário */
+/* .table-premium th.sticky-col-right {
     position: sticky;
     right: 0;
     z-index: 3;
-}
+} */
 
 .table-premium tbody tr:hover {
     background: linear-gradient(135deg, rgba(168, 25, 54, 0.08), rgba(168, 25, 54, 0.03));
@@ -1385,15 +1406,17 @@ body.app-body {
     white-space: nowrap;
 }
 
+/* Fase 3 Round 2 Correction: redesenhado para estabilidade visual */
 .row-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;    /* era: flex-end */
+    flex-wrap: nowrap;          /* era: wrap — garante que não quebra linha */
 }
 
-/* Mantem consistencia da coluna de documentos e acoes em tabelas de ativos. */
+/* Mantem consistencia da coluna de documentos e acoes em tabelas de ativos.
+   Fase 3 Round 2 Correction: remover sticky, redesenhar action-cell para clareza */
 .table-aligned td.attachment-cell {
     text-align: center;
     overflow: visible;
@@ -1401,17 +1424,19 @@ body.app-body {
 }
 
 .table-aligned td.action-cell {
-    text-align: right;
+    text-align: center;         /* era: right → centralizar para integração visual */
     overflow: visible;
     white-space: normal;
+    padding: 0 8px;             /* adicionar padding para respiração */
 }
 
-.table-aligned td.action-cell.sticky-col-right {
+/* Removido em Fase 3 Round 2 Correction: sticky-col-right inútil sem sticky thead */
+/* .table-aligned td.action-cell.sticky-col-right {
     position: sticky;
     right: 0;
     z-index: 2;
     background-color: rgba(255, 255, 255, 0.02);
-}
+} */
 
 .table-aligned td.action-cell .row-actions {
     justify-content: flex-end;
@@ -1829,4 +1854,115 @@ body.app-body {
         padding-right: 32px;
         background-size: auto, 12px 12px;
     }
+}
+
+/* ============================================ */
+/* Fase 3 Round 2 + Correction — Estilos      */
+/* ============================================ */
+
+/* Fase 3 Round 2 Correction: botão-ícone redesenhado com borda para integração visual */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    background-color: transparent;
+    color: var(--text-2);
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    flex-shrink: 0;
+}
+
+.btn-icon:hover {
+    border-color: var(--line-strong);
+    color: var(--text-1);
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Removido em Fase 3 Round 2 Correction: btn-attachment-link (substituído por btn-icon) */
+/* .btn-attachment-link { ... } */
+
+/* Seção interna do modal de confirmação */
+.movement-modal-section {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.movement-modal-section:last-child {
+    border-bottom: none;
+}
+
+.movement-modal-section-readonly {
+    padding-bottom: 0;
+}
+
+/* Título de seção dentro do modal */
+.movement-modal-section .asset-section-title {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+}
+
+/* Linha de upload — flex container para select + label + input */
+.upload-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 12px 0;
+}
+
+.upload-row .select-control-small {
+    flex: 0 1 160px;
+    font-size: 0.9rem;
+    padding: 6px 8px;
+}
+
+.upload-label {
+    flex: 0 0 auto;
+    cursor: pointer;
+    font-size: 0.88rem;
+    padding: 6px 12px;
+}
+
+.upload-label:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Select compacto para uso em modal */
+.select-control-small {
+    padding: 6px 8px;
+    font-size: 0.9rem;
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    background-color: var(--bg-2);
+    color: var(--text-0);
+}
+
+.select-control-small:focus {
+    outline: none;
+    border-color: var(--wine-1);
+    box-shadow: 0 0 0 2px rgba(168, 25, 54, 0.2);
+}
+
+/* Lista de arquivos selecionados no modal */
+.file-preview-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+}
+
+.file-preview-list li {
+    padding: 6px 8px;
+    margin: 4px 0;
+    font-size: 0.85rem;
+    color: var(--text-1);
+    background-color: rgba(255, 255, 255, 0.02);
+    border-left: 2px solid var(--wine-1);
+    border-radius: 2px;
 }

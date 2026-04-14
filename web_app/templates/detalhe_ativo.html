@@ -12,7 +12,9 @@
     <div class="page-actions">
         <a href="{{ url_for('listar_ativos_html') }}" class="btn btn-secondary">Voltar a listagem</a>
         <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}" class="btn btn-primary">Editar ativo</a>
-        <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos" class="btn btn-secondary">Gerenciar anexos</a>
+        <!-- Removido em Fase 3 Round 2: botão "Gerenciar anexos" redundante — uso redirecionado para abas de edição -->
+        <!-- <a href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos" class="btn btn-secondary">Gerenciar anexos</a> -->
+        <button type="button" id="btn-excluir-ativo" class="btn btn-danger" data-ativo-id="{{ ativo.id }}">Excluir ativo</button>
     </div>
 </section>
 
@@ -115,10 +117,11 @@
     </div>
 
     <div class="panel-body">
-        <div class="form-actions attachment-toolbar-inline">
+        <!-- Removido em Fase 3 Round 2: links de gestão de anexos — usar botão Editar no topo da página -->
+        <!-- <div class="form-actions attachment-toolbar-inline">
             <a class="btn btn-secondary" href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos">Adicionar documento</a>
             <a class="btn btn-secondary" href="{{ url_for('editar_ativo_html', id_ativo=ativo.id) }}#documentos">Gerenciar anexos</a>
-        </div>
+        </div> -->
 
         <div class="table-wrapper">
             <table class="table-premium table-mini">
@@ -168,4 +171,37 @@
         </div>
     </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Excluir ativo — Fase 3 Round 2
+    const btnExcluirAtivo = document.getElementById("btn-excluir-ativo");
+    if (btnExcluirAtivo) {
+        btnExcluirAtivo.addEventListener("click", async () => {
+            const ativoId = btnExcluirAtivo.getAttribute("data-ativo-id");
+            if (!ativoId) return;
+
+            const confirmacao = window.confirm(
+                "Tem certeza que deseja excluir este ativo permanentemente? Esta ação não pode ser desfeita."
+            );
+            if (!confirmacao) return;
+
+            try {
+                const response = await fetch(`/ativos/${encodeURIComponent(ativoId)}`, { method: "DELETE" });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    alert(payload?.erro || "Não foi possível excluir o ativo. Tente novamente.");
+                    return;
+                }
+
+                alert("Ativo excluído com sucesso. Redirecionando para a listagem...");
+                window.location.href = "{{ url_for('listar_ativos_html') }}";
+            } catch (error) {
+                console.error("Erro ao excluir ativo:", error);
+                alert("Falha de comunicação ao excluir o ativo. Tente novamente.");
+            }
+        });
+    }
+</script>
 {% endblock %}
