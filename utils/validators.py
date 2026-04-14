@@ -8,7 +8,7 @@
 # - web
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 STATUS_VALIDOS = [
     "Disponível",
@@ -16,6 +16,21 @@ STATUS_VALIDOS = [
     "Em Manutenção",
     "Reservado",
     "Baixado"
+]
+
+# Lista oficial dos tipos permitidos no cadastro inteligente.
+TIPOS_ATIVO_VALIDOS = [
+    "Notebook",
+    "Desktop",
+    "Celular",
+    "Monitor",
+    "Mouse",
+    "Teclado",
+    "Headset",
+    "Adaptador",
+    "Cabo",
+    "Carregador",
+    "Outro",
 ]
 
 PERFIS_VALIDOS = [
@@ -113,6 +128,21 @@ def validar_status(status: str) -> tuple[bool, str]:
     return True, ""
 
 
+def validar_tipo_ativo(tipo_ativo: str) -> tuple[bool, str]:
+    """
+    Valida o tipo oficial do ativo usado pela nova UI.
+    """
+    tipo_ativo = (tipo_ativo or "").strip().title()
+
+    if not tipo_ativo:
+        return False, "O tipo do ativo não pode ficar vazio."
+
+    if tipo_ativo not in TIPOS_ATIVO_VALIDOS:
+        return False, f"Tipo de ativo inválido. Use um destes: {', '.join(TIPOS_ATIVO_VALIDOS)}."
+
+    return True, ""
+
+
 def validar_texto_obrigatorio(
     valor: str,
     nome_campo: str,
@@ -197,6 +227,21 @@ def validar_data_iso_opcional(data_str: str | None) -> tuple[bool, str]:
     return validar_data_iso(data_str)
 
 
+def validar_data_nao_futura(data_str: str, nome_campo: str) -> tuple[bool, str]:
+    """
+    Garante que a data informada não seja posterior ao dia atual.
+    """
+    ok, msg = validar_data_iso(data_str)
+    if not ok:
+        return False, msg
+
+    data_valor = datetime.strptime((data_str or "").strip(), "%Y-%m-%d").date()
+    if data_valor > date.today():
+        return False, f"O campo {nome_campo} não pode ser uma data futura."
+
+    return True, ""
+
+
 def comparar_datas(data_inicial: str, data_final: str | None) -> tuple[bool, str]:
     """
     Garante que a data final não seja anterior à data inicial.
@@ -217,7 +262,8 @@ def validar_regras_ativo(
     status: str,
     usuario_responsavel: str | None,
     data_entrada: str,
-    data_saida: str | None
+    data_saida: str | None,
+    data_compra: str | None = None,
 ) -> tuple[bool, str]:
     """
     Valida regras de negócio do ativo.
@@ -230,13 +276,26 @@ def validar_regras_ativo(
     if not ok:
         return False, msg
 
+    ok, msg = validar_data_nao_futura(data_entrada, "data_entrada")
+    if not ok:
+        return False, msg
+
     ok, msg = validar_data_iso_opcional(data_saida_fmt)
+    if not ok:
+        return False, msg
+
+    ok, msg = validar_data_iso_opcional(data_compra)
     if not ok:
         return False, msg
 
     ok, msg = comparar_datas(data_entrada, data_saida_fmt)
     if not ok:
         return False, msg
+
+    if data_compra:
+        ok, msg = comparar_datas(data_compra, data_entrada)
+        if not ok:
+            return False, "A data da compra não pode ser maior que a data de entrada."
 
     if status_fmt == "Baixado" and not data_saida_fmt:
         return False, "Ativos com status 'Baixado' devem possuir data de saída."
@@ -260,19 +319,82 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
         if not ok:
             raise ValueError(msg)
 
+    # `tipo_ativo` é o campo oficial; `tipo` segue apenas como compatibilidade legada.
+    tipo_principal = getattr(ativo, "tipo_ativo", None) or ativo.tipo
+    # `setor` é o campo oficial; `departamento` segue apenas como compatibilidade legada.
+    setor_principal = getattr(ativo, "setor", None) or ativo.departamento
+
     for valor, nome in [
-        (ativo.tipo, "tipo"),
+        (tipo_principal, "tipo_ativo"),
         (ativo.marca, "marca"),
         (ativo.modelo, "modelo"),
-        (ativo.departamento, "departamento"),
+        (setor_principal, "setor"),
     ]:
         ok, msg = validar_texto_obrigatorio(valor, nome)
         if not ok:
             raise ValueError(msg)
 
+    ok, msg = validar_tipo_ativo(tipo_principal)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_obrigatorio(getattr(ativo, "descricao", ""), "descricao", tamanho_maximo=255)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_obrigatorio(getattr(ativo, "categoria", ""), "categoria")
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "codigo_interno", None), "codigo_interno", tamanho_maximo=50)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "serial", None), "serial", tamanho_maximo=120)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "condicao", None), "condicao")
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "localizacao", None), "localizacao", tamanho_maximo=120)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "email_responsavel", None), "email_responsavel", tamanho_maximo=255)
+    if not ok:
+        raise ValueError(msg)
+
+    email_responsavel = (getattr(ativo, "email_responsavel", "") or "").strip()
+    if email_responsavel and not validar_email(email_responsavel):
+        raise ValueError("O campo email_responsavel possui formato inválido.")
+
     ok, msg = validar_texto_opcional(ativo.usuario_responsavel, "usuario_responsavel")
     if not ok:
         raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "detalhes_tecnicos", None), "detalhes_tecnicos", tamanho_maximo=255)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "observacoes", None), "observacoes", tamanho_maximo=5000)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_data_iso_opcional(getattr(ativo, "data_compra", None))
+    if not ok:
+        raise ValueError(msg)
+
+    valor_bruto = (getattr(ativo, "valor", None) or "").strip()
+    if valor_bruto:
+        valor_normalizado = valor_bruto.replace(",", ".")
+        try:
+            valor_numerico = float(valor_normalizado)
+        except ValueError as exc:
+            raise ValueError("O campo valor deve ser numérico.") from exc
+        if valor_numerico < 0:
+            raise ValueError("O campo valor não pode ser negativo.")
 
     ok, msg = validar_texto_opcional(ativo.nota_fiscal, "nota_fiscal")
     if not ok:
@@ -291,7 +413,8 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
         ativo.status,
         ativo.usuario_responsavel,
         ativo.data_entrada,
-        ativo.data_saida
+        ativo.data_saida,
+        getattr(ativo, "data_compra", None),
     )
     if not ok:
         raise ValueError(msg)     

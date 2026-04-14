@@ -50,6 +50,143 @@ def test_asset_edit_page_authenticated(authenticated_client):
     assert "Edição do ativo" in response.get_data(as_text=True)
 
 
+def test_asset_create_route_exposes_automatic_timestamps():
+    class TimestampAtivosService:
+        def criar_ativo(self, _ativo, _user_id):
+            return "OPU-000999"
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return SimpleNamespace(
+                id_ativo=id_ativo,
+                tipo="Notebook",
+                tipo_ativo="Notebook",
+                marca="Dell",
+                modelo="XPS",
+                usuario_responsavel="Ana",
+                departamento="TI",
+                setor="TI",
+                status="Disponível",
+                data_entrada="2026-04-14",
+                data_saida=None,
+                created_at="2026-04-14 09:00:00",
+                updated_at="2026-04-14 09:00:00",
+                data_ultima_movimentacao=None,
+            )
+
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": TimestampAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos",
+        json={
+            "tipo_ativo": "Notebook",
+            "marca": "Dell",
+            "modelo": "XPS",
+            "descricao": "Notebook corporativo",
+            "categoria": "Computadores",
+            "status": "Disponível",
+            "data_entrada": "2026-04-14",
+            "setor": "TI",
+            "departamento": "TI",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    ativo = payload["ativo"]
+    assert ativo["created_at"] == "2026-04-14 09:00:00"
+    assert ativo["updated_at"] == "2026-04-14 09:00:00"
+
+
+def test_asset_update_route_returns_movement_summary():
+    class MovementAtivosService:
+        def atualizar_ativo(self, id_ativo, dados, user_id):
+            del user_id
+            return SimpleNamespace(
+                id_ativo=id_ativo,
+                tipo="Notebook",
+                tipo_ativo=dados.get("tipo_ativo", "Notebook"),
+                marca="Dell",
+                modelo="XPS",
+                usuario_responsavel=dados.get("usuario_responsavel", "Ana Silva"),
+                departamento=dados.get("departamento", "TI"),
+                setor=dados.get("setor", "TI"),
+                status=dados.get("status", "Disponível"),
+                data_entrada=dados.get("data_entrada", "2026-04-01"),
+                data_saida=None,
+                created_at="2026-04-01 09:00:00",
+                updated_at="2026-04-14 11:00:00",
+                data_ultima_movimentacao="2026-04-14 11:00:00",
+                resumo_movimentacao={
+                    "status_atual": "Disponível",
+                    "status_sugerido": "Em Uso",
+                    "tipo_movimentacao": "entrega_para_colaborador",
+                    "descricao_movimentacao": "Entrega para colaborador",
+                    "mudanca_relevante": True,
+                    "atualizar_data_ultima_movimentacao": True,
+                    "campos_alterados": [
+                        {"campo": "usuario_responsavel", "rotulo": "Responsável", "antes": "", "depois": "Ana Silva", "relevante": True}
+                    ],
+                    "estado_anterior": {"status": "Disponível", "usuario_responsavel": "", "setor": "TI", "localizacao": "Matriz"},
+                    "estado_novo": {"status": "Disponível", "usuario_responsavel": "Ana Silva", "setor": "TI", "localizacao": "Matriz"},
+                },
+            )
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return SimpleNamespace(id_ativo=id_ativo)
+
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": MovementAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.put(
+        "/ativos/OPU-000999",
+        json={
+            "tipo_ativo": "Notebook",
+            "marca": "Dell",
+            "modelo": "XPS",
+            "descricao": "Notebook corporativo",
+            "categoria": "Computadores",
+            "status": "Disponível",
+            "data_entrada": "2026-04-14",
+            "usuario_responsavel": "Ana Silva",
+            "setor": "TI",
+            "departamento": "TI",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["resumo_movimentacao"]["tipo_movimentacao"] == "entrega_para_colaborador"
+    assert payload["resumo_movimentacao"]["status_sugerido"] == "Em Uso"
+    assert payload["ativo"]["data_ultima_movimentacao"] == "2026-04-14 11:00:00"
+
+
 def test_asset_view_page_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/visualizar/A-001", follow_redirects=True)
     assert response.status_code == 200

@@ -23,12 +23,40 @@
 
     <div class="panel-body">
         <form id="create-asset-form" class="form-grid asset-form-grid">
-            <div class="form-block-title">Identificação e classificação</div>
-            <!-- ID é gerado automaticamente no backend — remover campo manual de entrada -->
+            <div class="form-block-title">Cadastro base do ativo</div>
+            <!-- O ID continua automático no backend; o campo patrimonial é opcional e separado -->
 
             <div class="field-group">
-                <label for="tipo">Tipo</label>
-                <input type="text" id="tipo" name="tipo" class="input-control" required>
+                <label for="codigo_interno">Patrimônio / Código interno</label>
+                <input type="text" id="codigo_interno" name="codigo_interno" class="input-control" maxlength="50">
+            </div>
+
+            <div class="field-group">
+                <label for="descricao">Descrição</label>
+                <input type="text" id="descricao" name="descricao" class="input-control" maxlength="255" required>
+            </div>
+
+            <div class="field-group">
+                <label for="categoria">Categoria</label>
+                <input type="text" id="categoria" name="categoria" class="input-control" maxlength="100" required>
+            </div>
+
+            <div class="field-group">
+                <label for="tipo_ativo">Tipo de ativo</label>
+                <select id="tipo_ativo" name="tipo_ativo" class="select-control" required>
+                    <option value="">Selecione o tipo</option>
+                    <option value="Notebook">Notebook</option>
+                    <option value="Desktop">Desktop</option>
+                    <option value="Celular">Celular</option>
+                    <option value="Monitor">Monitor</option>
+                    <option value="Mouse">Mouse</option>
+                    <option value="Teclado">Teclado</option>
+                    <option value="Headset">Headset</option>
+                    <option value="Adaptador">Adaptador</option>
+                    <option value="Cabo">Cabo</option>
+                    <option value="Carregador">Carregador</option>
+                    <option value="Outro">Outro</option>
+                </select>
             </div>
 
             <div class="field-group">
@@ -42,16 +70,14 @@
             </div>
 
             <div class="field-group">
-                <label for="usuario_responsavel">Responsável</label>
-                <input type="text" id="usuario_responsavel" name="usuario_responsavel" class="input-control">
+                <label for="serial">Serial</label>
+                <input type="text" id="serial" name="serial" class="input-control">
             </div>
 
             <div class="field-group">
-                <label for="departamento">Departamento</label>
-                <input type="text" id="departamento" name="departamento" class="input-control" required>
+                <label for="condicao">Condição</label>
+                <input type="text" id="condicao" name="condicao" class="input-control" placeholder="Novo, Usado, Recondicionado">
             </div>
-
-            <div class="form-block-title">Status e ciclo de datas</div>
 
             <div class="field-group">
                 <label for="status">Status</label>
@@ -64,13 +90,100 @@
             </div>
 
             <div class="field-group">
-                <label for="data_entrada">Data de entrada</label>
+                <label for="localizacao">Localização / Unidade</label>
+                <input type="text" id="localizacao" name="localizacao" class="input-control" maxlength="120">
+            </div>
+
+            <div class="field-group">
+                <label for="setor">Setor / Departamento</label>
+                <input type="text" id="setor" name="setor" class="input-control" maxlength="100" required>
+            </div>
+
+            <div class="field-group">
+                <label for="usuario_responsavel">Responsável</label>
+                <input type="text" id="usuario_responsavel" name="usuario_responsavel" class="input-control">
+            </div>
+
+            <div class="field-group">
+                <label for="email_responsavel">E-mail do responsável</label>
+                <input type="email" id="email_responsavel" name="email_responsavel" class="input-control" maxlength="255">
+            </div>
+
+            <div class="field-group">
+                <label for="data_compra">Data da compra</label>
+                <input type="date" id="data_compra" name="data_compra" class="input-control">
+            </div>
+
+            <div class="field-group">
+                <label for="garantia">Garantia</label>
+                <input type="text" id="garantia" name="garantia" class="input-control" placeholder="Ex.: 12 meses">
+            </div>
+
+            <div class="field-group">
+                <label for="valor">Valor</label>
+                <input type="number" id="valor" name="valor" class="input-control" step="0.01" min="0">
+            </div>
+
+            <div class="field-group">
+                <label for="data_entrada">Data de entrada no controle</label>
                 <input type="date" id="data_entrada" name="data_entrada" class="input-control" required>
             </div>
 
             <div class="field-group">
                 <label for="data_saida">Data de saída</label>
                 <input type="date" id="data_saida" name="data_saida" class="input-control">
+            </div>
+
+            <div class="field-group" style="grid-column: 1 / -1;">
+                <label for="observacoes">Observações</label>
+                <textarea id="observacoes" name="observacoes" class="input-control" rows="3" maxlength="5000"></textarea>
+            </div>
+
+            <div class="form-block-title">Especificações por tipo</div>
+
+            <div id="specs-notebook" class="asset-specs-group" hidden>
+                <div class="field-group"><label for="processador">Processador</label><input type="text" id="processador" name="processador" class="input-control"></div>
+                <div class="field-group"><label for="ram">RAM</label><input type="text" id="ram" name="ram" class="input-control"></div>
+                <div class="field-group"><label for="armazenamento">Armazenamento</label><input type="text" id="armazenamento" name="armazenamento" class="input-control"></div>
+                <div class="field-group"><label for="sistema_operacional">Sistema operacional</label><input type="text" id="sistema_operacional" name="sistema_operacional" class="input-control"></div>
+                <div class="field-group"><label for="carregador">Carregador</label><input type="text" id="carregador" name="carregador" class="input-control"></div>
+                <div class="field-group"><label for="teamviewer_id">TeamViewer ID</label><input type="text" id="teamviewer_id" name="teamviewer_id" class="input-control"></div>
+                <div class="field-group"><label for="anydesk_id">AnyDesk ID</label><input type="text" id="anydesk_id" name="anydesk_id" class="input-control"></div>
+                <div class="field-group"><label for="nome_equipamento">Nome do equipamento</label><input type="text" id="nome_equipamento" name="nome_equipamento" class="input-control"></div>
+            </div>
+
+            <div id="specs-desktop" class="asset-specs-group" hidden>
+                <div class="field-group"><label for="desktop_processador">Processador</label><input type="text" id="desktop_processador" data-field-alias="processador" class="input-control"></div>
+                <div class="field-group"><label for="desktop_ram">RAM</label><input type="text" id="desktop_ram" data-field-alias="ram" class="input-control"></div>
+                <div class="field-group"><label for="desktop_armazenamento">Armazenamento</label><input type="text" id="desktop_armazenamento" data-field-alias="armazenamento" class="input-control"></div>
+                <div class="field-group"><label for="desktop_sistema_operacional">Sistema operacional</label><input type="text" id="desktop_sistema_operacional" data-field-alias="sistema_operacional" class="input-control"></div>
+                <div class="field-group"><label for="hostname">Hostname / Nome equipamento</label><input type="text" id="hostname" name="hostname" class="input-control"></div>
+                <div class="field-group"><label for="desktop_teamviewer_id">TeamViewer ID</label><input type="text" id="desktop_teamviewer_id" data-field-alias="teamviewer_id" class="input-control"></div>
+                <div class="field-group"><label for="desktop_anydesk_id">AnyDesk ID</label><input type="text" id="desktop_anydesk_id" data-field-alias="anydesk_id" class="input-control"></div>
+            </div>
+
+            <div id="specs-celular" class="asset-specs-group" hidden>
+                <div class="field-group"><label for="imei_1">IMEI 1</label><input type="text" id="imei_1" name="imei_1" class="input-control"></div>
+                <div class="field-group"><label for="imei_2">IMEI 2</label><input type="text" id="imei_2" name="imei_2" class="input-control"></div>
+                <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control"></div>
+                <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
+                <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control"></div>
+                <div class="field-group"><label for="celular_armazenamento">Armazenamento</label><input type="text" id="celular_armazenamento" data-field-alias="armazenamento" class="input-control"></div>
+            </div>
+
+            <div id="specs-monitor" class="asset-specs-group" hidden>
+                <div class="field-group"><label for="polegadas">Polegadas</label><input type="text" id="polegadas" name="polegadas" class="input-control"></div>
+                <div class="field-group"><label for="resolucao">Resolução</label><input type="text" id="resolucao" name="resolucao" class="input-control"></div>
+                <div class="field-group"><label for="tipo_painel">Tipo de painel</label><input type="text" id="tipo_painel" name="tipo_painel" class="input-control"></div>
+                <div class="field-group"><label for="entrada_video">Entrada de vídeo</label><input type="text" id="entrada_video" name="entrada_video" class="input-control"></div>
+                <div class="field-group"><label for="fonte_ou_cabo">Fonte ou cabo</label><input type="text" id="fonte_ou_cabo" name="fonte_ou_cabo" class="input-control"></div>
+            </div>
+
+            <div id="specs-simples" class="asset-specs-group" hidden>
+                <div class="field-group" style="grid-column: 1 / -1;">
+                    <label for="detalhes_tecnicos">Detalhes técnicos (tipos simples)</label>
+                    <textarea id="detalhes_tecnicos" name="detalhes_tecnicos" class="input-control" rows="2" maxlength="255"></textarea>
+                </div>
             </div>
 
             <div class="form-actions">
@@ -116,6 +229,16 @@
 
     let currentAssetId = null;
 
+    // Define grupos de tipo com blocos de especificação reutilizáveis.
+    const TYPE_GROUPS = {
+        notebook: ["notebook"],
+        desktop: ["desktop"],
+        celular: ["celular"],
+        monitor: ["monitor"],
+    };
+
+    const SIMPLE_TYPES = new Set(["mouse", "teclado", "headset", "adaptador", "cabo", "carregador", "outro"]);
+
     const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
     const attachmentUrlTemplates = {
@@ -123,6 +246,38 @@
         downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
         deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
     };
+
+    function normalizeType(value) {
+        return String(value || "").trim().toLowerCase();
+    }
+
+    function syncAliasedSpecFieldsToBody(body) {
+        // Consolida aliases (desktop/celular) para o payload canônico do backend.
+        document.querySelectorAll("[data-field-alias]").forEach((input) => {
+            const alias = input.getAttribute("data-field-alias");
+            const value = String(input.value || "").trim();
+            if (value) body[alias] = value;
+        });
+    }
+
+    function setSpecsVisibility() {
+        const normalizedType = normalizeType(document.getElementById("tipo_ativo").value);
+        const activeGroups = TYPE_GROUPS[normalizedType] || [];
+        const showSimple = SIMPLE_TYPES.has(normalizedType);
+
+        ["notebook", "desktop", "celular", "monitor", "simples"].forEach((groupKey) => {
+            const group = document.getElementById(`specs-${groupKey}`);
+            if (!group) return;
+            const shouldShow = activeGroups.includes(groupKey) || (groupKey === "simples" && showSimple);
+            group.hidden = !shouldShow;
+
+            // Desabilita campos de grupos ocultos para evitar envio de lixo técnico.
+            group.querySelectorAll("input, textarea, select").forEach((field) => {
+                field.disabled = !shouldShow;
+                if (!shouldShow) field.value = "";
+            });
+        });
+    }
 
     function showMessage(type, message) {
         assetFeedback.hidden = false;
@@ -240,6 +395,12 @@
     createAssetForm.addEventListener("submit", async (event) => {
         event.preventDefault();
         const body = Object.fromEntries(new FormData(createAssetForm).entries());
+        syncAliasedSpecFieldsToBody(body);
+
+        // Mantém compatibilidade com backend legado que ainda usa a chave tipo.
+        body.tipo = body.tipo_ativo || body.tipo;
+        body.departamento = body.setor || body.departamento;
+        body.nota_fiscal = body.nota_fiscal || null;
 
         const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}", {
             method: "POST",
@@ -320,5 +481,8 @@
             attachmentUploadTrigger.style.pointerEvents = "";
         }
     });
+
+    document.getElementById("tipo_ativo").addEventListener("change", setSpecsVisibility);
+    setSpecsVisibility();
 </script>
 {% endblock %}
