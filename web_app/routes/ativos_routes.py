@@ -22,7 +22,7 @@ from services.ativos_arquivo_service import (
     TipoDocumentoInvalido,
 )
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
-from utils.validators import STATUS_VALIDOS
+from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS
 
 
 def _obter_user_id_logado() -> int | None:
@@ -196,6 +196,72 @@ def _ativo_do_payload(dados: dict) -> Ativo:
         nota_fiscal=None,
         garantia=None,
     )
+
+
+def _normalizar_payload_atualizacao(dados: dict, *, preencher_campos_ausentes: bool = True) -> dict:
+    """
+    Normaliza o payload de edição em um contrato único para PUT, prévia e confirmação.
+    """
+    mapa_campos = {
+        # Prioriza tipo_ativo e mantém suporte à chave antiga tipo.
+        "tipo_ativo": dados.get("tipo_ativo", dados.get("tipo", "")),
+        "marca": dados.get("marca", ""),
+        "modelo": dados.get("modelo", ""),
+        "serial": dados.get("serial", "") or None,
+        "codigo_interno": dados.get("codigo_interno", "") or None,
+        "descricao": dados.get("descricao", ""),
+        "categoria": dados.get("categoria", ""),
+        "condicao": dados.get("condicao", "") or None,
+        "localizacao": dados.get("localizacao", "") or None,
+        "setor": dados.get("setor", dados.get("departamento", "")),
+        "usuario_responsavel": dados.get("usuario_responsavel", "") or None,
+        "email_responsavel": dados.get("email_responsavel", "") or None,
+        "departamento": dados.get("setor", dados.get("departamento", "")),
+        "status": dados.get("status", ""),
+        "data_entrada": dados.get("data_entrada", ""),
+        "data_saida": dados.get("data_saida", "") or None,
+        "data_compra": dados.get("data_compra", "") or None,
+        "valor": dados.get("valor", "") or None,
+        "observacoes": dados.get("observacoes", "") or None,
+        "detalhes_tecnicos": dados.get("detalhes_tecnicos", "") or None,
+        "processador": dados.get("processador", "") or None,
+        "ram": dados.get("ram", "") or None,
+        "armazenamento": dados.get("armazenamento", "") or None,
+        "sistema_operacional": dados.get("sistema_operacional", "") or None,
+        "carregador": dados.get("carregador", "") or None,
+        "teamviewer_id": dados.get("teamviewer_id", "") or None,
+        "anydesk_id": dados.get("anydesk_id", "") or None,
+        "nome_equipamento": dados.get("nome_equipamento", "") or None,
+        "hostname": dados.get("hostname", "") or None,
+        "imei_1": dados.get("imei_1", "") or None,
+        "imei_2": dados.get("imei_2", "") or None,
+        "numero_linha": dados.get("numero_linha", "") or None,
+        "operadora": dados.get("operadora", "") or None,
+        "conta_vinculada": dados.get("conta_vinculada", "") or None,
+        "polegadas": dados.get("polegadas", "") or None,
+        "resolucao": dados.get("resolucao", "") or None,
+        "tipo_painel": dados.get("tipo_painel", "") or None,
+        "entrada_video": dados.get("entrada_video", "") or None,
+        "fonte_ou_cabo": dados.get("fonte_ou_cabo", "") or None,
+        "nota_fiscal": None,
+        "garantia": None,
+    }
+
+    if preencher_campos_ausentes:
+        return mapa_campos
+
+    dados_normalizados: dict = {}
+    for chave, valor in mapa_campos.items():
+        if chave in {"nota_fiscal", "garantia"}:
+            continue
+        if chave in dados:
+            dados_normalizados[chave] = valor
+
+    # Mantém compatibilidade de chave legada apenas quando o front realmente enviar dado operacional.
+    if "setor" in dados_normalizados and "departamento" not in dados_normalizados:
+        dados_normalizados["departamento"] = dados_normalizados["setor"]
+
+    return dados_normalizados
 
 
 def _validar_intervalo_datas(data_inicial: str | None, data_final: str | None, *, campo: str) -> None:
@@ -700,50 +766,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
         dados = _request_data()
-        dados_normalizados = {
-            # Prioriza tipo_ativo e mantém suporte à chave antiga tipo.
-            "tipo_ativo": dados.get("tipo_ativo", dados.get("tipo", "")),
-            "marca": dados.get("marca", ""),
-            "modelo": dados.get("modelo", ""),
-            "serial": dados.get("serial", "") or None,
-            "codigo_interno": dados.get("codigo_interno", "") or None,
-            "descricao": dados.get("descricao", ""),
-            "categoria": dados.get("categoria", ""),
-            "condicao": dados.get("condicao", "") or None,
-            "localizacao": dados.get("localizacao", "") or None,
-            "setor": dados.get("setor", dados.get("departamento", "")),
-            "usuario_responsavel": dados.get("usuario_responsavel", "") or None,
-            "email_responsavel": dados.get("email_responsavel", "") or None,
-            "departamento": dados.get("setor", dados.get("departamento", "")),
-            "status": dados.get("status", ""),
-            "data_entrada": dados.get("data_entrada", ""),
-            "data_saida": dados.get("data_saida", "") or None,
-            "data_compra": dados.get("data_compra", "") or None,
-            "valor": dados.get("valor", "") or None,
-            "observacoes": dados.get("observacoes", "") or None,
-            "detalhes_tecnicos": dados.get("detalhes_tecnicos", "") or None,
-            "processador": dados.get("processador", "") or None,
-            "ram": dados.get("ram", "") or None,
-            "armazenamento": dados.get("armazenamento", "") or None,
-            "sistema_operacional": dados.get("sistema_operacional", "") or None,
-            "carregador": dados.get("carregador", "") or None,
-            "teamviewer_id": dados.get("teamviewer_id", "") or None,
-            "anydesk_id": dados.get("anydesk_id", "") or None,
-            "nome_equipamento": dados.get("nome_equipamento", "") or None,
-            "hostname": dados.get("hostname", "") or None,
-            "imei_1": dados.get("imei_1", "") or None,
-            "imei_2": dados.get("imei_2", "") or None,
-            "numero_linha": dados.get("numero_linha", "") or None,
-            "operadora": dados.get("operadora", "") or None,
-            "conta_vinculada": dados.get("conta_vinculada", "") or None,
-            "polegadas": dados.get("polegadas", "") or None,
-            "resolucao": dados.get("resolucao", "") or None,
-            "tipo_painel": dados.get("tipo_painel", "") or None,
-            "entrada_video": dados.get("entrada_video", "") or None,
-            "fonte_ou_cabo": dados.get("fonte_ou_cabo", "") or None,
-            "nota_fiscal": None,
-            "garantia": None,
-        }
+        dados_normalizados = _normalizar_payload_atualizacao(dados)
 
         try:
             ativo = service.atualizar_ativo(id_ativo=id_ativo, dados=dados_normalizados, user_id=user_id)
@@ -758,6 +781,68 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=400)
         except (ValueError, KeyError, TypeError):
             return _json_error("Erro inesperado ao atualizar ativo.", status=500)
+
+    @app.post("/ativos/<id_ativo>/movimentacao/preview")
+    def preview_movimentacao_ativo(id_ativo):
+        """
+        Gera prévia estruturada da movimentação sem persistir atualização no banco.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        dados = _request_data()
+        dados_normalizados = _normalizar_payload_atualizacao(dados)
+
+        try:
+            preview = service.gerar_preview_atualizacao(
+                id_ativo=id_ativo,
+                dados=dados_normalizados,
+                user_id=user_id,
+            )
+            return _json_success("Prévia de movimentação gerada com sucesso.", preview=preview)
+        except AtivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except (PermissaoNegada, AtivoErro) as erro:
+            return _json_error(str(erro), status=400)
+        except (ValueError, KeyError, TypeError):
+            return _json_error("Erro inesperado ao gerar prévia de movimentação.", status=500)
+
+    @app.post("/ativos/<id_ativo>/movimentacao/confirmar")
+    def confirmar_movimentacao_ativo(id_ativo):
+        """
+        Confirma a edição após ajuste operacional no modal e persiste o resultado final.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        dados = _request_data()
+        dados_formulario = dados.get("dados_formulario") or {}
+        ajustes_movimentacao = dados.get("ajustes_movimentacao") or {}
+        # Na confirmação da movimentação aceitamos payload enxuto para evitar cobrar campos cadastrais.
+        dados_normalizados = _normalizar_payload_atualizacao(
+            dados_formulario,
+            preencher_campos_ausentes=False,
+        )
+
+        try:
+            dados_finais = service.preparar_dados_confirmacao_movimentacao(
+                dados=dados_normalizados,
+                ajustes=ajustes_movimentacao,
+            )
+            ativo = service.atualizar_ativo(id_ativo=id_ativo, dados=dados_finais, user_id=user_id)
+            return _json_success(
+                "Ativo atualizado com sucesso.",
+                ativo=_serializar_ativo(ativo),
+                resumo_movimentacao=getattr(ativo, "resumo_movimentacao", None),
+            )
+        except AtivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except (PermissaoNegada, AtivoErro) as erro:
+            return _json_error(str(erro), status=400)
+        except (ValueError, KeyError, TypeError):
+            return _json_error("Erro inesperado ao confirmar movimentação.", status=500)
 
     @app.delete("/ativos/<id_ativo>")
     def remover_ativo(id_ativo):
@@ -807,6 +892,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "novo_ativo.html",
             usuario_email=session.get("user_email"),
             status_validos=STATUS_VALIDOS,
+            setores_validos=SETORES_VALIDOS,
+            condicoes_validas=CONDICOES_VALIDAS,
             show_chrome=True,
         )
 
@@ -823,6 +910,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "editar_ativo.html",
             usuario_email=session.get("user_email"),
             status_validos=STATUS_VALIDOS,
+            setores_validos=SETORES_VALIDOS,
+            condicoes_validas=CONDICOES_VALIDAS,
             id_ativo=id_ativo,
             read_only=False,
             show_chrome=True,

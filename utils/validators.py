@@ -33,6 +33,31 @@ TIPOS_ATIVO_VALIDOS = [
     "Outro",
 ]
 
+SETORES_VALIDOS = [
+    "T.I",
+    "RH",
+    "ADM",
+    "Financeiro",
+    "Vendas",
+    "Marketing",
+    "Infraestrutura",
+    "Apoio",
+    "Estagiários",
+    "Diretoria",
+    "Manutenção",
+    "Técnica",
+    "Logística",
+    "Licitação",
+]
+
+CONDICOES_VALIDAS = [
+    "Novo",
+    "Bom",
+    "Regular",
+    "Ruim",
+    "Inativo",
+]
+
 PERFIS_VALIDOS = [
     "usuario",
     # Mantem compatibilidade com legado (adm) e novo rotulo (admin).
@@ -139,6 +164,38 @@ def validar_tipo_ativo(tipo_ativo: str) -> tuple[bool, str]:
 
     if tipo_ativo not in TIPOS_ATIVO_VALIDOS:
         return False, f"Tipo de ativo inválido. Use um destes: {', '.join(TIPOS_ATIVO_VALIDOS)}."
+
+    return True, ""
+
+
+def validar_setor(setor: str) -> tuple[bool, str]:
+    """
+    Valida se o setor informado é permitido.
+    Normaliza a entrada com title() para comparação case-insensitive.
+    """
+    setor = (setor or "").strip().title()
+
+    if not setor:
+        return False, "O setor não pode ficar vazio."
+
+    if setor not in SETORES_VALIDOS:
+        return False, f"Setor inválido. Use um destes: {', '.join(SETORES_VALIDOS)}."
+
+    return True, ""
+
+
+def validar_condicao(condicao: str | None) -> tuple[bool, str]:
+    """
+    Valida se a condição informada é permitida.
+    Campo opcional — retorna OK se vazio.
+    """
+    condicao = (condicao or "").strip().title()
+
+    if not condicao:
+        return True, ""
+
+    if condicao not in CONDICOES_VALIDAS:
+        return False, f"Condição inválida. Use uma delas: {', '.join(CONDICOES_VALIDAS)}."
 
     return True, ""
 
@@ -338,6 +395,10 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
     if not ok:
         raise ValueError(msg)
 
+    ok, msg = validar_setor(setor_principal)
+    if not ok:
+        raise ValueError(msg)
+
     ok, msg = validar_texto_obrigatorio(getattr(ativo, "descricao", ""), "descricao", tamanho_maximo=255)
     if not ok:
         raise ValueError(msg)
@@ -354,7 +415,7 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
     if not ok:
         raise ValueError(msg)
 
-    ok, msg = validar_texto_opcional(getattr(ativo, "condicao", None), "condicao")
+    ok, msg = validar_condicao(getattr(ativo, "condicao", None))
     if not ok:
         raise ValueError(msg)
 

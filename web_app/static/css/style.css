@@ -945,6 +945,122 @@ body.app-body {
     grid-template-columns: repeat(3, minmax(170px, 1fr));
 }
 
+/* Blocos de leitura da movimentação para reforçar a revisão antes do commit final. */
+.movement-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 10px 16px;
+    margin-bottom: 12px;
+}
+
+.movement-summary-grid strong {
+    display: inline-block;
+    min-width: 140px;
+    color: var(--text-0);
+    font-weight: 700;
+}
+
+.movement-summary-grid > div,
+.movement-modal-summary {
+    color: var(--text-1);
+    font-size: 0.84rem;
+    text-align: left;
+}
+
+.movement-summary-changes {
+    margin-top: 10px;
+}
+
+.movement-modal-section-readonly {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+.movement-modal-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-soft);
+}
+
+.movement-modal-hint {
+    margin: 8px 0 12px;
+    color: var(--text-2);
+    font-size: 0.8rem;
+}
+
+.movement-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.field-help {
+    display: block;
+    margin-top: 6px;
+    color: var(--text-2);
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+
+.movement-modal-footer {
+    justify-content: flex-end;
+}
+
+.movement-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-0);
+    font-size: 0.74rem;
+    letter-spacing: 0.03em;
+}
+
+.movement-badge-critical {
+    border-color: rgba(179, 38, 71, 0.55);
+    background: rgba(179, 38, 71, 0.2);
+}
+
+.movement-change-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.movement-change-table th,
+.movement-change-table td {
+    text-align: left;
+    vertical-align: top;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.movement-change-table th {
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.7rem;
+}
+
+.movement-change-table th:nth-child(1),
+.movement-change-table td:nth-child(1) {
+    width: 32%;
+}
+
+.movement-change-table th:nth-child(2),
+.movement-change-table td:nth-child(2),
+.movement-change-table th:nth-child(3),
+.movement-change-table td:nth-child(3) {
+    width: 34%;
+}
+
+.movement-change-critical td {
+    background: rgba(179, 38, 71, 0.12);
+}
+
 .btn-close {
     width: 34px;
     min-width: 34px;
@@ -1138,6 +1254,7 @@ body.app-body {
 .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    position: relative;
     /* Scrollbar styling para dark theme */
 }
 
@@ -1191,7 +1308,7 @@ body.app-body {
 
 /* Colunas fixas evitam deslocamento do corpo em relacao ao cabecalho. */
 .table-aligned col.col-id {
-    width: 96px;
+    width: 80px;
 }
 
 .table-aligned col.col-type,
@@ -1199,23 +1316,23 @@ body.app-body {
 .table-aligned col.col-model,
 .table-aligned col.col-owner,
 .table-aligned col.col-department {
-    width: 130px;
+    width: 120px;
 }
 
 .table-aligned col.col-status {
-    width: 112px;
+    width: 100px;
 }
 
 .table-aligned col.col-date {
-    width: 118px;
+    width: 100px;
 }
 
 .table-aligned col.col-attachments {
-    width: 154px;
+    width: 130px;
 }
 
 .table-aligned col.col-actions {
-    width: 300px;
+    width: 220px;
 }
 
 .table-premium th,
@@ -1236,6 +1353,12 @@ body.app-body {
     position: sticky;
     top: 0;
     z-index: 1;
+}
+
+.table-premium th.sticky-col-right {
+    position: sticky;
+    right: 0;
+    z-index: 3;
 }
 
 .table-premium tbody tr:hover {
@@ -1281,6 +1404,13 @@ body.app-body {
     text-align: right;
     overflow: visible;
     white-space: normal;
+}
+
+.table-aligned td.action-cell.sticky-col-right {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background-color: rgba(255, 255, 255, 0.02);
 }
 
 .table-aligned td.action-cell .row-actions {
@@ -1336,6 +1466,32 @@ body.app-body {
 .empty-state i {
     font-size: 1.2rem;
     color: rgba(168, 25, 54, 0.65);
+}
+
+/* Painel de especificacoes resumidas em modo leitura (quando nao em manutencao) */
+.specs-summary-readonly {
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.01);
+}
+
+.specs-summary-readonly-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 0.85rem;
+}
+
+.specs-summary-readonly-label {
+    font-weight: 600;
+    color: var(--text-2);
+    min-width: 100px;
+}
+
+.specs-summary-readonly-value {
+    color: var(--text-1);
 }
 
 /* Responsividade para notebook e largura intermediaria */

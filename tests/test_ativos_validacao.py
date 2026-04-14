@@ -22,7 +22,7 @@ def make_valid_ativo(**overrides):
         "modelo": "XPS",
         "serial": "SN-001",
         "usuario_responsavel": None,
-        "departamento": "TI",
+        "departamento": "T.I",
         "status": "Disponível",
         "data_entrada": date.today().isoformat(),
         "data_saida": None,
@@ -33,7 +33,7 @@ def make_valid_ativo(**overrides):
         "tipo_ativo": "Notebook",
         "condicao": "Novo",
         "localizacao": "Matriz",
-        "setor": "TI",
+        "setor": "T.I",
         "email_responsavel": None,
         "data_compra": date.today().isoformat(),
         "valor": "4500.00",
@@ -236,7 +236,7 @@ def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
         modelo="XPS",
         serial="SN-LEGADO",
         usuario_responsavel=None,
-        departamento="TI",
+        departamento="T.I",
         status="Disponível",
         data_entrada=date.today().isoformat(),
         data_saida=None,
@@ -276,9 +276,9 @@ def test_analisar_movimentacao_ativo_classifica_casos_principais(cenario, espera
     """
     service = AtivosService()
 
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="TI", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
     if cenario in {"devolucao", "troca"}:
-        atual = make_valid_ativo(status="Em Uso", usuario_responsavel="Ana Silva", setor="TI", localizacao="Matriz")
+        atual = make_valid_ativo(status="Em Uso", usuario_responsavel="Ana Silva", setor="T.I", localizacao="Matriz")
 
     if cenario == "entrega":
         novo = _atualizar_fechas_ativo(atual, usuario_responsavel="Ana Silva", status="Disponível")
@@ -304,7 +304,7 @@ def test_analisar_movimentacao_ativo_retorna_resumo_com_antes_depois():
     O contrato do resumo precisa carregar o comparativo para o modal da próxima fase.
     """
     service = AtivosService()
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="TI", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
     novo = _atualizar_fechas_ativo(atual, usuario_responsavel="Ana Silva", status="Disponível")
 
     resumo = service.analisar_movimentacao_ativo(atual, novo)
@@ -316,6 +316,23 @@ def test_analisar_movimentacao_ativo_retorna_resumo_com_antes_depois():
     assert all("antes" in item and "depois" in item for item in resumo["campos_alterados"])
 
 
+def test_analisar_movimentacao_ativo_lista_apenas_campos_realmente_alterados():
+    """
+    O resumo de movimentação não deve incluir campos que permaneceram iguais.
+    """
+    service = AtivosService()
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
+    novo = _atualizar_fechas_ativo(atual, localizacao="Filial 2")
+
+    resumo = service.analisar_movimentacao_ativo(atual, novo)
+    campos = [item["campo"] for item in resumo["campos_alterados"]]
+
+    assert "localizacao" in campos
+    assert "status" not in campos
+    assert "usuario_responsavel" not in campos
+    assert "setor" not in campos
+
+
 def test_atualizar_ativo_simple_nao_altera_movimentacao(monkeypatch):
     """
     Alteração técnica isolada não deve atualizar a data de movimentação.
@@ -323,7 +340,7 @@ def test_atualizar_ativo_simple_nao_altera_movimentacao(monkeypatch):
     service = AtivosService()
     cursor = FakeCursor()
 
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="TI", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
     atualizado = _atualizar_fechas_ativo(atual, processador="Intel Core i7")
     cursor.fetchone_queue = [
         _row_db_from_ativo(atual, created_at="2026-04-01 10:00:00", updated_at="2026-04-01 10:00:00", data_ultima_movimentacao=None),
@@ -352,7 +369,7 @@ def test_atualizar_ativo_preenche_responsavel_sugere_em_uso(monkeypatch):
     service = AtivosService()
     cursor = FakeCursor()
 
-    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="TI", localizacao="Matriz")
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Matriz")
     cursor.fetchone_queue = [
         _row_db_from_ativo(atual, created_at="2026-04-01 10:00:00", updated_at="2026-04-01 10:00:00", data_ultima_movimentacao=None),
         _row_db_from_ativo(
@@ -377,6 +394,39 @@ def test_atualizar_ativo_preenche_responsavel_sugere_em_uso(monkeypatch):
     assert resultado.data_ultima_movimentacao == "2026-04-14 11:00:00"
 
 
+def test_preparar_dados_confirmacao_movimentacao_nao_exige_campos_cadastrais():
+    """
+    A etapa de confirmação deve aceitar payload operacional sem descrição/categoria/condição.
+    """
+    service = AtivosService()
+
+    dados_formulario = {
+        "status": "Disponível",
+        "setor": "TI",
+        "localizacao": "Matriz",
+        "usuario_responsavel": None,
+    }
+    ajustes = {
+        "status_final": "Em Uso",
+        "usuario_responsavel": "Ana Silva",
+        "setor": "Logística",
+        "localizacao": "CD-01",
+        "observacao_movimentacao": "Entrega confirmada no balcão",
+    }
+
+    dados_finais = service.preparar_dados_confirmacao_movimentacao(dados_formulario, ajustes)
+
+    assert dados_finais["status"] == "Em Uso"
+    assert dados_finais["usuario_responsavel"] == "Ana Silva"
+    assert dados_finais["setor"] == "Logística"
+    assert dados_finais["departamento"] == "Logística"
+    assert dados_finais["localizacao"] == "CD-01"
+    assert "[Movimentação]" in dados_finais["observacoes"]
+    assert "descricao" not in dados_finais
+    assert "categoria" not in dados_finais
+    assert "condicao" not in dados_finais
+
+
 def test_criar_ativo_legado_mantem_compatibilidade_com_tipo_e_departamento(monkeypatch):
     """
     O fluxo de criação continua aceitando os nomes legados sem quebrar a base nova.
@@ -399,7 +449,7 @@ def test_criar_ativo_legado_mantem_compatibilidade_com_tipo_e_departamento(monke
         modelo="XPS",
         serial="SN-LEGADO",
         usuario_responsavel=None,
-        departamento="TI",
+        departamento="T.I",
         status="Disponível",
         data_entrada=date.today().isoformat(),
         data_saida=None,

@@ -76,7 +76,12 @@
 
                     <div class="field-group">
                         <label for="condicao">Condição</label>
-                        <input type="text" id="condicao" name="condicao" class="input-control" {% if read_only %}disabled{% endif %}>
+                        <select id="condicao" name="condicao" class="select-control" {% if read_only %}disabled{% endif %}>
+                            <option value="">Selecione uma condição</option>
+                            {% for condicao in condicoes_validas %}
+                                <option value="{{ condicao }}">{{ condicao }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div class="field-group">
@@ -101,7 +106,12 @@
 
                     <div class="field-group">
                         <label for="setor">Setor / Departamento</label>
-                        <input type="text" id="setor" name="setor" class="input-control" {% if read_only %}disabled{% endif %} required>
+                        <select id="setor" name="setor" class="select-control" {% if read_only %}disabled{% endif %} required>
+                            <option value="">Selecione um setor</option>
+                            {% for setor in setores_validos %}
+                                <option value="{{ setor }}">{{ setor }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
             </section>
@@ -161,7 +171,34 @@
                 </div>
             </section>
 
-            <section class="asset-section">
+            <section class="asset-section" id="specs-section-readonly" hidden>
+                <h4 class="asset-section-title">Especificações principais</h4>
+                <div class="specs-summary-readonly">
+                    <div class="specs-summary-readonly-item">
+                        <span class="specs-summary-readonly-label">Tipo:</span>
+                        <span class="specs-summary-readonly-value" id="specs-ro-tipo">–</span>
+                    </div>
+                    <div class="specs-summary-readonly-item">
+                        <span class="specs-summary-readonly-label">Modelo:</span>
+                        <span class="specs-summary-readonly-value" id="specs-ro-modelo">–</span>
+                    </div>
+                    <div class="specs-summary-readonly-item">
+                        <span class="specs-summary-readonly-label">Serial:</span>
+                        <span class="specs-summary-readonly-value" id="specs-ro-serial">–</span>
+                    </div>
+                    <div class="specs-summary-readonly-item">
+                        <span class="specs-summary-readonly-label">Marca:</span>
+                        <span class="specs-summary-readonly-value" id="specs-ro-marca">–</span>
+                    </div>
+                    <div class="specs-summary-readonly-item">
+                        <span class="specs-summary-readonly-label">Código interno:</span>
+                        <span class="specs-summary-readonly-value" id="specs-ro-codigo">–</span>
+                    </div>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-2); margin-top: 8px;">Editar especificações está disponível apenas quando o ativo está em manutenção.</p>
+            </section>
+
+            <section class="asset-section" id="specs-section-complete" hidden>
                 <h4 class="asset-section-title">Especificações por tipo</h4>
                 <div id="specs-notebook" class="asset-section-grid" hidden>
                     <div class="field-group"><label for="processador">Processador</label><input type="text" id="processador" name="processador" class="input-control" {% if read_only %}disabled{% endif %}></div>
@@ -228,6 +265,70 @@
     </div>
 </section>
 
+<div id="movement-confirmation-modal" class="modal" hidden>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Revisar e confirmar</h3>
+            <button type="button" class="btn btn-secondary btn-close" id="movement-modal-close" aria-label="Fechar">×</button>
+        </div>
+        <div class="modal-body">
+            <section class="movement-modal-section movement-modal-section-readonly">
+                <h4 class="asset-section-title">O que foi identificado</h4>
+                <div id="movement-modal-summary" class="movement-modal-summary"></div>
+            </section>
+
+            <div class="movement-modal-section">
+                <h4 class="asset-section-title">Confirme os dados abaixo</h4>
+                <p class="movement-modal-hint">Revise e ajuste os campos de movimentação conforme necessário.</p>
+                <div class="movement-modal-grid">
+                    <div class="field-group">
+                        <label for="movement_status_final">Status final</label>
+                        <select id="movement_status_final" class="select-control" aria-describedby="movement-status-help">
+                            <option value="">Selecione um status</option>
+                            {% for status in status_validos %}
+                                <option value="{{ status }}">{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                        <small id="movement-status-help" class="field-help">Use para confirmar ou ajustar a sugestão automática de status.</small>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="movement_usuario_responsavel">Responsável</label>
+                        <input type="text" id="movement_usuario_responsavel" class="input-control" maxlength="255" placeholder="Ex.: Ana Silva">
+                        <small class="field-help">Preencha apenas se houver entrega, troca ou devolução de responsável.</small>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="movement_setor">Setor</label>
+                        <select id="movement_setor" class="select-control">
+                            <option value="">Selecione um setor</option>
+                            {% for setor in setores_validos %}
+                                <option value="{{ setor }}">{{ setor }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="movement_localizacao">Localização</label>
+                        <input type="text" id="movement_localizacao" class="input-control" maxlength="120" placeholder="Ex.: Matriz, CD-01">
+                    </div>
+
+                    <div class="field-group" style="grid-column: 1 / -1;">
+                        <label for="movement_observacao">Observação da movimentação</label>
+                        <textarea id="movement_observacao" class="input-control" rows="3" maxlength="500" placeholder="Descreva o contexto operacional desta movimentação."></textarea>
+                        <small class="field-help">Esta observação será anexada ao histórico operacional do ativo.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer movement-modal-footer">
+            <button type="button" class="btn btn-secondary" id="movement-back-edit">Voltar para editar</button>
+            <button type="button" class="btn btn-secondary" id="movement-cancel">Cancelar</button>
+            <button type="button" class="btn btn-primary" id="movement-confirm-save">Confirmar e salvar</button>
+        </div>
+    </div>
+</div>
+
 <section class="panel form-panel" id="movement-preview-panel" hidden>
     <div class="panel-header">
         <h3 class="title-section">Prévia da movimentação</h3>
@@ -271,9 +372,26 @@
     const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
     const movementPreviewPanel = document.getElementById("movement-preview-panel");
     const movementSummaryContent = document.getElementById("movement-summary-content");
+    const movementModal = document.getElementById("movement-confirmation-modal");
+    const movementModalSummary = document.getElementById("movement-modal-summary");
+    const movementModalClose = document.getElementById("movement-modal-close");
+    const movementBackEditButton = document.getElementById("movement-back-edit");
+    const movementCancelButton = document.getElementById("movement-cancel");
+    const movementConfirmButton = document.getElementById("movement-confirm-save");
+    const movementStatusField = document.getElementById("movement_status_final");
+    const movementResponsavelField = document.getElementById("movement_usuario_responsavel");
+    const movementSetorField = document.getElementById("movement_setor");
+    const movementLocalizacaoField = document.getElementById("movement_localizacao");
+    const movementObservacaoField = document.getElementById("movement_observacao");
 
     const assetId = "{{ id_ativo }}";
     const readOnlyMode = {{ 'true' if read_only else 'false' }};
+    const movementPreviewUrl = `{{ url_for('preview_movimentacao_ativo', id_ativo=id_ativo) }}`;
+    const movementConfirmUrl = `{{ url_for('confirmar_movimentacao_ativo', id_ativo=id_ativo) }}`;
+
+    // Guarda os dados do formulário até a confirmação final no modal.
+    let pendingUpdatePayload = null;
+    let pendingMovementPreview = null;
 
     const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
@@ -293,14 +411,51 @@
 
     const SIMPLE_TYPES = new Set(["mouse", "teclado", "headset", "adaptador", "cabo", "carregador", "outro"]);
 
+    const MOVEMENT_CRITICAL_TYPES = new Set([
+        "entrega_para_colaborador",
+        "devolucao_ao_estoque",
+        "troca_de_responsavel",
+        "envio_para_manutencao",
+        "retorno_de_manutencao"
+    ]);
+
+    const MOVEMENT_CRITICAL_FIELDS = new Set(["status", "usuario_responsavel", "setor", "localizacao"]);
+    const MOVEMENT_OPERATIONAL_FIELDS = new Set(["status", "usuario_responsavel", "setor", "localizacao"]);
+
     function normalizeType(value) {
         return String(value || "").trim().toLowerCase();
     }
 
     function setSpecsVisibility() {
         const normalizedType = normalizeType(document.getElementById("tipo_ativo").value);
+        const status = (document.getElementById("status").value || "").trim();
+        const isInMaintenance = status.toLowerCase() === "em manutenção";
+
         const activeGroups = TYPE_GROUPS[normalizedType] || [];
         const showSimple = SIMPLE_TYPES.has(normalizedType);
+
+        // Se não está em manutenção, mostra resumo e oculta edição técnica
+        const specsCompleteSection = document.getElementById("specs-section-complete");
+        const specsReadonlySection = document.getElementById("specs-section-readonly");
+
+        if (!isInMaintenance) {
+            // Modo operacional: mostra apenas resumo em leitura
+            if (specsCompleteSection) specsCompleteSection.hidden = true;
+            if (specsReadonlySection) {
+                specsReadonlySection.hidden = false;
+                // Popula os resumos com valores do formulário
+                document.getElementById("specs-ro-tipo").textContent = normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1) || "–";
+                document.getElementById("specs-ro-modelo").textContent = (document.getElementById("modelo").value || "").trim() || "–";
+                document.getElementById("specs-ro-serial").textContent = (document.getElementById("serial").value || "").trim() || "–";
+                document.getElementById("specs-ro-marca").textContent = (document.getElementById("marca").value || "").trim() || "–";
+                document.getElementById("specs-ro-codigo").textContent = (document.getElementById("codigo_interno").value || "").trim() || "–";
+            }
+            return;
+        }
+
+        // Modo manutenção: mostra completo
+        if (specsCompleteSection) specsCompleteSection.hidden = false;
+        if (specsReadonlySection) specsReadonlySection.hidden = true;
 
         ["notebook", "desktop", "celular", "monitor", "simples"].forEach((groupKey) => {
             const group = document.getElementById(`specs-${groupKey}`);
@@ -330,7 +485,7 @@
     }
 
     function renderMovementSummary(summary) {
-        // A tela ainda não abre modal; esta prévia prepara o contrato da próxima fase.
+        // Mantém o painel de prévia na tela principal para rastreabilidade da operação confirmada.
         if (!summary || typeof summary !== "object") {
             movementPreviewPanel.hidden = true;
             movementSummaryContent.innerHTML = "";
@@ -347,22 +502,22 @@
                 <div><strong>Mudança relevante:</strong> ${summary.mudanca_relevante ? "Sim" : "Não"}</div>
             </div>
             <div class="movement-summary-changes">
-                <h4 class="asset-section-title">Campos alterados</h4>
+                <h4 class="asset-section-title">Mudanças identificadas</h4>
                 ${changedFields.length ? `
                     <table class="table-premium table-mini">
                         <thead>
                             <tr>
                                 <th>Campo</th>
-                                <th>Antes</th>
-                                <th>Depois</th>
+                                <th>De</th>
+                                <th>Para</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${changedFields.map((item) => `
                                 <tr>
                                     <td>${item.rotulo || item.campo || ""}</td>
-                                    <td>${item.antes || ""}</td>
-                                    <td>${item.depois || ""}</td>
+                                    <td>${formatMovementValue(item.antes)}</td>
+                                    <td>${formatMovementValue(item.depois, { whenEmpty: "Será removido" })}</td>
                                 </tr>
                             `).join("")}
                         </tbody>
@@ -370,6 +525,97 @@
                 ` : "<p>Sem alterações relevantes para movimentação.</p>"}
             </div>
         `;
+    }
+
+    function formatMovementValue(value, options = {}) {
+        const { whenEmpty = "Não informado" } = options;
+        const normalized = String(value ?? "").trim();
+        return normalized ? escapeHtml(normalized) : `<span class="text-muted">${escapeHtml(whenEmpty)}</span>`;
+    }
+
+    function escapeHtml(value) {
+        return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function closeMovementModal({ clearPending = false } = {}) {
+        movementModal.hidden = true;
+        if (clearPending) {
+            pendingUpdatePayload = null;
+            pendingMovementPreview = null;
+            movementObservacaoField.value = "";
+        }
+    }
+
+    function renderMovementModalSummary(preview) {
+        const resumo = preview?.resumo_movimentacao || preview || {};
+        const changedFields = Array.isArray(resumo.campos_alterados) ? resumo.campos_alterados : [];
+        const operationalChanges = changedFields.filter((item) => {
+            const campo = String(item?.campo || "").trim();
+            return MOVEMENT_OPERATIONAL_FIELDS.has(campo);
+        });
+        const movementType = resumo.tipo_movimentacao || "atualizacao_cadastral";
+        const isCriticalType = MOVEMENT_CRITICAL_TYPES.has(movementType);
+        const hasOnlyCadastralChanges = changedFields.length > 0 && operationalChanges.length === 0;
+
+        movementModalSummary.innerHTML = `
+            <div class="movement-summary-grid">
+                <div><strong>Status atual:</strong> ${escapeHtml(resumo.status_atual || "")}</div>
+                <div><strong>Status sugerido:</strong> ${escapeHtml(resumo.status_sugerido || "")}</div>
+                <div><strong>Tipo detectado:</strong> <span class="movement-badge ${isCriticalType ? "movement-badge-critical" : ""}">${escapeHtml(movementType)}</span></div>
+                <div><strong>Resumo:</strong> ${escapeHtml(resumo.descricao_movimentacao || "Atualização cadastral")}</div>
+                <div><strong>Relevância:</strong> ${resumo.mudanca_relevante ? "Mudança operacional relevante" : "Atualização apenas cadastral"}</div>
+            </div>
+            <div class="movement-summary-changes">
+                <h4 class="asset-section-title">Mudanças identificadas</h4>
+                ${operationalChanges.length ? `
+                    <table class="table-premium table-mini movement-change-table">
+                        <thead>
+                            <tr>
+                                <th>Campo</th>
+                                <th>De</th>
+                                <th>Para</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${operationalChanges.map((item) => {
+                                const campo = String(item.campo || "");
+                                const isCriticalField = MOVEMENT_CRITICAL_FIELDS.has(campo) || item.relevante === true;
+                                return `
+                                    <tr class="${isCriticalField ? "movement-change-critical" : ""}">
+                                        <td>${escapeHtml(item.rotulo || campo)}</td>
+                                        <td>${formatMovementValue(item.antes)}</td>
+                                        <td>${formatMovementValue(item.depois, { whenEmpty: "Será removido" })}</td>
+                                    </tr>
+                                `;
+                            }).join("")}
+                        </tbody>
+                    </table>
+                ` : `<p>${hasOnlyCadastralChanges ? "Foram detectadas apenas alterações cadastrais fora do escopo operacional deste modal." : "Sem alterações operacionais detectadas para revisão."}</p>`}
+            </div>
+        `;
+    }
+
+    function openMovementModal(preview, body) {
+        const resumo = preview?.resumo_movimentacao || preview || {};
+
+        pendingUpdatePayload = { ...body };
+        pendingMovementPreview = resumo;
+
+        renderMovementModalSummary(preview);
+
+        // O ajuste fino inicia com os valores do formulário e com status sugerido pelo backend.
+        movementStatusField.value = resumo.status_sugerido || body.status || "";
+        movementResponsavelField.value = body.usuario_responsavel || "";
+        movementSetorField.value = body.setor || body.departamento || "";
+        movementLocalizacaoField.value = body.localizacao || "";
+        movementObservacaoField.value = "";
+
+        movementModal.hidden = false;
     }
 
     function setAttachmentLoading(message = "Carregando documentos...") {
@@ -554,19 +800,17 @@
             body.tipo = body.tipo_ativo || body.tipo;
             body.departamento = body.setor || body.departamento;
 
-            const { response, payload } = await requestJson(`{{ url_for('listar_ativos') }}/${encodeURIComponent(assetId)}`, {
-                method: "PUT",
+            const { response, payload } = await requestJson(movementPreviewUrl, {
+                method: "POST",
                 body: JSON.stringify(body)
             });
 
             if (!response.ok) {
-                showMessage("danger", payload?.erro || "Não foi possível atualizar o ativo.");
+                showMessage("danger", payload?.erro || "Não foi possível gerar a prévia de movimentação.");
                 return;
             }
 
-            showMessage("success", payload?.mensagem || "Ativo atualizado com sucesso.");
-            renderMovementSummary(payload?.resumo_movimentacao);
-            await loadAsset();
+            openMovementModal(payload?.preview, body);
         });
 
         attachmentFileInput.addEventListener("change", async (event) => {
@@ -602,6 +846,44 @@
                 attachmentUploadTrigger.style.pointerEvents = "";
             }
         });
+
+        // Fecha o modal sem persistir e mantém o formulário exatamente como o usuário deixou.
+        movementBackEditButton.addEventListener("click", () => closeMovementModal());
+        movementModalClose.addEventListener("click", () => closeMovementModal({ clearPending: true }));
+        movementCancelButton.addEventListener("click", () => closeMovementModal({ clearPending: true }));
+
+        movementConfirmButton.addEventListener("click", async () => {
+            if (!pendingUpdatePayload) {
+                closeMovementModal({ clearPending: true });
+                return;
+            }
+
+            const ajustesMovimentacao = {
+                status_final: movementStatusField.value || null,
+                usuario_responsavel: movementResponsavelField.value || null,
+                setor: movementSetorField.value || null,
+                localizacao: movementLocalizacaoField.value || null,
+                observacao_movimentacao: movementObservacaoField.value || null,
+            };
+
+            const { response, payload } = await requestJson(movementConfirmUrl, {
+                method: "POST",
+                body: JSON.stringify({
+                    dados_formulario: pendingUpdatePayload,
+                    ajustes_movimentacao: ajustesMovimentacao,
+                })
+            });
+
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível confirmar e salvar a movimentação.");
+                return;
+            }
+
+            closeMovementModal({ clearPending: true });
+            showMessage("success", payload?.mensagem || "Ativo atualizado com sucesso.");
+            renderMovementSummary(payload?.resumo_movimentacao || pendingMovementPreview);
+            await loadAsset();
+        });
     }
 
     attachmentList.addEventListener("click", async (event) => {
@@ -633,6 +915,7 @@
     setAttachmentLoading();
     if (!readOnlyMode) {
         document.getElementById("tipo_ativo").addEventListener("change", setSpecsVisibility);
+        document.getElementById("status").addEventListener("change", setSpecsVisibility);
     }
     loadAsset();
     loadAttachments();

@@ -280,6 +280,116 @@ class AtivosService:
     Serviço responsável pelas regras de negócio e persistência dos ativos.
     """
 
+    def _construir_ativo_para_atualizacao(self, atual: Ativo, dados: dict) -> Ativo:
+        """
+        Monta o estado proposto do ativo a partir do payload recebido na edição.
+        """
+        return Ativo(
+            id_ativo=atual.id_ativo,
+            tipo=dados.get("tipo_ativo", dados.get("tipo", atual.tipo_ativo or atual.tipo)),
+            marca=dados.get("marca", atual.marca),
+            modelo=dados.get("modelo", atual.modelo),
+            serial=dados.get("serial", atual.serial),
+            codigo_interno=dados.get("codigo_interno", atual.codigo_interno),
+            descricao=dados.get("descricao", atual.descricao),
+            categoria=dados.get("categoria", atual.categoria),
+            tipo_ativo=dados.get("tipo_ativo", atual.tipo_ativo),
+            condicao=dados.get("condicao", atual.condicao),
+            localizacao=dados.get("localizacao", atual.localizacao),
+            setor=dados.get("setor", atual.setor),
+            usuario_responsavel=dados.get("usuario_responsavel", atual.usuario_responsavel),
+            email_responsavel=dados.get("email_responsavel", atual.email_responsavel),
+            departamento=dados.get("setor", dados.get("departamento", atual.departamento)),
+            nota_fiscal=dados.get("nota_fiscal", atual.nota_fiscal),
+            garantia=dados.get("garantia", atual.garantia),
+            status=dados.get("status", atual.status),
+            data_entrada=dados.get("data_entrada", atual.data_entrada),
+            data_saida=dados.get("data_saida", atual.data_saida),
+            data_compra=dados.get("data_compra", atual.data_compra),
+            valor=dados.get("valor", atual.valor),
+            observacoes=dados.get("observacoes", atual.observacoes),
+            detalhes_tecnicos=dados.get("detalhes_tecnicos", atual.detalhes_tecnicos),
+            processador=dados.get("processador", atual.processador),
+            ram=dados.get("ram", atual.ram),
+            armazenamento=dados.get("armazenamento", atual.armazenamento),
+            sistema_operacional=dados.get("sistema_operacional", atual.sistema_operacional),
+            carregador=dados.get("carregador", atual.carregador),
+            teamviewer_id=dados.get("teamviewer_id", atual.teamviewer_id),
+            anydesk_id=dados.get("anydesk_id", atual.anydesk_id),
+            nome_equipamento=dados.get("nome_equipamento", atual.nome_equipamento),
+            hostname=dados.get("hostname", atual.hostname),
+            imei_1=dados.get("imei_1", atual.imei_1),
+            imei_2=dados.get("imei_2", atual.imei_2),
+            numero_linha=dados.get("numero_linha", atual.numero_linha),
+            operadora=dados.get("operadora", atual.operadora),
+            conta_vinculada=dados.get("conta_vinculada", atual.conta_vinculada),
+            polegadas=dados.get("polegadas", atual.polegadas),
+            resolucao=dados.get("resolucao", atual.resolucao),
+            tipo_painel=dados.get("tipo_painel", atual.tipo_painel),
+            entrada_video=dados.get("entrada_video", atual.entrada_video),
+            fonte_ou_cabo=dados.get("fonte_ou_cabo", atual.fonte_ou_cabo),
+            criado_por=atual.criado_por,
+        )
+
+    def preparar_dados_confirmacao_movimentacao(self, dados: dict, ajustes: dict | None = None) -> dict:
+        """
+        Aplica apenas ajustes operacionais permitidos no modal antes da confirmação final.
+        """
+        dados_finais = dict(dados or {})
+        ajustes = ajustes or {}
+
+        # O modal só pode sobrescrever campos operacionais ligados ao fluxo de movimentação.
+        mapa_ajustes = {
+            "status_final": "status",
+            "usuario_responsavel": "usuario_responsavel",
+            "setor": "setor",
+            "localizacao": "localizacao",
+        }
+        for chave_origem, chave_destino in mapa_ajustes.items():
+            if chave_origem not in ajustes:
+                continue
+            valor = ajustes.get(chave_origem)
+            dados_finais[chave_destino] = valor if valor not in (None, "") else None
+
+        if "setor" in dados_finais:
+            # Mantém sincronia com campo legado ainda usado por partes do sistema.
+            dados_finais["departamento"] = dados_finais.get("setor")
+
+        observacao_movimentacao = (ajustes.get("observacao_movimentacao") or "").strip()
+        if observacao_movimentacao:
+            observacao_atual = (dados_finais.get("observacoes") or "").strip()
+            prefixo = "[Movimentação]"
+            complemento = f"{prefixo} {observacao_movimentacao}"
+            dados_finais["observacoes"] = (
+                f"{observacao_atual}\n{complemento}" if observacao_atual else complemento
+            )
+
+        return dados_finais
+
+    def gerar_preview_atualizacao(self, id_ativo: str, dados: dict, user_id: int) -> dict:
+        """
+        Gera prévia estruturada da movimentação sem persistir alterações no banco.
+        """
+        atual = self.buscar_ativo(id_ativo=id_ativo, user_id=user_id)
+        novo = self._construir_ativo_para_atualizacao(atual, dados)
+        novo_norm = _padronizar_ativo(novo)
+
+        try:
+            validar_ativo(novo_norm)
+        except ValueError as erro:
+            raise AtivoErro(str(erro)) from erro
+
+        resumo_movimentacao = self.analisar_movimentacao_ativo(atual, novo_norm)
+        return {
+            "status_atual": resumo_movimentacao["status_atual"],
+            "status_sugerido": resumo_movimentacao["status_sugerido"],
+            "tipo_movimentacao": resumo_movimentacao["tipo_movimentacao"],
+            "descricao_movimentacao": resumo_movimentacao["descricao_movimentacao"],
+            "mudanca_relevante": resumo_movimentacao["mudanca_relevante"],
+            "campos_alterados": resumo_movimentacao["campos_alterados"],
+            "resumo_movimentacao": resumo_movimentacao,
+        }
+
     def _obter_contexto_acesso(self, user_id: int) -> dict:
         """
         Busca o perfil e a empresa do usuário autenticado.
@@ -855,54 +965,7 @@ class AtivosService:
         Atualiza um ativo existente dentro do escopo permitido.
         """
         atual = self.buscar_ativo(id_ativo=id_ativo, user_id=user_id)
-
-        novo = Ativo(
-            id_ativo=atual.id_ativo,
-            tipo=dados.get("tipo_ativo", dados.get("tipo", atual.tipo_ativo or atual.tipo)),
-            marca=dados.get("marca", atual.marca),
-            modelo=dados.get("modelo", atual.modelo),
-            serial=dados.get("serial", atual.serial),
-            codigo_interno=dados.get("codigo_interno", atual.codigo_interno),
-            descricao=dados.get("descricao", atual.descricao),
-            categoria=dados.get("categoria", atual.categoria),
-            tipo_ativo=dados.get("tipo_ativo", atual.tipo_ativo),
-            condicao=dados.get("condicao", atual.condicao),
-            localizacao=dados.get("localizacao", atual.localizacao),
-            setor=dados.get("setor", atual.setor),
-            usuario_responsavel=dados.get("usuario_responsavel", atual.usuario_responsavel),
-            email_responsavel=dados.get("email_responsavel", atual.email_responsavel),
-            departamento=dados.get("setor", dados.get("departamento", atual.departamento)),
-            nota_fiscal=dados.get("nota_fiscal", atual.nota_fiscal),
-            # Atualiza com o campo documental renomeado garantia.
-            garantia=dados.get("garantia", atual.garantia),
-            status=dados.get("status", atual.status),
-            data_entrada=dados.get("data_entrada", atual.data_entrada),
-            data_saida=dados.get("data_saida", atual.data_saida),
-            data_compra=dados.get("data_compra", atual.data_compra),
-            valor=dados.get("valor", atual.valor),
-            observacoes=dados.get("observacoes", atual.observacoes),
-            detalhes_tecnicos=dados.get("detalhes_tecnicos", atual.detalhes_tecnicos),
-            processador=dados.get("processador", atual.processador),
-            ram=dados.get("ram", atual.ram),
-            armazenamento=dados.get("armazenamento", atual.armazenamento),
-            sistema_operacional=dados.get("sistema_operacional", atual.sistema_operacional),
-            carregador=dados.get("carregador", atual.carregador),
-            teamviewer_id=dados.get("teamviewer_id", atual.teamviewer_id),
-            anydesk_id=dados.get("anydesk_id", atual.anydesk_id),
-            nome_equipamento=dados.get("nome_equipamento", atual.nome_equipamento),
-            hostname=dados.get("hostname", atual.hostname),
-            imei_1=dados.get("imei_1", atual.imei_1),
-            imei_2=dados.get("imei_2", atual.imei_2),
-            numero_linha=dados.get("numero_linha", atual.numero_linha),
-            operadora=dados.get("operadora", atual.operadora),
-            conta_vinculada=dados.get("conta_vinculada", atual.conta_vinculada),
-            polegadas=dados.get("polegadas", atual.polegadas),
-            resolucao=dados.get("resolucao", atual.resolucao),
-            tipo_painel=dados.get("tipo_painel", atual.tipo_painel),
-            entrada_video=dados.get("entrada_video", atual.entrada_video),
-            fonte_ou_cabo=dados.get("fonte_ou_cabo", atual.fonte_ou_cabo),
-            criado_por=atual.criado_por
-        )
+        novo = self._construir_ativo_para_atualizacao(atual, dados)
 
         novo_norm = _padronizar_ativo(novo)
 

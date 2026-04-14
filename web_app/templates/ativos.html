@@ -50,7 +50,7 @@
                     <th>Data entrada</th>
                     <th>Data saída</th>
                     <th>Anexos</th>
-                    <th>Ações</th>
+                    <th class="sticky-col-right">Ações</th>
                 </tr>
             </thead>
             <tbody id="asset-table-body">
@@ -369,7 +369,7 @@
                 <td class="attachment-cell">
                     <button type="button" class="btn btn-secondary btn-mini" data-attachments="${asset.id}">Documentos</button>
                 </td>
-                <td class="action-cell">
+                <td class="action-cell sticky-col-right">
                     <div class="row-actions">
                         <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Visualizar</a>
                         <a href="{{ url_for('editar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Editar</a>

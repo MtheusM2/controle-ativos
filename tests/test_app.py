@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from openpyxl import load_workbook
+from services.ativos_service import PermissaoNegada
 from web_app.app import create_app
 
 def test_healthcheck(http_client):
@@ -48,6 +49,17 @@ def test_asset_edit_page_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/editar/A-001")
     assert response.status_code == 200
     assert "Edição do ativo" in response.get_data(as_text=True)
+
+
+def test_asset_edit_page_contains_movement_modal_flow_elements(authenticated_client):
+    response = authenticated_client.get("/ativos/editar/A-001")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    # Garante que a UI da Fase 3 está presente no template de edição.
+    assert "movement-confirmation-modal" in html
+    assert "Confirmar e salvar" in html
+    assert "/movimentacao/preview" in html
+    assert "/movimentacao/confirmar" in html
 
 
 def test_asset_create_route_exposes_automatic_timestamps():
@@ -185,6 +197,281 @@ def test_asset_update_route_returns_movement_summary():
     assert payload["resumo_movimentacao"]["tipo_movimentacao"] == "entrega_para_colaborador"
     assert payload["resumo_movimentacao"]["status_sugerido"] == "Em Uso"
     assert payload["ativo"]["data_ultima_movimentacao"] == "2026-04-14 11:00:00"
+
+
+def test_asset_preview_route_returns_summary_without_persisting():
+    class PreviewOnlyAtivosService:
+        def __init__(self):
+            self.preview_calls = 0
+
+        def gerar_preview_atualizacao(self, id_ativo, dados, user_id):
+            del id_ativo, dados, user_id
+            self.preview_calls += 1
+            return {
+                "status_atual": "Disponível",
+                "status_sugerido": "Em Uso",
+                "tipo_movimentacao": "entrega_para_colaborador",
+                "descricao_movimentacao": "Entrega para colaborador",
+                "mudanca_relevante": True,
+                "campos_alterados": [
+                    {
+                        "campo": "usuario_responsavel",
+                        "rotulo": "Responsável",
+                        "antes": "",
+                        "depois": "Ana Silva",
+                        "relevante": True,
+                    }
+                ],
+                "resumo_movimentacao": {
+                    "status_atual": "Disponível",
+                    "status_sugerido": "Em Uso",
+                    "tipo_movimentacao": "entrega_para_colaborador",
+                    "descricao_movimentacao": "Entrega para colaborador",
+                    "mudanca_relevante": True,
+                    "campos_alterados": [],
+                },
+            }
+
+        def atualizar_ativo(self, *_args, **_kwargs):
+            raise AssertionError("A rota de preview não pode persistir dados.")
+
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    service = PreviewOnlyAtivosService()
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": service,
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/OPU-000999/movimentacao/preview",
+        json={
+            "tipo_ativo": "Notebook",
+            "marca": "Dell",
+            "modelo": "XPS",
+            "descricao": "Notebook corporativo",
+            "categoria": "Computadores",
+            "status": "Disponível",
+            "data_entrada": "2026-04-14",
+            "usuario_responsavel": "Ana Silva",
+            "setor": "TI",
+            "departamento": "TI",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["preview"]["tipo_movimentacao"] == "entrega_para_colaborador"
+    assert service.preview_calls == 1
+
+
+def test_asset_confirm_route_applies_operational_adjustments():
+    class ConfirmFlowAtivosService:
+        def __init__(self):
+            self.recebido = None
+
+        def preparar_dados_confirmacao_movimentacao(self, dados, ajustes):
+            # Replica o contrato do service real para validar integração da rota.
+            dados_finais = dict(dados)
+            dados_finais["status"] = ajustes.get("status_final")
+            dados_finais["usuario_responsavel"] = ajustes.get("usuario_responsavel")
+            dados_finais["setor"] = ajustes.get("setor")
+            dados_finais["departamento"] = ajustes.get("setor")
+            dados_finais["localizacao"] = ajustes.get("localizacao")
+            dados_finais["observacoes"] = "[Movimentação] " + (ajustes.get("observacao_movimentacao") or "")
+            return dados_finais
+
+        def atualizar_ativo(self, id_ativo, dados, user_id):
+            del user_id
+            self.recebido = dados
+            return SimpleNamespace(
+                id_ativo=id_ativo,
+                tipo="Notebook",
+                tipo_ativo=dados.get("tipo_ativo", "Notebook"),
+                marca=dados.get("marca", "Dell"),
+                modelo=dados.get("modelo", "XPS"),
+                usuario_responsavel=dados.get("usuario_responsavel"),
+                departamento=dados.get("departamento"),
+                setor=dados.get("setor"),
+                localizacao=dados.get("localizacao"),
+                status=dados.get("status"),
+                data_entrada=dados.get("data_entrada", "2026-04-01"),
+                data_saida=None,
+                created_at="2026-04-01 09:00:00",
+                updated_at="2026-04-14 12:00:00",
+                data_ultima_movimentacao="2026-04-14 12:00:00",
+                resumo_movimentacao={
+                    "tipo_movimentacao": "troca_de_responsavel",
+                    "status_sugerido": "Em Uso",
+                    "mudanca_relevante": True,
+                    "campos_alterados": [],
+                },
+            )
+
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    service = ConfirmFlowAtivosService()
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": service,
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/OPU-000999/movimentacao/confirmar",
+        json={
+            "dados_formulario": {
+                "tipo_ativo": "Notebook",
+                "marca": "Dell",
+                "modelo": "XPS",
+                "descricao": "Notebook corporativo",
+                "categoria": "Computadores",
+                "status": "Disponível",
+                "data_entrada": "2026-04-14",
+                "usuario_responsavel": "Ana Silva",
+                "setor": "TI",
+                "departamento": "TI",
+                "localizacao": "Matriz",
+            },
+            "ajustes_movimentacao": {
+                "status_final": "Em Uso",
+                "usuario_responsavel": "Beatriz Souza",
+                "setor": "Logística",
+                "localizacao": "CD-01",
+                "observacao_movimentacao": "Entrega registrada no turno da manhã",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert service.recebido["status"] == "Em Uso"
+    assert service.recebido["usuario_responsavel"] == "Beatriz Souza"
+    assert service.recebido["setor"] == "Logística"
+    assert service.recebido["localizacao"] == "CD-01"
+    assert "[Movimentação]" in service.recebido["observacoes"]
+
+
+def test_asset_confirm_route_accepts_sparse_form_payload_without_cadastro_fields():
+    class ConfirmSparsePayloadAtivosService:
+        def preparar_dados_confirmacao_movimentacao(self, dados, ajustes):
+            # Simula merge operacional sem exigir descrição/categoria/condição.
+            dados_finais = dict(dados)
+            dados_finais["status"] = ajustes.get("status_final") or dados_finais.get("status")
+            dados_finais["usuario_responsavel"] = ajustes.get("usuario_responsavel")
+            dados_finais["setor"] = ajustes.get("setor")
+            dados_finais["departamento"] = ajustes.get("setor")
+            dados_finais["localizacao"] = ajustes.get("localizacao")
+            return dados_finais
+
+        def atualizar_ativo(self, id_ativo, dados, user_id):
+            del user_id
+            assert "descricao" not in dados
+            assert "categoria" not in dados
+            assert "condicao" not in dados
+            return SimpleNamespace(
+                id_ativo=id_ativo,
+                tipo="Notebook",
+                tipo_ativo="Notebook",
+                marca="Dell",
+                modelo="XPS",
+                usuario_responsavel=dados.get("usuario_responsavel"),
+                departamento=dados.get("departamento"),
+                setor=dados.get("setor"),
+                localizacao=dados.get("localizacao"),
+                status=dados.get("status"),
+                data_entrada="2026-04-14",
+                data_saida=None,
+                resumo_movimentacao={"tipo_movimentacao": "entrega_para_colaborador", "campos_alterados": []},
+            )
+
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": ConfirmSparsePayloadAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/OPU-000999/movimentacao/confirmar",
+        json={
+            "dados_formulario": {
+                "status": "Disponível",
+                "setor": "TI",
+                "localizacao": "Matriz",
+            },
+            "ajustes_movimentacao": {
+                "status_final": "Em Uso",
+                "usuario_responsavel": "Ana Silva",
+                "setor": "Logística",
+                "localizacao": "CD-01",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_asset_preview_route_requires_authentication(http_client):
+    response = http_client.post(
+        "/ativos/OPU-000999/movimentacao/preview",
+        json={"tipo_ativo": "Notebook", "status": "Disponível", "data_entrada": "2026-04-14"},
+    )
+    assert response.status_code == 401
+
+
+def test_asset_preview_route_keeps_permission_contract():
+    class ForbiddenPreviewAtivosService:
+        def gerar_preview_atualizacao(self, id_ativo, dados, user_id):
+            del id_ativo, dados, user_id
+            raise PermissaoNegada("Sem permissão para visualizar este ativo.")
+
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": ForbiddenPreviewAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/OPU-000999/movimentacao/preview",
+        json={"tipo_ativo": "Notebook", "status": "Disponível", "data_entrada": "2026-04-14"},
+    )
+    assert response.status_code == 400
 
 
 def test_asset_view_page_authenticated(authenticated_client):

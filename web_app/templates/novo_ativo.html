@@ -76,7 +76,12 @@
 
             <div class="field-group">
                 <label for="condicao">Condição</label>
-                <input type="text" id="condicao" name="condicao" class="input-control" placeholder="Novo, Usado, Recondicionado">
+                <select id="condicao" name="condicao" class="select-control">
+                    <option value="">Selecione uma condição</option>
+                    {% for condicao in condicoes_validas %}
+                        <option value="{{ condicao }}">{{ condicao }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="field-group">
@@ -96,7 +101,12 @@
 
             <div class="field-group">
                 <label for="setor">Setor / Departamento</label>
-                <input type="text" id="setor" name="setor" class="input-control" maxlength="100" required>
+                <select id="setor" name="setor" class="select-control" required>
+                    <option value="">Selecione um setor</option>
+                    {% for setor in setores_validos %}
+                        <option value="{{ setor }}">{{ setor }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="field-group">
