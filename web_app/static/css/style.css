@@ -1966,3 +1966,121 @@ body.app-body {
     border-left: 2px solid var(--wine-1);
     border-radius: 2px;
 }
+
+/* =============================== */
+/* Estilos para filtro moderno */
+/* =============================== */
+
+/* Header de seção de filtros — separa visual entre seções de filtros */
+.filter-section-header {
+    grid-column: 1 / -1;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    padding: 12px 0 8px 0;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+/* Subtítulos para agrupar campos relacionados */
+.filter-subsection-title {
+    grid-column: 1 / -1;
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    padding: 10px 0 6px 0;
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+/* Container para toggle de filtros avançados */
+.filter-section-toggle {
+    grid-column: 1 / -1;
+    padding: 8px 0;
+    margin: 4px 0;
+}
+
+/* Botão de link para toggle com comportamento clean e responsivo */
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--wine-1);
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 500;
+    padding: 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.2s ease;
+}
+
+.btn-link:hover {
+    color: var(--wine-2);
+}
+
+/* Ícone de toggle com transição de rotação suave */
+.toggle-icon {
+    display: inline-block;
+    font-size: 0.7rem;
+    transition: transform 0.3s ease;
+}
+
+/* Seção de filtros avançados recolhível */
+.advanced-filters-section {
+    grid-column: 1 / -1;
+    display: contents;
+    animation: slideDown 0.3s ease;
+}
+
+.advanced-filters-section[hidden] {
+    display: none;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Agrupamento visual de campos de datas com label descritivo */
+.filter-date-group {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 100px 1fr 1fr;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 4px;
+}
+
+.filter-date-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-1);
+    padding: 0;
+}
+
+/* Campo inline para datas com label compacto */
+.field-group-inline {
+    margin-bottom: 0;
+}
+
+.field-group-inline label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+.field-group-inline input {
+    font-size: 0.85rem;
+    padding: 6px 8px;
+}

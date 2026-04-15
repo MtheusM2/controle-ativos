@@ -62,6 +62,15 @@ def test_asset_edit_page_contains_movement_modal_flow_elements(authenticated_cli
     assert "/movimentacao/confirmar" in html
 
 
+def test_asset_edit_template_does_not_reference_removed_descricao_categoria_fields(authenticated_client):
+    # Regressão: o script não pode acessar campos removidos (descricao/categoria), evitando erro JS em runtime.
+    response = authenticated_client.get("/ativos/editar/A-001")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'getElementById("descricao")' not in html
+    assert 'getElementById("categoria")' not in html
+
+
 def test_asset_create_route_exposes_automatic_timestamps():
     class TimestampAtivosService:
         def criar_ativo(self, _ativo, _user_id):
@@ -776,6 +785,100 @@ def test_ativos_route_authenticated(authenticated_client):
     assert payload["ativos"]
 
 
+def test_ativos_route_document_presence_filters_consider_attachments():
+    class FakeAtivosComDoisItens:
+        def listar_ativos(self, _user_id):
+            return [
+                SimpleNamespace(
+                    id_ativo="A-111",
+                    tipo="Notebook",
+                    tipo_ativo="Notebook",
+                    marca="Dell",
+                    modelo="XPS",
+                    usuario_responsavel="Ana",
+                    departamento="TI",
+                    setor="TI",
+                    status="Disponível",
+                    data_entrada="2026-04-01",
+                    data_saida=None,
+                    nota_fiscal="",
+                    garantia="",
+                ),
+                SimpleNamespace(
+                    id_ativo="A-222",
+                    tipo="Notebook",
+                    tipo_ativo="Notebook",
+                    marca="Lenovo",
+                    modelo="T14",
+                    usuario_responsavel="Bruno",
+                    departamento="TI",
+                    setor="TI",
+                    status="Em Uso",
+                    data_entrada="2026-04-02",
+                    data_saida=None,
+                    nota_fiscal="",
+                    garantia="",
+                ),
+            ]
+
+        def filtrar_ativos(self, **_kwargs):
+            return self.listar_ativos(1)
+
+    class FakeArquivosFiltroPresenca:
+        upload_base_dir = "."
+
+        def listar_arquivos(self, id_ativo, _user_id):
+            # Apenas A-111 possui garantia real por anexo; A-222 não possui documento.
+            if id_ativo == "A-111":
+                return [
+                    {
+                        "id": 55,
+                        "ativo_id": "A-111",
+                        "tipo_documento": "garantia",
+                        "nome_original": "garantia_notebook.pdf",
+                        "tamanho_bytes": 123,
+                        "mime_type": "application/pdf",
+                        "criado_em": "2026-04-10",
+                    }
+                ]
+            return []
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from tests.conftest import FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosComDoisItens(),
+            "ativos_arquivo_service": FakeArquivosFiltroPresenca(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response_com_garantia = client.get("/ativos?tem_garantia=sim")
+    assert response_com_garantia.status_code == 200
+    payload_com = response_com_garantia.get_json()
+    assert [item["id"] for item in payload_com["ativos"]] == ["A-111"]
+
+    response_sem_garantia = client.get("/ativos?tem_garantia=nao")
+    assert response_sem_garantia.status_code == 200
+    payload_sem = response_sem_garantia.get_json()
+    assert [item["id"] for item in payload_sem["ativos"]] == ["A-222"]
+
+
 def test_attachment_route_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/A-001/anexos")
     assert response.status_code == 200
@@ -1292,6 +1395,189 @@ def test_csrf_invalid_token_blocks_password_change(authenticated_client):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "Requisição inválida" in html
+
+
+def test_asset_create_route_accepts_sparse_payload_without_descricao_categoria():
+    """
+    Testa que a rota de criação aceita payload esparso SEM descricao e categoria.
+    O backend deve preencher automaticamente esses campos — não devem estar no payload.
+    Regressão para garantir que a Fase 3 Round 2 permanece válida.
+    """
+    class SparseAtivosService:
+        def criar_ativo(self, ativo, _user_id):
+            # Valida que descricao e categoria não vieram do payload
+            assert not hasattr(ativo, "_incoming_descricao")
+            assert not hasattr(ativo, "_incoming_categoria")
+            return "NTB-001"
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return SimpleNamespace(
+                id_ativo=id_ativo,
+                tipo="Notebook",
+                tipo_ativo="Notebook",
+                marca="Dell",
+                modelo="XPS",
+                usuario_responsavel="João",
+                departamento="TI",
+                setor="TI",
+                status="Disponível",
+                data_entrada="2026-04-15",
+                data_saida=None,
+                created_at="2026-04-15 10:00:00",
+                updated_at="2026-04-15 10:00:00",
+                data_ultima_movimentacao=None,
+            )
+
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": SparseAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    # Payload SEM descricao e categoria — como vem do novo formulário da Fase 3
+    response = client.post(
+        "/ativos",
+        json={
+            "tipo_ativo": "Notebook",
+            "marca": "Dell",
+            "modelo": "XPS",
+            "status": "Disponível",
+            "data_entrada": "2026-04-15",
+            "setor": "TI",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["ativo"]["id"] == "NTB-001"
+
+
+def test_asset_filter_presenca_documental_uses_real_attachments():
+    """
+    Testa que o filtro de presença documental usa anexos reais da tabela ativos_arquivos.
+    Garante compatibilidade com a implementação de fallback para campos legados.
+    """
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    class DocumentFilterAtivosService:
+        def listar_ativos(self, _user_id):
+            return [
+                SimpleNamespace(
+                    id_ativo="NTB-001",
+                    tipo="Notebook",
+                    tipo_ativo="Notebook",
+                    marca="Dell",
+                    modelo="XPS",
+                    usuario_responsavel="Ana",
+                    departamento="TI",
+                    setor="TI",
+                    status="Disponível",
+                    data_entrada="2026-04-01",
+                    data_saida=None,
+                    garantia=None,
+                    nota_fiscal=None,
+                ),
+                SimpleNamespace(
+                    id_ativo="NTB-002",
+                    tipo="Notebook",
+                    tipo_ativo="Notebook",
+                    marca="Lenovo",
+                    modelo="ThinkPad",
+                    usuario_responsavel="Bruno",
+                    departamento="TI",
+                    setor="TI",
+                    status="Disponível",
+                    data_entrada="2026-04-02",
+                    data_saida=None,
+                    garantia="12 meses",  # campo legado, sem anexo
+                    nota_fiscal=None,
+                ),
+            ]
+
+        def filtrar_ativos(self, user_id, **_kwargs):
+            return self.listar_ativos(user_id)
+
+    class DocumentFilterArquivosService(_FakeArquivosService):
+        def listar_arquivos(self, id_ativo, _user_id):
+            # Retorna um anexo real apenas para o primeiro ativo
+            if id_ativo == "NTB-001":
+                return [
+                    {"tipo_documento": "nota_fiscal", "nome_original": "nf-001.pdf", "tamanho_bytes": 50000}
+                ]
+            return []
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": DocumentFilterAtivosService(),
+            "ativos_arquivo_service": DocumentFilterArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    # Filtra apenas ativos COM nota fiscal
+    response = client.get("/ativos?tem_nota_fiscal=sim", headers={"X-Requested-With": "fetch"})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert len(payload["ativos"]) == 1
+    assert payload["ativos"][0]["id"] == "NTB-001"
+
+    # Filtra apenas ativos SEM nota fiscal
+    response = client.get("/ativos?tem_nota_fiscal=nao", headers={"X-Requested-With": "fetch"})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert len(payload["ativos"]) == 1
+    assert payload["ativos"][0]["id"] == "NTB-002"
+
+
+def test_asset_edit_template_does_not_reference_removed_fields():
+    """
+    Validação contínua: editar_ativo.html não deve tentar preencher ou referenciar
+    descricao e categoria (removidos em Fase 3 Round 2).
+    Verifica que os campos removidos estão apenas em comentários HTML (não ativos).
+    """
+    from pathlib import Path
+    import re
+
+    template_path = Path(__file__).parent.parent / "web_app" / "templates" / "editar_ativo.html"
+    assert template_path.exists(), f"Template não encontrado: {template_path}"
+
+    template_content = template_path.read_text(encoding="utf-8")
+
+    # Remove comentários HTML e verifica que os campos removidos não estão no template ativo
+    template_without_comments = re.sub(r"<!--.*?-->", "", template_content, flags=re.DOTALL)
+
+    # Verifica que os campos removidos não estão FORA dos comentários
+    assert 'id="descricao"' not in template_without_comments, \
+        "Campo descricao encontrado ativo no template (deveria estar comentado)"
+    assert 'id="categoria"' not in template_without_comments, \
+        "Campo categoria encontrado ativo no template (deveria estar comentado)"
+    assert 'name="descricao"' not in template_without_comments, \
+        "Campo descricao encontrado ativo no template (deveria estar comentado)"
+    assert 'name="categoria"' not in template_without_comments, \
+        "Campo categoria encontrado ativo no template (deveria estar comentado)"
+
+    # Verifica que os campos principais continuam presentes
+    assert 'id="tipo_ativo"' in template_without_comments, "Campo tipo_ativo deveria estar no template"
+    assert 'id="marca"' in template_without_comments, "Campo marca deveria estar no template"
+    assert 'id="modelo"' in template_without_comments, "Campo modelo deveria estar no template"
+    assert 'id="status"' in template_without_comments, "Campo status deveria estar no template"
 
 
 def test_debug_error_is_re_raised(app_fixture):

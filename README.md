@@ -28,6 +28,10 @@
 
 - User authentication with login, registration, logout, and password recovery
 - Asset lifecycle management (create, list, details, update, delete)
+- Smart asset registration with base data plus dynamic technical specifications by asset type
+- Automatic timestamps and movement traceability for operational edits
+- Confirmation modal flow for asset movement review before final save
+- Structured movement preview with backend-driven status suggestion
 - Attachment workflow for invoice and warranty documents
 - Asset export in CSV, XLSX, and PDF formats
 - CSV import workflow for controlled batch updates
@@ -38,6 +42,8 @@
 ### Current Status
 
 - Stable Flask web application with active authentication and asset modules
+- Fases 1, 2 and 3 closed and validated for the asset flow
+- Current edit flow uses preview + confirmation before the final persistence of movement-related edits
 - Migrations and deploy artifacts maintained in repository
 - Production-ready WSGI path and local production simulation scripts available
 
@@ -197,6 +203,8 @@ Notes:
 - `POST /ativos` - create asset
 - `GET /ativos/<id_ativo>` - asset details
 - `PUT /ativos/<id_ativo>` - update asset
+- `POST /ativos/<id_ativo>/movimentacao/preview` - preview movement without persisting
+- `POST /ativos/<id_ativo>/movimentacao/confirmar` - confirm movement and persist final edit
 - `DELETE /ativos/<id_ativo>` - delete asset
 
 ### Attachments and Export
@@ -268,6 +276,8 @@ python web_app/app.py
 - Keep services focused on business logic
 - Keep HTTP serialization concerns in route layer
 - Preserve backward-compatible routes intentionally documented in route modules
+- Keep movement review logic in the backend as the source of truth
+- Keep modal editing limited to operational fields only
 
 ---
 
@@ -350,4 +360,4 @@ This software is confidential and intended for authorized internal use. Unauthor
 
 ---
 
-**Last Updated:** April 7, 2026
+**Last Updated:** April 14, 2026

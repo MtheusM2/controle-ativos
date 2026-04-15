@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
-from pathlib import Path
 
 from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from services.storage_backend import S3StorageBackend
@@ -23,6 +22,11 @@ from services.ativos_arquivo_service import (
 )
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
 from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS, UNIDADES_VALIDAS
+
+
+# Mensagens padronizadas para manter respostas da camada web consistentes.
+MSG_SESSAO_EXPIRADA = "Sessão expirada. Faça login novamente."
+MSG_ERRO_LISTAR_ATIVOS = "Erro inesperado ao listar ativos."
 
 
 def _obter_user_id_logado() -> int | None:
@@ -146,64 +150,19 @@ def _serializar_arquivo(arquivo: dict) -> dict:
     }
 
 
-def _ativo_do_payload(dados: dict) -> Ativo:
+def _mapa_campos_ativo(dados: dict) -> dict:
     """
-    Constrói o domínio Ativo a partir do payload do frontend.
-    O campo id não é lido do payload — o ID é gerado automaticamente no backend.
-    """
-    return Ativo(
-        id_ativo=None,  # gerado pelo service no momento do cadastro
-        tipo=dados.get("tipo_ativo", dados.get("tipo", "")),
-        marca=dados.get("marca", ""),
-        modelo=dados.get("modelo", ""),
-        serial=dados.get("serial", "") or None,
-        codigo_interno=dados.get("codigo_interno", "") or None,
-        descricao=dados.get("descricao", ""),
-        categoria=dados.get("categoria", ""),
-        tipo_ativo=dados.get("tipo_ativo", dados.get("tipo", "")),
-        condicao=dados.get("condicao", "") or None,
-        localizacao=dados.get("localizacao", "") or None,
-        setor=dados.get("setor", dados.get("departamento", "")),
-        usuario_responsavel=dados.get("usuario_responsavel", "") or None,
-        email_responsavel=dados.get("email_responsavel", "") or None,
-        departamento=dados.get("setor", dados.get("departamento", "")),
-        status=dados.get("status", ""),
-        data_entrada=dados.get("data_entrada", ""),
-        data_saida=dados.get("data_saida", "") or None,
-        data_compra=dados.get("data_compra", "") or None,
-        valor=dados.get("valor", "") or None,
-        observacoes=dados.get("observacoes", "") or None,
-        detalhes_tecnicos=dados.get("detalhes_tecnicos", "") or None,
-        processador=dados.get("processador", "") or None,
-        ram=dados.get("ram", "") or None,
-        armazenamento=dados.get("armazenamento", "") or None,
-        sistema_operacional=dados.get("sistema_operacional", "") or None,
-        carregador=dados.get("carregador", "") or None,
-        teamviewer_id=dados.get("teamviewer_id", "") or None,
-        anydesk_id=dados.get("anydesk_id", "") or None,
-        nome_equipamento=dados.get("nome_equipamento", "") or None,
-        hostname=dados.get("hostname", "") or None,
-        imei_1=dados.get("imei_1", "") or None,
-        imei_2=dados.get("imei_2", "") or None,
-        numero_linha=dados.get("numero_linha", "") or None,
-        operadora=dados.get("operadora", "") or None,
-        conta_vinculada=dados.get("conta_vinculada", "") or None,
-        polegadas=dados.get("polegadas", "") or None,
-        resolucao=dados.get("resolucao", "") or None,
-        tipo_painel=dados.get("tipo_painel", "") or None,
-        entrada_video=dados.get("entrada_video", "") or None,
-        fonte_ou_cabo=dados.get("fonte_ou_cabo", "") or None,
-        nota_fiscal=None,
-        garantia=None,
-    )
+    Centraliza o mapeamento normalizado de campos de um payload de ativo.
 
+    Esse mapa é usado tanto na criação (para construir Ativo) quanto na atualização
+    (para normalizar payload antes de chamar o service). Centralizar evita duplicação
+    e facilita manutenção futura quando o schema mudar.
 
-def _normalizar_payload_atualizacao(dados: dict, *, preencher_campos_ausentes: bool = True) -> dict:
+    Prioriza:
+    - tipo_ativo sobre tipo (compatibilidade com chave legada)
+    - setor sobre departamento (compatibilidade com chave legada)
     """
-    Normaliza o payload de edição em um contrato único para PUT, prévia e confirmação.
-    """
-    mapa_campos = {
-        # Prioriza tipo_ativo e mantém suporte à chave antiga tipo.
+    return {
         "tipo_ativo": dados.get("tipo_ativo", dados.get("tipo", "")),
         "marca": dados.get("marca", ""),
         "modelo": dados.get("modelo", ""),
@@ -247,13 +206,93 @@ def _normalizar_payload_atualizacao(dados: dict, *, preencher_campos_ausentes: b
         "garantia": None,
     }
 
+
+def _ativo_do_payload(dados: dict) -> Ativo:
+    """
+    Constrói o domínio Ativo a partir do payload do frontend.
+    O campo id não é lido do payload — o ID é gerado automaticamente no backend.
+
+    Usa _mapa_campos_ativo() para normalizar campos, evitando duplicação com
+    _normalizar_payload_atualizacao().
+    """
+    # Obtém o mapa normalizado de campos
+    mapa = _mapa_campos_ativo(dados)
+
+    # Constrói o Ativo com os campos normalizados
+    return Ativo(
+        id_ativo=None,  # gerado pelo service no momento do cadastro
+        tipo=mapa["tipo_ativo"],  # campo tipo é alias de tipo_ativo no Ativo
+        marca=mapa["marca"],
+        modelo=mapa["modelo"],
+        serial=mapa["serial"],
+        codigo_interno=mapa["codigo_interno"],
+        descricao=mapa["descricao"],
+        categoria=mapa["categoria"],
+        tipo_ativo=mapa["tipo_ativo"],
+        condicao=mapa["condicao"],
+        localizacao=mapa["localizacao"],
+        setor=mapa["setor"],
+        usuario_responsavel=mapa["usuario_responsavel"],
+        email_responsavel=mapa["email_responsavel"],
+        departamento=mapa["departamento"],
+        status=mapa["status"],
+        data_entrada=mapa["data_entrada"],
+        data_saida=mapa["data_saida"],
+        data_compra=mapa["data_compra"],
+        valor=mapa["valor"],
+        observacoes=mapa["observacoes"],
+        detalhes_tecnicos=mapa["detalhes_tecnicos"],
+        processador=mapa["processador"],
+        ram=mapa["ram"],
+        armazenamento=mapa["armazenamento"],
+        sistema_operacional=mapa["sistema_operacional"],
+        carregador=mapa["carregador"],
+        teamviewer_id=mapa["teamviewer_id"],
+        anydesk_id=mapa["anydesk_id"],
+        nome_equipamento=mapa["nome_equipamento"],
+        hostname=mapa["hostname"],
+        imei_1=mapa["imei_1"],
+        imei_2=mapa["imei_2"],
+        numero_linha=mapa["numero_linha"],
+        operadora=mapa["operadora"],
+        conta_vinculada=mapa["conta_vinculada"],
+        polegadas=mapa["polegadas"],
+        resolucao=mapa["resolucao"],
+        tipo_painel=mapa["tipo_painel"],
+        entrada_video=mapa["entrada_video"],
+        fonte_ou_cabo=mapa["fonte_ou_cabo"],
+        nota_fiscal=mapa["nota_fiscal"],
+        garantia=mapa["garantia"],
+    )
+
+
+def _normalizar_payload_atualizacao(dados: dict, *, preencher_campos_ausentes: bool = True) -> dict:
+    """
+    Normaliza o payload de edição em um contrato único para PUT, prévia e confirmação.
+
+    Usa _mapa_campos_ativo() para obter o mapeamento padrão, evitando duplicação com
+    _ativo_do_payload(). O parâmetro preencher_campos_ausentes controla se a função
+    retorna todos os campos (com defaults) ou apenas os campos presentes no payload.
+
+    Parâmetros:
+      dados: dict — payload bruto do frontend ou JavaScript
+      preencher_campos_ausentes: bool — se True, retorna mapa completo com defaults;
+                                        se False, retorna apenas campos enviados pelo front
+    """
+    # Obtém o mapa completo de campos normalizados
+    mapa_campos = _mapa_campos_ativo(dados)
+
+    # Se preencher_campos_ausentes=True, retorna o mapa completo com defaults
     if preencher_campos_ausentes:
         return mapa_campos
 
+    # Caso contrário, retorna apenas os campos que foram realmente enviados no payload
     dados_normalizados: dict = {}
     for chave, valor in mapa_campos.items():
+        # Exclui campos que não vêm do payload (nota_fiscal e garantia são sempre None)
         if chave in {"nota_fiscal", "garantia"}:
             continue
+        # Inclui apenas se a chave foi enviada no payload original
         if chave in dados:
             dados_normalizados[chave] = valor
 
@@ -606,23 +645,55 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     def _filtrar_presenca_documentos(
         ativos: list[Ativo],
         *,
+        user_id: int,
         tem_garantia: str | None,
         tem_nota_fiscal: str | None,
     ) -> list[Ativo]:
         """
-        Aplica filtros de presença documental sem alterar regras de negócio da camada service.
+        Aplica filtros de presença documental usando anexos reais como fonte primária.
+        Mantém fallback para campos legados do ativo quando não houver anexos.
         """
+        # Evita custo extra de I/O quando o usuário não solicitou filtro documental.
+        if tem_garantia is None and tem_nota_fiscal is None:
+            return ativos
+
+        def _tem_documento(ativo: Ativo, tipo_documento: str) -> bool:
+            """
+            Resolve presença documental priorizando anexos persistidos na tabela ativos_arquivos.
+            """
+            try:
+                anexos = arquivo_service.listar_arquivos(str(ativo.id_ativo), user_id)
+            except (AtivoErro, ArquivoNaoEncontrado, ArquivoInvalido, TipoDocumentoInvalido, ValueError, TypeError, KeyError):
+                # Em falha de leitura dos anexos, preserva compatibilidade com campos legados.
+                anexos = []
+
+            possui_anexo_do_tipo = any(
+                (anexo.get("tipo_documento") == tipo_documento)
+                and (anexo.get("nome_original") or "").strip()
+                for anexo in anexos
+            )
+            if possui_anexo_do_tipo:
+                return True
+
+            if tipo_documento == "garantia":
+                return bool((getattr(ativo, "garantia", "") or "").strip())
+
+            if tipo_documento == "nota_fiscal":
+                return bool((getattr(ativo, "nota_fiscal", "") or "").strip())
+
+            return False
+
         filtrados = ativos
 
         if tem_garantia == "sim":
-            filtrados = [a for a in filtrados if (a.garantia or "").strip()]
+            filtrados = [a for a in filtrados if _tem_documento(a, "garantia")]
         elif tem_garantia == "nao":
-            filtrados = [a for a in filtrados if not (a.garantia or "").strip()]
+            filtrados = [a for a in filtrados if not _tem_documento(a, "garantia")]
 
         if tem_nota_fiscal == "sim":
-            filtrados = [a for a in filtrados if (a.nota_fiscal or "").strip()]
+            filtrados = [a for a in filtrados if _tem_documento(a, "nota_fiscal")]
         elif tem_nota_fiscal == "nao":
-            filtrados = [a for a in filtrados if not (a.nota_fiscal or "").strip()]
+            filtrados = [a for a in filtrados if not _tem_documento(a, "nota_fiscal")]
 
         return filtrados
 
@@ -644,6 +715,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         return _filtrar_presenca_documentos(
             ativos,
+            user_id=user_id,
             tem_garantia=tem_garantia,
             tem_nota_fiscal=tem_nota_fiscal,
         )
@@ -700,7 +772,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         """
         user_id = _obter_user_id_logado()
         if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+            return _json_error(MSG_SESSAO_EXPIRADA, status=401)
 
         try:
             ativos = _buscar_ativos_com_filtros(user_id)
@@ -712,7 +784,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
         except (ValueError, KeyError, TypeError):
-            return _json_error("Erro inesperado ao listar ativos.", status=500)
+            return _json_error(MSG_ERRO_LISTAR_ATIVOS, status=500)
 
     @app.post("/ativos")
     def criar_ativo():

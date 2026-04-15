@@ -711,8 +711,7 @@
     function fillForm(asset) {
         document.getElementById("id").value = asset.id;
         document.getElementById("codigo_interno").value = asset.codigo_interno || "";
-        document.getElementById("descricao").value = asset.descricao || "";
-        document.getElementById("categoria").value = asset.categoria || "";
+        // descricao/categoria foram removidos do formulário e não devem mais ser preenchidos via JS.
         document.getElementById("tipo_ativo").value = asset.tipo_ativo || asset.tipo || "";
         document.getElementById("marca").value = asset.marca || "";
         document.getElementById("modelo").value = asset.modelo || "";

@@ -63,7 +63,7 @@
     </div>
 </section>
 
-<!-- Modal de filtros -->
+<!-- Modal de filtros com separação entre principais e avançados para melhor UX -->
 <div id="filter-modal" class="modal" hidden>
     <div class="modal-content modal-content-small">
         <div class="modal-header">
@@ -73,34 +73,12 @@
 
         <div class="modal-body">
             <form id="filter-form" class="form-grid modal-grid">
+                <!-- SEÇÃO 1: Filtros principais — sempre visíveis -->
+                <div class="filter-section-header">Filtros principais</div>
+
                 <div class="field-group">
                     <label for="filter-id">ID</label>
-                    <input type="text" id="filter-id" class="input-control">
-                </div>
-
-                <div class="field-group">
-                    <label for="filter-tipo">Tipo</label>
-                    <input type="text" id="filter-tipo" class="input-control">
-                </div>
-
-                <div class="field-group">
-                    <label for="filter-marca">Marca</label>
-                    <input type="text" id="filter-marca" class="input-control">
-                </div>
-
-                <div class="field-group">
-                    <label for="filter-modelo">Modelo</label>
-                    <input type="text" id="filter-modelo" class="input-control">
-                </div>
-
-                <div class="field-group">
-                    <label for="filter-usuario_responsavel">Responsável</label>
-                    <input type="text" id="filter-usuario_responsavel" class="input-control">
-                </div>
-
-                <div class="field-group">
-                    <label for="filter-departamento">Departamento</label>
-                    <input type="text" id="filter-departamento" class="input-control">
+                    <input type="text" id="filter-id" class="input-control" placeholder="Ex: NTB-001">
                 </div>
 
                 <div class="field-group">
@@ -114,41 +92,88 @@
                 </div>
 
                 <div class="field-group">
-                    <label for="filter-tem-garantia">Presença de garantia</label>
-                    <select id="filter-tem-garantia" class="select-control">
-                        <option value="">Todas</option>
-                        <option value="sim">Com garantia</option>
-                        <option value="nao">Sem garantia</option>
-                    </select>
+                    <label for="filter-tipo">Tipo</label>
+                    <input type="text" id="filter-tipo" class="input-control" placeholder="Ex: Notebook">
                 </div>
 
                 <div class="field-group">
-                    <label for="filter-tem-nota">Presença de nota fiscal</label>
-                    <select id="filter-tem-nota" class="select-control">
-                        <option value="">Todas</option>
-                        <option value="sim">Com nota fiscal</option>
-                        <option value="nao">Sem nota fiscal</option>
-                    </select>
+                    <label for="filter-usuario_responsavel">Responsável</label>
+                    <input type="text" id="filter-usuario_responsavel" class="input-control" placeholder="Nome ou e-mail">
                 </div>
 
-                <div class="field-group">
-                    <label for="filter-data_entrada_inicial">Data entrada inicial</label>
-                    <input type="date" id="filter-data_entrada_inicial" class="input-control">
+                <!-- SEÇÃO 2: Filtros avançados — recolhível por padrão -->
+                <div class="filter-section-toggle">
+                    <button type="button" class="btn btn-link" id="toggle-advanced-filters">
+                        <span class="toggle-icon">▼</span> Mais filtros
+                    </button>
                 </div>
 
-                <div class="field-group">
-                    <label for="filter-data_entrada_final">Data entrada final</label>
-                    <input type="date" id="filter-data_entrada_final" class="input-control">
-                </div>
+                <div id="advanced-filters-section" class="advanced-filters-section" hidden>
+                    <!-- Sub-seção: Detalhes do ativo -->
+                    <div class="filter-subsection-title">Detalhes do ativo</div>
 
-                <div class="field-group">
-                    <label for="filter-data_saida_inicial">Data saída inicial</label>
-                    <input type="date" id="filter-data_saida_inicial" class="input-control">
-                </div>
+                    <div class="field-group">
+                        <label for="filter-marca">Marca</label>
+                        <input type="text" id="filter-marca" class="input-control">
+                    </div>
 
-                <div class="field-group">
-                    <label for="filter-data_saida_final">Data saída final</label>
-                    <input type="date" id="filter-data_saida_final" class="input-control">
+                    <div class="field-group">
+                        <label for="filter-modelo">Modelo</label>
+                        <input type="text" id="filter-modelo" class="input-control">
+                    </div>
+
+                    <div class="field-group">
+                        <label for="filter-departamento">Departamento</label>
+                        <input type="text" id="filter-departamento" class="input-control">
+                    </div>
+
+                    <!-- Sub-seção: Documentação -->
+                    <div class="filter-subsection-title">Documentação</div>
+
+                    <div class="field-group">
+                        <label for="filter-tem-garantia">Presença de garantia</label>
+                        <select id="filter-tem-garantia" class="select-control">
+                            <option value="">Todas</option>
+                            <option value="sim">Com garantia</option>
+                            <option value="nao">Sem garantia</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="filter-tem-nota">Presença de nota fiscal</label>
+                        <select id="filter-tem-nota" class="select-control">
+                            <option value="">Todas</option>
+                            <option value="sim">Com nota fiscal</option>
+                            <option value="nao">Sem nota fiscal</option>
+                        </select>
+                    </div>
+
+                    <!-- Sub-seção: Datas agrupadas por intervalo -->
+                    <div class="filter-subsection-title">Períodos</div>
+
+                    <div class="filter-date-group">
+                        <div class="filter-date-label">Data de entrada</div>
+                        <div class="field-group field-group-inline">
+                            <label for="filter-data_entrada_inicial">De</label>
+                            <input type="date" id="filter-data_entrada_inicial" class="input-control">
+                        </div>
+                        <div class="field-group field-group-inline">
+                            <label for="filter-data_entrada_final">Até</label>
+                            <input type="date" id="filter-data_entrada_final" class="input-control">
+                        </div>
+                    </div>
+
+                    <div class="filter-date-group">
+                        <div class="filter-date-label">Data de saída</div>
+                        <div class="field-group field-group-inline">
+                            <label for="filter-data_saida_inicial">De</label>
+                            <input type="date" id="filter-data_saida_inicial" class="input-control">
+                        </div>
+                        <div class="field-group field-group-inline">
+                            <label for="filter-data_saida_final">Até</label>
+                            <input type="date" id="filter-data_saida_final" class="input-control">
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
@@ -417,6 +442,23 @@
         //     resetAttachmentModalState();
         // }
     }
+
+    // Toggle para mostrar/ocultar filtros avançados com rotação suave do ícone.
+    document.getElementById("toggle-advanced-filters").addEventListener("click", (event) => {
+        event.preventDefault();
+        const advancedSection = document.getElementById("advanced-filters-section");
+        const toggleIcon = event.target.closest(".btn-link").querySelector(".toggle-icon");
+
+        const isHidden = advancedSection.hidden;
+        advancedSection.hidden = !isHidden;
+
+        // Rotaciona o ícone para indicar estado expandido/recolhido
+        if (isHidden) {
+            toggleIcon.style.transform = "rotate(180deg)";
+        } else {
+            toggleIcon.style.transform = "rotate(0deg)";
+        }
+    });
 
     document.getElementById("open-filter-modal").addEventListener("click", () => openModal("filter-modal"));
     document.getElementById("open-export-modal").addEventListener("click", () => openModal("export-modal"));
