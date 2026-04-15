@@ -93,7 +93,12 @@
 
                 <div class="field-group">
                     <label for="filter-tipo">Tipo</label>
-                    <input type="text" id="filter-tipo" class="input-control" placeholder="Ex: Notebook">
+                    <select id="filter-tipo" class="select-control">
+                        <option value="">Todos os tipos</option>
+                        {% for tipo in tipos_validos %}
+                            <option value="{{ tipo }}">{{ tipo }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <div class="field-group">
@@ -123,8 +128,13 @@
                     </div>
 
                     <div class="field-group">
-                        <label for="filter-departamento">Departamento</label>
-                        <input type="text" id="filter-departamento" class="input-control">
+                        <label for="filter-departamento">Departamento / Setor</label>
+                        <select id="filter-departamento" class="select-control">
+                            <option value="">Todos os setores</option>
+                            {% for setor in setores_validos %}
+                                <option value="{{ setor }}">{{ setor }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <!-- Sub-seção: Documentação -->
@@ -198,6 +208,25 @@
             <button type="button" class="btn btn-secondary" data-export-format="csv">CSV</button>
             <button type="button" class="btn btn-secondary" data-export-format="pdf">PDF</button>
             <button type="button" class="btn btn-secondary" data-export-format="json">JSON</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de visualização resumida do ativo — experiência moderna e objetiva para usuário -->
+<div id="view-asset-modal" class="modal" hidden>
+    <div class="modal-content modal-content-medium">
+        <div class="modal-header">
+            <h3 id="view-asset-modal-title">Detalhes do ativo</h3>
+            <button type="button" class="btn btn-close" data-close-modal="view-asset-modal">&times;</button>
+        </div>
+
+        <div class="modal-body" id="view-asset-modal-body">
+            <p>Carregando informações do ativo...</p>
+        </div>
+
+        <div class="modal-footer">
+            <a id="view-asset-full-link" href="#" class="btn btn-secondary">Ver completo</a>
+            <a id="view-asset-edit-link" href="#" class="btn btn-primary">Editar</a>
         </div>
     </div>
 </div>
@@ -399,9 +428,10 @@
                 <td>${escapeHtml(asset.data_saida)}</td>
                 <!-- Removido em Fase 3 Round 2: coluna de anexos — indicador agora junto às ações -->
                 <!-- Redesenhado em Fase 3 Round 2 Correction: remover sticky, redesenhar com btn-icon -->
+                <!-- Nova rodada: botão Visualizar abre modal resumido em vez de página completa -->
                 <td class="action-cell">
                     <div class="row-actions">
-                        <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Visualizar</a>
+                        <button type="button" class="btn btn-secondary btn-mini view-asset-btn" data-asset-id="${asset.id}">Visualizar</button>
                         <a href="{{ url_for('editar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Editar</a>
                         <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn-icon" title="Ver documentos e detalhes">📋</a>
                     </div>
@@ -540,6 +570,136 @@
 
     // Removido em Fase 3 Round 2: attachment modal desativado
     // resetAttachmentModalState();
+
+    // ========== VISUALIZAÇÃO RESUMIDA DO ATIVO ==========
+    // Nova funcionalidade: modal resumido com informações principais e campos específicos por tipo.
+    // Controla visibilidade de campos técnicos/sensíveis por perfil de usuário (admin vs comum).
+
+    /**
+     * Formata um valor para exibição no resumo.
+     * Retorna "-" se vazio para melhor legibilidade.
+     */
+    function formatDisplayValue(value) {
+        const trimmed = String(value || "").trim();
+        return trimmed || "-";
+    }
+
+    /**
+     * Renderiza um bloco de campos do resumo no modal.
+     * @param {string} titulo - Título da seção
+     * @param {object} campos - Mapa de label => valor
+     * @returns {string} HTML renderizado
+     */
+    function renderResumoSecao(titulo, campos) {
+        const camposValidos = Object.entries(campos || {})
+            .filter(([_, valor]) => formatDisplayValue(valor) !== "-" || true)
+            .map(([chave, valor]) => {
+                const label = chave
+                    .replace(/_/g, " ")
+                    .split(" ")
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(" ");
+                return `
+                    <div class="detail-row">
+                        <span class="detail-label">${label}:</span>
+                        <span class="detail-value">${escapeHtml(formatDisplayValue(valor))}</span>
+                    </div>
+                `;
+            })
+            .join("");
+
+        if (!camposValidos) return "";
+
+        return `
+            <div class="detail-section">
+                <h4 class="detail-section-title">${titulo}</h4>
+                ${camposValidos}
+            </div>
+        `;
+    }
+
+    /**
+     * Carrega e exibe o resumo do ativo no modal.
+     * Controla visibilidade de campos técnicos conforme perfil do usuário.
+     */
+    async function loadViewAssetModal(assetId) {
+        const modal = document.getElementById("view-asset-modal");
+        const body = document.getElementById("view-asset-modal-body");
+        const title = document.getElementById("view-asset-modal-title");
+        const fullLink = document.getElementById("view-asset-full-link");
+        const editLink = document.getElementById("view-asset-edit-link");
+
+        // Atualiza links de ação
+        const detailUrl = "{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodeURIComponent(assetId));
+        const editUrl = "{{ url_for('editar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodeURIComponent(assetId));
+        fullLink.href = detailUrl;
+        editLink.href = editUrl;
+
+        // Carrega resumo via API
+        const { response, payload } = await requestJson(
+            `/ativos/${encodeURIComponent(assetId)}/resumo`,
+            { method: "GET" }
+        );
+
+        if (!response.ok) {
+            body.innerHTML = `<p class="error-text">Não foi possível carregar o resumo. ${payload?.erro || ""}</p>`;
+            openModal("view-asset-modal");
+            return;
+        }
+
+        const resumo = payload.resumo || {};
+        const secaoPrincipal = resumo.secao_principal || {};
+        const secaoResponsabilidade = resumo.secao_responsabilidade || {};
+        const secaoCiclo = resumo.secao_ciclo || {};
+        const secaoTecnica = resumo.secao_tecnica || {};
+        const secaoTecnicaRestrita = resumo.secao_tecnica_restrita || {};
+
+        // Monta HTML do resumo
+        let html = "";
+
+        // Título do modal com ID do ativo
+        title.textContent = `Ativo ${escapeHtml(secaoPrincipal.id || assetId)}`;
+
+        // Seção Principal
+        html += renderResumoSecao("Identificação", secaoPrincipal);
+
+        // Seção Responsabilidade
+        html += renderResumoSecao("Responsabilidade", secaoResponsabilidade);
+
+        // Seção Ciclo
+        html += renderResumoSecao("Ciclo e Documentação", secaoCiclo);
+
+        // Seção Técnica (específica por tipo)
+        if (secaoTecnica.campos && Object.keys(secaoTecnica.campos).length > 0) {
+            html += renderResumoSecao(
+                secaoTecnica.label || "Especificações",
+                secaoTecnica.campos
+            );
+        }
+
+        // Seção Técnica Restrita (apenas admin)
+        if (Object.keys(secaoTecnicaRestrita).length > 0) {
+            html += renderResumoSecao(
+                "Informações Técnicas Restritas",
+                secaoTecnicaRestrita
+            );
+        }
+
+        body.innerHTML = html || "<p>Nenhuma informação disponível.</p>";
+        openModal("view-asset-modal");
+    }
+
+    // Adiciona listener ao botão "Visualizar" para abrir o modal resumido
+    assetTableBody.addEventListener("click", (event) => {
+        const viewBtn = event.target.closest(".view-asset-btn");
+        if (!viewBtn) return;
+
+        const assetId = viewBtn.getAttribute("data-asset-id");
+        if (assetId) {
+            loadViewAssetModal(assetId);
+        }
+    });
+
     loadAssets();
 </script>
 {% endblock %}

@@ -21,7 +21,7 @@ from services.ativos_arquivo_service import (
     TipoDocumentoInvalido,
 )
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
-from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS, UNIDADES_VALIDAS
+from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS, UNIDADES_VALIDAS, TIPOS_ATIVO_VALIDOS
 
 
 # Mensagens padronizadas para manter respostas da camada web consistentes.
@@ -148,6 +148,98 @@ def _serializar_arquivo(arquivo: dict) -> dict:
         "mime_type": arquivo["mime_type"],
         "criado_em": arquivo["criado_em"],
     }
+
+
+def _eh_admin(perfil: str | None) -> bool:
+    """
+    Centraliza a regra de detecção de perfil administrativo.
+    Verificação de visibilidade de campos técnicos/sensíveis.
+    """
+    return (perfil or "").strip().lower() in {"adm", "admin"}
+
+
+def _resumo_ativo_para_modal(ativo: dict, eh_admin: bool) -> dict:
+    """
+    Retorna um resumo composto do ativo para exibição em modal.
+    Mostra informações principais e opcionalmente campos técnicos conforme tipo.
+
+    Campos sempre visíveis:
+    - ID, tipo, marca, modelo, status
+    - responsável, e-mail, setor/departamento
+    - data de entrada, data de saída
+    - presença de nota fiscal e garantia
+
+    Campos específicos por tipo (quando aplicável):
+    - Notebook/Desktop: processador, RAM, armazenamento, sistema operacional
+    - Monitor: polegadas, resolução, tipo de painel, entradas de vídeo
+    - Celular: IMEI principal, número da linha, operadora
+
+    Campos técnicos restritos (visíveis apenas para admin):
+    - AnyDesk ID, TeamViewer ID, hostname, serial, código interno
+    """
+    tipo = (ativo.get("tipo") or "").strip().lower()
+
+    # Seção principal — sempre visível
+    resumo = {
+        "secao_principal": {
+            "id": ativo.get("id", ""),
+            "tipo": ativo.get("tipo", ""),
+            "marca": ativo.get("marca", ""),
+            "modelo": ativo.get("modelo", ""),
+            "status": ativo.get("status", ""),
+        },
+        "secao_responsabilidade": {
+            "usuario_responsavel": ativo.get("usuario_responsavel", ""),
+            "email_responsavel": ativo.get("email_responsavel", ""),
+            "setor": ativo.get("setor", ""),
+            "localizacao": ativo.get("localizacao", ""),
+        },
+        "secao_ciclo": {
+            "data_entrada": ativo.get("data_entrada", ""),
+            "data_saida": ativo.get("data_saida", ""),
+            "nota_fiscal": ativo.get("nota_fiscal", ""),
+            "garantia": ativo.get("garantia", ""),
+        },
+    }
+
+    # Seção técnica por tipo — visível para todos quando não restritos
+    resumo["secao_tecnica"] = {}
+
+    if tipo in {"notebook", "desktop"}:
+        resumo["secao_tecnica"]["label"] = "Especificações de Computador"
+        resumo["secao_tecnica"]["campos"] = {
+            "processador": ativo.get("processador", ""),
+            "ram": ativo.get("ram", ""),
+            "armazenamento": ativo.get("armazenamento", ""),
+            "sistema_operacional": ativo.get("sistema_operacional", ""),
+        }
+    elif tipo == "monitor":
+        resumo["secao_tecnica"]["label"] = "Especificações de Monitor"
+        resumo["secao_tecnica"]["campos"] = {
+            "polegadas": ativo.get("polegadas", ""),
+            "resolucao": ativo.get("resolucao", ""),
+            "tipo_painel": ativo.get("tipo_painel", ""),
+            "entrada_video": ativo.get("entrada_video", ""),
+        }
+    elif tipo == "celular":
+        resumo["secao_tecnica"]["label"] = "Especificações de Celular"
+        resumo["secao_tecnica"]["campos"] = {
+            "imei_1": ativo.get("imei_1", ""),
+            "numero_linha": ativo.get("numero_linha", ""),
+            "operadora": ativo.get("operadora", ""),
+        }
+
+    # Seção restrita — visível apenas para admin
+    if eh_admin:
+        resumo["secao_tecnica_restrita"] = {
+            "anydesk_id": ativo.get("anydesk_id", ""),
+            "teamviewer_id": ativo.get("teamviewer_id", ""),
+            "hostname": ativo.get("hostname", ""),
+            "serial": ativo.get("serial", ""),
+            "codigo_interno": ativo.get("codigo_interno", ""),
+        }
+
+    return resumo
 
 
 def _mapa_campos_ativo(dados: dict) -> dict:
@@ -939,6 +1031,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     def listar_ativos_html():
         """
         Renderiza a listagem de ativos com filtros em modal e ações por linha.
+        Passa as listas de valores controlados (status, tipos, setores) para renderizar
+        filtros como select fields em vez de input text.
         """
         user_id = _obter_user_id_logado()
         if user_id is None:
@@ -948,6 +1042,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "ativos.html",
             usuario_email=session.get("user_email"),
             status_validos=STATUS_VALIDOS,
+            tipos_validos=TIPOS_ATIVO_VALIDOS,
+            setores_validos=SETORES_VALIDOS,
             show_chrome=True,
         )
 
@@ -1062,6 +1158,54 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         Alias para rota de detalhes no padrao por recurso.
         """
         return redirect(url_for("detalhar_ativo_html", id_ativo=id_ativo))
+
+    @app.get("/ativos/<id_ativo>/resumo")
+    def obter_resumo_ativo(id_ativo):
+        """
+        Retorna um resumo composto do ativo em JSON para exibição em modal.
+        Inclui informações principais e campos específicos conforme o tipo.
+
+        Controle de visibilidade por perfil:
+        - Campos técnicos restritos (AnyDesk, TeamViewer, hostname, serial, código interno)
+          são retornados apenas se o usuário for admin.
+
+        Resposta em caso de sucesso:
+        {
+            "ok": true,
+            "resumo": {
+                "secao_principal": {...},
+                "secao_responsabilidade": {...},
+                "secao_ciclo": {...},
+                "secao_tecnica": {...},
+                "secao_tecnica_restrita": {...}  // Apenas se admin
+            }
+        }
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada.", status=401)
+
+        try:
+            ativo = service.buscar_ativo(id_ativo, user_id)
+            ativo_serializado = _serializar_ativo(ativo)
+
+            # Obtém perfil do usuário da sessão para controlar visibilidade
+            perfil_usuario = session.get("user_perfil")
+            eh_admin_user = _eh_admin(perfil_usuario)
+
+            # Compõe o resumo com visibilidade controlada
+            resumo = _resumo_ativo_para_modal(ativo_serializado, eh_admin_user)
+
+            return _json_success(
+                "Resumo do ativo carregado com sucesso.",
+                resumo=resumo,
+            )
+        except AtivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except (PermissaoNegada, AtivoErro) as erro:
+            return _json_error(str(erro), status=400)
+        except Exception as erro:
+            return _json_error("Erro ao carregar resumo do ativo.", status=500)
 
     @app.post("/ativos/remover/<id_ativo>")
     def remover_ativo_html(id_ativo):

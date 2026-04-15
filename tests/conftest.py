@@ -105,6 +105,10 @@ class FakeEmpresaService:
 
 
 class FakeAtivosService:
+    def __init__(self):
+        # Armazena ativos criados durante testes para persistência
+        self._ativos_criados = {}
+
     def listar_ativos(self, _user_id):
         return [
             SimpleNamespace(
@@ -123,11 +127,23 @@ class FakeAtivosService:
     def filtrar_ativos(self, **kwargs):
         return self.listar_ativos(kwargs.get("user_id"))
 
-    def criar_ativo(self, _ativo, _user_id):
+    def criar_ativo(self, ativo, _user_id):
         # Simula retorno de ID gerado automaticamente pelo backend
+        # Mas também armazena o ativo para persistência em testes
+        if hasattr(ativo, 'id_ativo'):
+            # Converte o objeto Ativo para um SimpleNamespace para armazenar
+            ativo_dict = {}
+            if hasattr(ativo, '__dict__'):
+                ativo_dict = ativo.__dict__.copy()
+            self._ativos_criados[ativo.id_ativo] = SimpleNamespace(**ativo_dict)
         return "OPU-000001"
 
     def buscar_ativo(self, id_ativo, _user_id):
+        # Se o ativo foi criado em testes, retorna com os dados criados
+        if id_ativo in self._ativos_criados:
+            return self._ativos_criados[id_ativo]
+
+        # Padrão para compatibilidade com testes existentes
         return SimpleNamespace(
             id_ativo=id_ativo,
             tipo="Notebook",

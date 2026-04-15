@@ -2084,3 +2084,62 @@ body.app-body {
     font-size: 0.85rem;
     padding: 6px 8px;
 }
+
+/* =============================== */
+/* Modal resumido de visualização do ativo (nova rodada) */
+/* =============================== */
+
+/* Tamanho médio para modal com múltiplas seções de detalhes */
+.modal-content-medium {
+    max-width: 540px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+/* Container de detalhes dentro do modal resumido */
+.detail-section {
+    margin-bottom: 24px;
+}
+
+.detail-section-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--wine-2);
+    border-bottom: 1px solid var(--line-strong);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+}
+
+/* Linha individual dentro de uma seção de detalhes */
+.detail-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+/* Label e valor dentro de uma linha de detalhes */
+.detail-label {
+    font-weight: 500;
+    color: var(--text-2);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.detail-value {
+    color: var(--text-0);
+    word-break: break-word;
+}
+
+/* Texto de erro em caso de falha ao carregar */
+.error-text {
+    color: var(--danger);
+    font-style: italic;
+}

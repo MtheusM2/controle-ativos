@@ -1594,3 +1594,236 @@ def test_debug_error_is_re_raised(app_fixture):
         raised = True
 
     assert raised is True
+
+
+# ========== TESTES PARA NOVA RODADA DE FECHAMENTO ==========
+# Validações da rodada de refinamento final da camada web
+
+def test_filter_modal_has_select_for_tipo_e_departamento(app_fixture):
+    """
+    Valida que o modal de filtros usa SELECT em vez de input text
+    para campos com vocabulário controlado (tipo e departamento/setor).
+
+    Essa validação garante que usuários escolham de opções oficiais
+    e não possam digitar valores livres nesses campos.
+    """
+    from pathlib import Path
+
+    # Lê o template ativos.html
+    template_path = Path(__file__).parent.parent / "web_app" / "templates" / "ativos.html"
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_content = f.read()
+
+    # Valida que filter-tipo é um SELECT
+    assert 'id="filter-tipo"' in template_content, "Campo filter-tipo não encontrado"
+    assert '<select id="filter-tipo"' in template_content, \
+        "filter-tipo deveria ser SELECT, não input text"
+
+    # Valida que filter-departamento é um SELECT
+    assert 'id="filter-departamento"' in template_content, "Campo filter-departamento não encontrado"
+    assert '<select id="filter-departamento"' in template_content, \
+        "filter-departamento deveria ser SELECT, não input text"
+
+    # Valida que as opções são renderizadas a partir das listas de valores válidos
+    assert "{% for tipo in tipos_validos %}" in template_content, \
+        "Tipos válidos não estão sendo iterados no template"
+    assert "{% for setor in setores_validos %}" in template_content, \
+        "Setores válidos não estão sendo iterados no template"
+
+
+def test_filter_modal_receives_valid_options_from_route(authenticated_client):
+    """
+    Valida que a rota de listagem passa as listas de tipos e setores
+    para o template de filtros.
+
+    Isso garante que o modal tem acesso aos valores válidos para renderizar
+    as opções nos SELECT fields.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+
+    # Valida que as variáveis estão no contexto do template
+    # (Testado indiretamente pela presença de <option> tags no HTML)
+    html = response.get_data(as_text=True)
+
+    # Valida que tipos válidos aparecem nas opções
+    assert "<option value=\"Notebook\">" in html, "Tipo 'Notebook' não encontrado nas opções"
+    assert "<option value=\"Desktop\">" in html, "Tipo 'Desktop' não encontrado nas opções"
+    assert "<option value=\"Celular\">" in html, "Tipo 'Celular' não encontrado nas opções"
+
+    # Valida que setores válidos aparecem nas opções
+    assert "<option value=\"T.I\">" in html or "T.I" in html, "Setor 'T.I' não encontrado nas opções"
+    assert "<option value=\"RH\">" in html, "Setor 'RH' não encontrado nas opções"
+    assert "<option value=\"Financeiro\">" in html, "Setor 'Financeiro' não encontrado nas opções"
+
+
+def test_asset_summary_endpoint_returns_structured_resumo(authenticated_client):
+    """
+    Valida que o endpoint GET /ativos/<id>/resumo retorna um resumo
+    estruturado do ativo com as seções principais.
+
+    Resumo esperado contém:
+    - secao_principal (ID, tipo, marca, modelo, status)
+    - secao_responsabilidade (responsável, e-mail, setor)
+    - secao_ciclo (datas, documentação)
+    - secao_tecnica (campos específicos por tipo)
+    - secao_tecnica_restrita (opcional, visível apenas para admin)
+    """
+    client = authenticated_client
+
+    # Cria um ativo de teste
+    response = client.post(
+        "/ativos",
+        json={
+            "id_ativo": "TEST-001",
+            "tipo_ativo": "Notebook",
+            "marca": "Dell",
+            "modelo": "Inspiron",
+            "setor": "T.I",
+            "status": "Disponível",
+            "data_entrada": "2026-04-01",
+            "usuario_responsavel": "João",
+        },
+        headers={"X-Requested-With": "fetch"}
+    )
+    assert response.status_code == 201
+
+    # Requisita o resumo
+    response = client.get(
+        "/ativos/TEST-001/resumo",
+        headers={"X-Requested-With": "fetch"}
+    )
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    assert payload["ok"] is True
+
+    resumo = payload.get("resumo", {})
+
+    # Valida estrutura básica do resumo
+    assert "secao_principal" in resumo, "resumo deveria ter secao_principal"
+    assert "secao_responsabilidade" in resumo, "resumo deveria ter secao_responsabilidade"
+    assert "secao_ciclo" in resumo, "resumo deveria ter secao_ciclo"
+    assert "secao_tecnica" in resumo, "resumo deveria ter secao_tecnica"
+
+    # Valida que secao_principal tem dados corretos
+    principal = resumo["secao_principal"]
+    assert principal.get("id") == "TEST-001", f"ID do ativo incorreto: {principal.get('id')}"
+    assert principal.get("tipo") == "Notebook", "Tipo do ativo incorreto"
+    assert principal.get("marca") == "Dell", "Marca do ativo incorreta"
+
+    # Valida que secao_tecnica tem campos para Notebook
+    tecnica = resumo.get("secao_tecnica", {})
+    campos_tecnica = tecnica.get("campos", {})
+    assert "processador" in campos_tecnica, "Notebook deveria ter campo 'processador'"
+    assert "ram" in campos_tecnica, "Notebook deveria ter campo 'ram'"
+    assert "armazenamento" in campos_tecnica, "Notebook deveria ter campo 'armazenamento'"
+
+
+def test_asset_summary_hides_technical_fields_from_common_user(authenticated_client):
+    """
+    Valida que o resumo NÃO inclui campos técnicos restritos
+    (AnyDesk, TeamViewer, hostname, serial, código_interno)
+    quando o usuário é um usuário comum (perfil != admin).
+
+    Seção 'secao_tecnica_restrita' deveria estar vazia ou ausente.
+    """
+    client = authenticated_client
+
+    # Cria um ativo com campos técnicos sensíveis
+    response = client.post(
+        "/ativos",
+        json={
+            "id_ativo": "TEST-002",
+            "tipo_ativo": "Desktop",
+            "marca": "HP",
+            "modelo": "ProDesk",
+            "setor": "Financeiro",
+            "status": "Disponível",
+            "data_entrada": "2026-04-01",
+            "usuario_responsavel": "Maria",
+            "teamviewer_id": "SECRET123",
+            "anydesk_id": "ANOTHER-SECRET",
+            "hostname": "FIN-DESK-01",
+            "serial": "SN12345",
+            "codigo_interno": "INT-001",
+        },
+        headers={"X-Requested-With": "fetch"}
+    )
+    assert response.status_code == 201
+
+    # Requisita o resumo como usuário comum (perfil padrão na sessão)
+    response = client.get(
+        "/ativos/TEST-002/resumo",
+        headers={"X-Requested-With": "fetch"}
+    )
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    resumo = payload.get("resumo", {})
+
+    # Valida que campos técnicos restritos NÃO aparecem
+    assert "secao_tecnica_restrita" not in resumo or \
+           not resumo.get("secao_tecnica_restrita"), \
+        "Usuário comum não deveria ver secao_tecnica_restrita"
+
+
+def test_asset_summary_shows_technical_fields_to_admin(authenticated_client):
+    """
+    Valida que o resumo INCLUI campos técnicos restritos
+    (AnyDesk, TeamViewer, hostname, serial, código_interno)
+    quando o usuário é admin (perfil == 'adm' ou 'admin').
+
+    Seção 'secao_tecnica_restrita' deveria conter todos os campos restritos.
+
+    Nota: Este teste valida a função _resumo_ativo_para_modal com dados mock,
+    pois o FakeAtivosService não persiste todos os campos técnicos.
+    """
+    # Testa a função _resumo_ativo_para_modal diretamente com dados mock
+    from web_app.routes.ativos_routes import _resumo_ativo_para_modal
+
+    # Mock de ativo completo com todos os campos técnicos
+    ativo_mock = {
+        "id": "TEST-003",
+        "tipo": "Notebook",
+        "marca": "Lenovo",
+        "modelo": "ThinkPad",
+        "status": "Disponível",
+        "usuario_responsavel": "Admin",
+        "email_responsavel": "admin@example.com",
+        "setor": "T.I",
+        "localizacao": "Sala IT",
+        "data_entrada": "2026-04-01",
+        "data_saida": None,
+        "nota_fiscal": "NF-123",
+        "garantia": "12 meses",
+        # Campos técnicos
+        "processador": "Intel i7",
+        "ram": "16GB",
+        "armazenamento": "512GB SSD",
+        "sistema_operacional": "Windows 11",
+        "teamviewer_id": "SECRET123",
+        "anydesk_id": "ANOTHER-SECRET",
+        "hostname": "IT-NB-01",
+        "serial": "SN67890",
+        "codigo_interno": "INT-002",
+    }
+
+    # Chama a função com eh_admin=True
+    resumo = _resumo_ativo_para_modal(ativo_mock, eh_admin=True)
+
+    # Valida que campos técnicos restritos APARECEM para admin
+    assert "secao_tecnica_restrita" in resumo, \
+        "Admin deveria ver secao_tecnica_restrita"
+
+    tecnica_restrita = resumo.get("secao_tecnica_restrita", {})
+    assert tecnica_restrita.get("teamviewer_id") == "SECRET123", \
+        "Admin deveria ver teamviewer_id"
+    assert tecnica_restrita.get("anydesk_id") == "ANOTHER-SECRET", \
+        "Admin deveria ver anydesk_id"
+    assert tecnica_restrita.get("hostname") == "IT-NB-01", \
+        "Admin deveria ver hostname"
+    assert tecnica_restrita.get("serial") == "SN67890", \
+        "Admin deveria ver serial"
+    assert tecnica_restrita.get("codigo_interno") == "INT-002", \
+        "Admin deveria ver codigo_interno"
