@@ -634,11 +634,12 @@ class AtivosService:
                     empresa_id
                 )
                 VALUES (
+                    # A lista de placeholders precisa manter 1:1 com as colunas acima.
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s
+                    %s, %s, %s, %s, %s
                 )
                 """,
                 (

@@ -257,7 +257,10 @@ def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
     id_gerado = service.criar_ativo(ativo_legado, user_id=1)
 
     assert id_gerado == "OPU-000001"
-    assert any("INSERT INTO ativos" in sql for sql, _params in cursor.statements)
+    # Garante que o INSERT continua com a mesma quantidade de colunas e valores.
+    insert_statements = [item for item in cursor.statements if "INSERT INTO ativos" in item[0]]
+    assert insert_statements
+    assert len(insert_statements[0][1]) == 45
 
 
 @pytest.mark.parametrize(
