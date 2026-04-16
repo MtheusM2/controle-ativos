@@ -40,15 +40,16 @@
             </colgroup>
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Tipo</th>
-                    <th>Marca</th>
-                    <th>Modelo</th>
-                    <th>Responsável</th>
-                    <th>Departamento</th>
-                    <th>Status</th>
-                    <th>Data entrada</th>
-                    <th>Data saída</th>
+                    <!-- Fase 3 Round 3: Cabeçalhos clicáveis para ordenação -->
+                    <th data-sort-field="id" style="cursor: pointer;">ID</th>
+                    <th data-sort-field="tipo" style="cursor: pointer;">Tipo</th>
+                    <th data-sort-field="marca" style="cursor: pointer;">Marca</th>
+                    <th data-sort-field="modelo" style="cursor: pointer;">Modelo</th>
+                    <th data-sort-field="usuario_responsavel" style="cursor: pointer;">Responsável</th>
+                    <th data-sort-field="departamento" style="cursor: pointer;">Departamento</th>
+                    <th data-sort-field="status" style="cursor: pointer;">Status</th>
+                    <th data-sort-field="data_entrada" style="cursor: pointer;">Data entrada</th>
+                    <th data-sort-field="data_saida" style="cursor: pointer;">Data saída</th>
                     <!-- Removido em Fase 3 Round 2: coluna Anexos — indicador agora aparece junto às ações -->
                     <!-- Removido em Fase 3 Round 2 Correction: sticky-col-right removido — scroll horizontal limpo -->
                     <th>Ações</th>
@@ -279,6 +280,11 @@
     // const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
 
     let currentFilters = {};
+    // Fase 3 Round 3: Suporte a ordenação clicável
+    let currentSort = {
+        field: "id",        // Campo de ordenação padrão
+        direction: "asc"    // Direção padrão: crescente
+    };
     // let currentAttachmentAssetId = null;
 
     // Usa placeholder textual para preservar IDs de ativo como string (ex.: 001, A-001).
@@ -423,9 +429,18 @@
         return div.innerHTML;
     }
 
+    // Fase 3 Round 3: Cria header clicável com indicador de ordenação
+    function renderSortableHeader(label, field) {
+        const isActive = field === currentSort.field;
+        const indicator = isActive ? (currentSort.direction === "asc" ? " ↑" : " ↓") : "";
+        const style = isActive ? 'style="color: #2c3e50; font-weight: bold;"' : 'style="cursor: pointer; color: #555;"';
+        return `<th ${style} data-sort-field="${field}">${label}${indicator}</th>`;
+    }
+
     // Renderiza tabela de ativos com suporte a destaque de ativo recém-criado.
     // @param {Array} assets - Lista de ativos a renderizar
     // @param {string} highlightId - ID do ativo a destacar com badge "NOVO" (opcional)
+    // Fase 3 Round 3: Badge NOVO simplificado — sem coloração de fundo na linha, só a badge discreta
     function renderAssets(assets, highlightId = null) {
         if (!assets.length) {
             assetTableBody.innerHTML = `<tr><td colspan="10">Nenhum ativo encontrado para os filtros selecionados.</td></tr>`;
@@ -435,17 +450,17 @@
         assetTableBody.innerHTML = assets.map((asset) => {
             // Verifica se este ativo deve ser destacado com badge "NOVO".
             const isNewAsset = highlightId && String(asset.id).trim() === String(highlightId).trim();
-            const rowStyle = isNewAsset ? 'style="background-color: #fffacd; border-left: 4px solid #ffc107;"' : '';
+            // Removido: rowStyle com background-color e border-left — apenas badge discreta
             // Resolve URLs por linha sem encadear replace em Array (evita erro JS em runtime).
             const encodedId = encodeURIComponent(asset.id || "");
             const editUrl = "{{ url_for('editar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodedId);
             const detailUrl = "{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodedId);
 
             return `
-                <tr data-asset-id="${escapeHtml(asset.id)}" ${rowStyle}>
+                <tr data-asset-id="${escapeHtml(asset.id)}">
                     <td>
                         ${escapeHtml(asset.id)}
-                        ${isNewAsset ? '<span style="margin-left: 0.5rem; display: inline-block; background: #ffc107; color: #333; padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: bold;">NOVO</span>' : ''}
+                        ${isNewAsset ? '<span style="margin-left: 0.5rem; display: inline-block; background: #fff3cd; color: #856404; padding: 0.25rem 0.6rem; border: 1px solid #ffeaa7; border-radius: 3px; font-size: 0.7rem; font-weight: bold; white-space: nowrap;">NOVO</span>' : ''}
                     </td>
                     <td>${escapeHtml(asset.tipo)}</td>
                     <td>${escapeHtml(asset.marca)}</td>
@@ -485,10 +500,17 @@
     // Carrega ativos da API e renderiza tabela com suporte a destaque de novo ativo.
     // @param {Object} filters - Filtros a aplicar na busca
     // @param {string} highlightId - ID do ativo a destacar com badge "NOVO" (opcional)
+    // Fase 3 Round 3: Suporte a ordenação clicável
     async function loadAssets(filters = currentFilters, highlightId = null) {
         try {
             currentFilters = filters;
-            const queryString = buildQueryString(filters);
+            let queryString = buildQueryString(filters);
+
+            // Adiciona parâmetros de ordenação à query string
+            if (currentSort.field) {
+                const separator = queryString ? "&" : "?";
+                queryString += separator + `ordenar_por=${currentSort.field}&ordem=${currentSort.direction}`;
+            }
 
             const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}" + queryString, { method: "GET" });
             if (!response.ok) {
@@ -498,11 +520,35 @@
 
             clearMessage();
             renderAssets(payload.ativos || [], highlightId);
+            updateSortIndicators();
         } catch (error) {
             // Mantém o usuário informado quando ocorrer exceção de script no fluxo da listagem.
             console.error("Falha no fluxo de listagem de ativos:", error);
             showMessage("danger", "Falha ao renderizar a listagem de ativos. Recarregue a página.");
             assetTableBody.innerHTML = `<tr><td colspan="10">Erro ao carregar ativos.</td></tr>`;
+        }
+    }
+
+    // Fase 3 Round 3: Atualiza indicadores visuais de ordenação no header
+    function updateSortIndicators() {
+        const headerRow = document.querySelector("thead tr");
+        if (!headerRow) return;
+
+        // Remove todas as marcações anteriores
+        headerRow.querySelectorAll("th").forEach((th) => {
+            th.style.fontWeight = "normal";
+            th.style.color = "#555";
+            // Remove indicador antigo se houver
+            th.textContent = th.textContent.replace(/\s+[↑↓]$/, "");
+        });
+
+        // Marca o header ativo
+        const activeHeader = headerRow.querySelector(`th[data-sort-field="${currentSort.field}"]`);
+        if (activeHeader) {
+            activeHeader.style.fontWeight = "bold";
+            activeHeader.style.color = "#2c3e50";
+            const indicator = currentSort.direction === "asc" ? " ↑" : " ↓";
+            activeHeader.textContent += indicator;
         }
     }
 
@@ -538,6 +584,26 @@
         } else {
             toggleIcon.style.transform = "rotate(0deg)";
         }
+    });
+
+    // Fase 3 Round 3: Handler para cliques em headers de ordenação
+    document.querySelectorAll("thead th[data-sort-field]").forEach((header) => {
+        header.addEventListener("click", (event) => {
+            const field = header.getAttribute("data-sort-field");
+            if (!field) return;
+
+            // Se clicou no mesmo campo, alterna a direção
+            if (currentSort.field === field) {
+                currentSort.direction = currentSort.direction === "asc" ? "desc" : "asc";
+            } else {
+                // Novo campo — começa com asc
+                currentSort.field = field;
+                currentSort.direction = "asc";
+            }
+
+            // Recarrega com a nova ordenação
+            loadAssets(currentFilters);
+        });
     });
 
     document.getElementById("open-filter-modal").addEventListener("click", () => openModal("filter-modal"));

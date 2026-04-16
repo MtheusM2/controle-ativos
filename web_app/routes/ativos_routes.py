@@ -182,8 +182,7 @@ def _serializar_ativo(ativo: Ativo) -> dict:
         "anydesk_id": getattr(ativo, "anydesk_id", "") or "",
         "nome_equipamento": getattr(ativo, "nome_equipamento", "") or "",
         "hostname": getattr(ativo, "hostname", "") or "",
-        "imei_1": getattr(ativo, "imei_1", "") or "",
-        "imei_2": getattr(ativo, "imei_2", "") or "",
+        # Fase 3 Round 3: Removido IMEI da serialização — escopo de celular simplificado
         "numero_linha": getattr(ativo, "numero_linha", "") or "",
         "operadora": getattr(ativo, "operadora", "") or "",
         "conta_vinculada": getattr(ativo, "conta_vinculada", "") or "",
@@ -290,10 +289,12 @@ def _resumo_ativo_para_modal(ativo: dict, eh_admin: bool) -> dict:
         }
     elif tipo == "celular":
         resumo["secao_tecnica"]["label"] = "Especificações de Celular"
+        # Fase 3 Round 3: Removido IMEI do resumo — escopo simplificado
         resumo["secao_tecnica"]["campos"] = {
-            "imei_1": ativo.get("imei_1", ""),
             "numero_linha": ativo.get("numero_linha", ""),
             "operadora": ativo.get("operadora", ""),
+            "conta_vinculada": ativo.get("conta_vinculada", ""),
+            "armazenamento": ativo.get("armazenamento", ""),
         }
 
     # Seção restrita — visível apenas para admin
@@ -351,8 +352,7 @@ def _mapa_campos_ativo(dados: dict) -> dict:
         "anydesk_id": dados.get("anydesk_id", "") or None,
         "nome_equipamento": dados.get("nome_equipamento", "") or None,
         "hostname": dados.get("hostname", "") or None,
-        "imei_1": dados.get("imei_1", "") or None,
-        "imei_2": dados.get("imei_2", "") or None,
+        # Fase 3 Round 3: Removido IMEI — escopo de celular simplificado
         "numero_linha": dados.get("numero_linha", "") or None,
         "operadora": dados.get("operadora", "") or None,
         "conta_vinculada": dados.get("conta_vinculada", "") or None,
@@ -410,8 +410,7 @@ def _ativo_do_payload(dados: dict) -> Ativo:
         anydesk_id=mapa["anydesk_id"],
         nome_equipamento=mapa["nome_equipamento"],
         hostname=mapa["hostname"],
-        imei_1=mapa["imei_1"],
-        imei_2=mapa["imei_2"],
+        # Fase 3 Round 3: Removido IMEI da construção de Ativo
         numero_linha=mapa["numero_linha"],
         operadora=mapa["operadora"],
         conta_vinculada=mapa["conta_vinculada"],

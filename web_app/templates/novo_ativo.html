@@ -179,9 +179,9 @@
                 <div class="field-group"><label for="desktop_anydesk_id">AnyDesk ID</label><input type="text" id="desktop_anydesk_id" data-field-alias="anydesk_id" class="input-control"></div>
             </div>
 
+            <!-- Fase 3 Round 3: Celular simplificado sem IMEI -->
             <div id="specs-celular" class="asset-specs-group" hidden>
-                <div class="field-group"><label for="imei_1">IMEI 1</label><input type="text" id="imei_1" name="imei_1" class="input-control" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="99 999999 999999 9"></div>
-                <div class="field-group"><label for="imei_2">IMEI 2</label><input type="text" id="imei_2" name="imei_2" class="input-control" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="99 999999 999999 9"></div>
+                <!-- Removido: IMEI 1, IMEI 2 — escopo reduzido conforme requisitos atualizados -->
                 <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" inputmode="tel" maxlength="19" autocomplete="off" placeholder="(11) 98765-4321"></div>
                 <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
                 <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control"></div>
@@ -356,27 +356,14 @@
         return (digits.length === 12 || digits.length === 13) && digits.startsWith("55");
     }
 
-    function luhnIsValid(number) {
-        let sum = 0;
-        const reversed = number.split("").reverse();
+    // Removido em Fase 3 Round 3: validação de Luhn para IMEI não mais necessária
 
-        for (let i = 0; i < reversed.length; i += 1) {
-            let digit = Number(reversed[i]);
-            if ((i + 1) % 2 === 0) {
-                digit *= 2;
-                if (digit > 9) digit -= 9;
-            }
-            sum += digit;
-        }
-
-        return sum % 10 === 0;
-    }
-
-    function isValidImei(value) {
-        const digits = onlyDigits(value);
-        if (!digits) return true;
-        return digits.length === 15 && luhnIsValid(digits);
-    }
+    // Removido em Fase 3 Round 3: validação de IMEI não mais necessária
+    // function isValidImei(value) {
+    //     const digits = onlyDigits(value);
+    //     if (!digits) return true;
+    //     return digits.length === 15 && luhnIsValid(digits);
+    // }
 
     function normalizeMoneyToBackend(value) {
         const raw = String(value || "").trim();
@@ -417,15 +404,7 @@
         return formatted;
     }
 
-    function formatImeiForDisplay(value) {
-        const digits = onlyDigits(value).slice(0, 15);
-        if (!digits) return "";
-        const g1 = digits.slice(0, 2);
-        const g2 = digits.slice(2, 8);
-        const g3 = digits.slice(8, 14);
-        const g4 = digits.slice(14, 15);
-        return [g1, g2, g3, g4].filter(Boolean).join(" ");
-    }
+    // Removido em Fase 3 Round 3: formatação de IMEI não mais necessária
 
     function validatePayloadBeforeConfirmation(body) {
         const codigoInternoRegex = /^[A-Z0-9._/-]+$/;
@@ -445,13 +424,7 @@
             return "Número da linha inválido. Informe 10 ou 11 dígitos (ou 12/13 com DDI 55).";
         }
 
-        if (!isValidImei(body.imei_1)) {
-            return "IMEI 1 inválido. Informe 15 dígitos válidos.";
-        }
-
-        if (!isValidImei(body.imei_2)) {
-            return "IMEI 2 inválido. Informe 15 dígitos válidos.";
-        }
+        // Removido em Fase 3 Round 3: validação de IMEI não mais necessária no escopo
 
         if (body.email_responsavel && !emailRegex.test(body.email_responsavel)) {
             return "E-mail do responsável inválido.";
@@ -481,8 +454,7 @@
         body.serial = normalizeIdentifier(body.serial);
         body.email_responsavel = String(body.email_responsavel || "").trim().toLowerCase();
         body.numero_linha = onlyDigits(body.numero_linha);
-        body.imei_1 = onlyDigits(body.imei_1);
-        body.imei_2 = onlyDigits(body.imei_2);
+        // Removido em Fase 3 Round 3: normalização de IMEI não mais necessária
 
         const normalizedMoney = normalizeMoneyToBackend(body.valor);
         body.valor = normalizedMoney === null ? body.valor : normalizedMoney;
@@ -493,8 +465,7 @@
         const serialInput = document.getElementById("serial");
         const valorInput = document.getElementById("valor");
         const numeroLinhaInput = document.getElementById("numero_linha");
-        const imei1Input = document.getElementById("imei_1");
-        const imei2Input = document.getElementById("imei_2");
+        // Removido em Fase 3 Round 3: máscaras de IMEI não mais necessárias
 
         if (codigoInternoInput) {
             codigoInternoInput.addEventListener("input", () => {
@@ -525,13 +496,6 @@
                 numeroLinhaInput.value = formatPhoneForDisplay(numeroLinhaInput.value);
             });
         }
-
-        [imei1Input, imei2Input].forEach((input) => {
-            if (!input) return;
-            input.addEventListener("input", () => {
-                input.value = formatImeiForDisplay(input.value);
-            });
-        });
     }
 
     function setAttachmentLoading(message = "Carregando documentos...") {
