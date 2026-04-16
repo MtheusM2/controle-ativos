@@ -56,6 +56,71 @@ def test_assets_listing_template_does_not_chain_replaceall_on_mapped_array(authe
     assert ").replaceAll(\"__ID__\"" not in html
 
 
+def test_assets_listing_template_does_not_leave_raw_jinja_inside_javascript(authenticated_client):
+    """
+    Regressão: o navegador não pode receber expressão Jinja literal dentro do script,
+    pois isso gera SyntaxError e impede o carregamento da tabela.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "{{ status_validos | tojson }}" not in html
+    assert "{{ tipos_validos | tojson }}" not in html
+    assert "{{ setores_validos | tojson }}" not in html
+
+
+def test_assets_listing_quick_filters_are_limited_to_strategic_columns(authenticated_client):
+    """
+    Regressão: filtro rápido no cabeçalho deve existir apenas para tipo,
+    departamento, status e data de entrada.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    # Estratégicos: habilitados explicitamente com quickFilter true.
+    assert 'tipo: { label: "Tipo", sortable: true, quickFilter: true }' in html
+    assert 'departamento: { label: "Departamento", sortable: true, quickFilter: true }' in html
+    assert 'status: { label: "Status", sortable: true, quickFilter: true }' in html
+    assert 'data_entrada: { label: "Data entrada", sortable: true, quickFilter: true }' in html
+
+    # Não estratégicos: devem permanecer sem filtro rápido.
+    assert 'id: { label: "ID", sortable: true, quickFilter: false }' in html
+    assert 'marca: { label: "Marca", sortable: true, quickFilter: false }' in html
+    assert 'modelo: { label: "Modelo", sortable: true, quickFilter: false }' in html
+    assert 'usuario_responsavel: { label: "Responsável", sortable: true, quickFilter: false }' in html
+    assert 'data_saida: { label: "Data saída", sortable: true, quickFilter: false }' in html
+
+
+def test_assets_listing_template_has_separate_controls_for_sort_and_quick_filter(authenticated_client):
+    """
+    Regressão de UX: título da coluna ordena e botão dedicado abre filtro rápido,
+    evitando clique ambíguo no cabeçalho.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "header-sort-button" in html
+    assert "quick-filter-icon-btn" in html
+
+
+def test_assets_listing_template_includes_date_quick_filter_presets(authenticated_client):
+    """
+    Regressão: filtro rápido de data deve oferecer atalhos operacionais padronizados.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "function renderQuickFilterDataEntrada(container)" in html
+    assert "Mais recentes" in html
+    assert "Mais antigos" in html
+    assert "Hoje" in html
+    assert "Últimos 7 dias" in html
+    assert "Este mês" in html
+
+
 def test_asset_create_template_includes_escape_html_for_confirmation_modal(authenticated_client):
     """
     Regressão: a modal de confirmação do cadastro depende de escapeHtml().
