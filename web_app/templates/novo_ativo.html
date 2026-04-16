@@ -482,37 +482,74 @@
     });
 
     // Renderiza o conteúdo da modal de confirmação com dados preenchidos.
-    // Mostra ao usuário os principais campos antes de confirmar.
+    // Mostra todos os campos principais organizados por seção antes de confirmar.
     function renderConfirmationModal(data) {
         const detailsDiv = document.getElementById("confirm-asset-details");
         if (!detailsDiv) return;
 
-        // Mapeia dados para exibição amigável (só mostra campos preenchidos).
-        const fields = [
-            { label: "Tipo", value: data.tipo_ativo || data.tipo },
-            { label: "Marca", value: data.marca },
-            { label: "Modelo", value: data.modelo },
-            { label: "Serial", value: data.serial },
-            { label: "Responsável", value: data.usuario_responsavel },
-            { label: "Setor", value: data.setor || data.departamento },
-            { label: "Localidade", value: data.localizacao },
-            { label: "Condição", value: data.condicao },
-            { label: "Status", value: data.status || "Disponível" },
-            { label: "Observações", value: data.observacoes }
-        ];
+        // Organiza dados em seções para melhor visualização na confirmação.
+        const sections = {
+            "Identificação": [
+                { label: "Patrimônio / Código", value: data.codigo_interno },
+                { label: "ID do Ativo", value: "(será gerado automaticamente)" }
+            ],
+            "Classificação": [
+                { label: "Tipo", value: data.tipo_ativo || data.tipo },
+                { label: "Marca", value: data.marca },
+                { label: "Modelo", value: data.modelo },
+                { label: "Serial", value: data.serial }
+            ],
+            "Localização e Setor": [
+                { label: "Localidade", value: data.localizacao },
+                { label: "Setor / Departamento", value: data.setor || data.departamento }
+            ],
+            "Responsável": [
+                { label: "Responsável", value: data.usuario_responsavel },
+                { label: "E-mail", value: data.email_responsavel }
+            ],
+            "Dados Operacionais": [
+                { label: "Condição", value: data.condicao },
+                { label: "Status", value: data.status || "Disponível" },
+                { label: "Data de Entrada", value: data.data_entrada },
+                { label: "Data de Saída", value: data.data_saida }
+            ],
+            "Valor e Documentação": [
+                { label: "Data de Compra", value: data.data_compra },
+                { label: "Valor", value: data.valor },
+                { label: "Garantia", value: data.garantia },
+                { label: "Nota Fiscal", value: data.nota_fiscal }
+            ],
+            "Detalhes Técnicos": [
+                { label: "Observações", value: data.observacoes },
+                { label: "Especificações", value: data.detalhes_tecnicos }
+            ]
+        };
 
-        // Renderiza apenas campos com valores (não vazio).
-        const fieldsHtml = fields
-            .filter(f => f.value && String(f.value).trim())
-            .map(f => `
-                <div style="display: flex; margin-bottom: 0.5rem;">
-                    <strong style="min-width: 120px; color: #333;">${f.label}:</strong>
-                    <span style="color: #666;">${escapeHtml(String(f.value))}</span>
-                </div>
-            `)
-            .join("");
+        // Renderiza seções com dados preenchidos.
+        let html = "";
+        for (const [secaoNome, camposDaSeccao] of Object.entries(sections)) {
+            // Filtra campos com valor para a seção.
+            const camposFull = camposDaSeccao.filter(f => f.value && String(f.value).trim());
 
-        detailsDiv.innerHTML = fieldsHtml || "<p>Nenhum dado preenchido.</p>";
+            if (camposFull.length === 0) continue; // Pula seções vazias.
+
+            // Renderiza cabeçalho da seção.
+            html += `<div style="margin-bottom: 1rem;">`;
+            html += `<h4 style="margin: 0.5rem 0; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 0.5rem;">${secaoNome}</h4>`;
+
+            // Renderiza campos da seção.
+            for (const campo of camposFull) {
+                html += `
+                    <div style="display: flex; margin-bottom: 0.4rem; font-size: 0.95rem;">
+                        <span style="min-width: 140px; color: #555; font-weight: 500;">${campo.label}:</span>
+                        <span style="color: #333; flex: 1;">${escapeHtml(String(campo.value))}</span>
+                    </div>
+                `;
+            }
+            html += `</div>`;
+        }
+
+        detailsDiv.innerHTML = html || `<p style="text-align: center; color: #999;">Nenhum dado preenchido.</p>`;
     }
 
     // Handler do botão "Confirmar e salvar" na modal de confirmação.
