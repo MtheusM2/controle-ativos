@@ -137,6 +137,12 @@
                         </select>
                     </div>
 
+                    <!-- Filtro de localidade: localização física do ativo -->
+                    <div class="field-group">
+                        <label for="filter-localizacao">Localidade</label>
+                        <input type="text" id="filter-localizacao" class="input-control" placeholder="Ex: Sala 101, 2º andar">
+                    </div>
+
                     <!-- Sub-seção: Documentação -->
                     <div class="filter-subsection-title">Documentação</div>
 
@@ -348,10 +354,13 @@
     }
 
     async function requestJson(url, options = {}) {
+        // Reaproveita token global exposto em base.html para hardening CSRF.
+        const csrfToken = (window.APP_CSRF_TOKEN || "").trim();
         const response = await fetch(url, {
             headers: {
                 "Content-Type": "application/json",
                 "X-Requested-With": "fetch",
+                ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
                 ...(options.headers || {})
             },
             ...options
@@ -361,6 +370,10 @@
         return { response, payload };
     }
 
+    // Coleta valores dos campos de filtro do modal e monta objeto para requisição.
+    // Converte valores vazios para undefined para não incluir na query string.
+    // Suportados: id, tipo, marca, modelo, responsável, departamento, localidade, status,
+    // presença de garantia/nota fiscal, períodos de data entrada/saída.
     function collectFiltersFromModal() {
         return {
             id_ativo: document.getElementById("filter-id").value || undefined,
@@ -369,6 +382,7 @@
             modelo: document.getElementById("filter-modelo").value || undefined,
             usuario_responsavel: document.getElementById("filter-usuario_responsavel").value || undefined,
             departamento: document.getElementById("filter-departamento").value || undefined,
+            localizacao: document.getElementById("filter-localizacao").value || undefined,
             status: document.getElementById("filter-status").value || undefined,
             tem_garantia: document.getElementById("filter-tem-garantia").value || undefined,
             tem_nota_fiscal: document.getElementById("filter-tem-nota").value || undefined,

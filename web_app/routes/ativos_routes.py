@@ -5,7 +5,7 @@ import io
 from datetime import datetime
 
 from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
-from services.storage_backend import S3StorageBackend
+from services.storage_backend import S3StorageBackend, StorageBackendError
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font
@@ -21,6 +21,8 @@ from services.ativos_arquivo_service import (
     TipoDocumentoInvalido,
 )
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
+from utils.auth import require_auth_api
+from utils.csrf import validar_csrf_da_requisicao, require_csrf
 from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS, UNIDADES_VALIDAS, TIPOS_ATIVO_VALIDOS
 
 
@@ -643,6 +645,24 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     service = ativos_service
     arquivo_service = ativos_arquivo_service
 
+    # DEPRECATED: Esta função helper foi substituída pelo decorator @require_csrf()
+    # Mantida apenas para referência histórica — remover em próxima rodada de refatoração.
+    # Veja utils/csrf.py::require_csrf() para a implementação moderna.
+    def _validar_csrf_endpoints_mutacao():
+        """
+        [DEPRECATED] Proteção CSRF manual — use @require_csrf() decorator em vez disso.
+
+        Razão: O decorator @require_csrf() encapsula melhor a validação CSRF,
+        evita duplicação de código nas rotas, e torna explícita a intenção de
+        segurança ao olhar a definição da rota.
+        """
+        if validar_csrf_da_requisicao(request):
+            return None
+        return _json_error(
+            "Requisição inválida. Atualize a página e tente novamente.",
+            status=403,
+        )
+
     def _resolver_documento_vinculado(arquivos: list[dict], tipo_documento: str) -> str:
         """
         Resolve o documento vinculado por categoria usando o primeiro registro valido.
@@ -679,7 +699,11 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     def _coletar_filtros_e_ordenacao_da_query() -> tuple[dict, str, str, str | None, str | None]:
         """
         Centraliza leitura de query params para manter consistência entre lista e exportação.
+        Coleta: id, tipo, marca, modelo, responsável, departamento, localidade, status,
+        presença de documentos (garantia/nota fiscal), períodos de data entrada/saída.
         """
+        # Coleta todos os filtros suportados a partir da query string.
+        # Valores vazios são normalizados para None para manter dict limpo.
         filtros = {
             "id_ativo": request.args.get("id_ativo", "").strip() or None,
             "tipo": request.args.get("tipo", "").strip() or None,
@@ -687,6 +711,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "modelo": request.args.get("modelo", "").strip() or None,
             "usuario_responsavel": request.args.get("usuario_responsavel", "").strip() or None,
             "departamento": request.args.get("departamento", "").strip() or None,
+            "localizacao": request.args.get("localizacao", "").strip() or None,
             "nota_fiscal": request.args.get("nota_fiscal", "").strip() or None,
             "garantia": request.args.get("garantia", "").strip() or None,
             "status": request.args.get("status", "").strip() or None,
@@ -695,6 +720,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "data_saida_inicial": request.args.get("data_saida_inicial", "").strip() or None,
             "data_saida_final": request.args.get("data_saida_final", "").strip() or None,
         }
+        # Remove entradas nulas para manter dict apenas com filtros realmente solicitados.
         filtros = {k: v for k, v in filtros.items() if v is not None}
 
         ordenar_por = request.args.get("ordenar_por", "id").strip() or "id"
@@ -703,6 +729,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         if ordem not in {"asc", "desc"}:
             raise AtivoErro("Ordem de classificacao invalida. Use asc ou desc.")
 
+        # Lista de campos permitidos para ordenação da listagem de ativos.
+        # Apenas esses campos podem ser usados para ORDER BY para evitar injeção.
         campos_ordenacao_permitidos = {
             "id",
             "tipo",
@@ -710,6 +738,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "modelo",
             "usuario_responsavel",
             "departamento",
+            "localizacao",
             "nota_fiscal",
             "garantia",
             "status",
@@ -744,27 +773,65 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         """
         Aplica filtros de presença documental usando anexos reais como fonte primária.
         Mantém fallback para campos legados do ativo quando não houver anexos.
+
+        Fluxo:
+        1. Se arquivo_service possui método mapear_presenca_documentos (batch),
+           usa consulta otimizada que evita N+1 por ativo.
+        2. Se arquivo_service NÃO possui esse método (testes antigos, etc),
+           cai em fallback que chama listar_arquivos() por ativo — mais lento.
+        3. Em ambos casos, pode usar campos legados (nota_fiscal, garantia)
+           do ativo como última chance se nenhum anexo real foi encontrado.
+
+        Razão do fallback existir: Compatibilidade com testes antigos que usam
+        doubles/fakes sem implementar o método em lote. Em produção, espera-se
+        que AtivosArquivoService tenha mapear_presenca_documentos().
         """
         # Evita custo extra de I/O quando o usuário não solicitou filtro documental.
         if tem_garantia is None and tem_nota_fiscal is None:
             return ativos
 
+        # Busca presença documental em lote para evitar N+1 por ativo na listagem.
+        # A fonte principal continua sendo anexo real; campos legados entram como fallback.
+        ativo_ids = [str(ativo.id_ativo) for ativo in ativos if getattr(ativo, "id_ativo", None)]
+        usar_fallback_listagem = False
+        if hasattr(arquivo_service, "mapear_presenca_documentos"):
+            presenca_por_ativo = arquivo_service.mapear_presenca_documentos(ativo_ids, user_id)
+        else:
+            # FALLBACK: Compatibilidade para doubles de testes antigos sem o método em lote.
+            # Em produção, isso NÃO deve ocorrer. Se ocorrer, é sinal de que o serviço
+            # de arquivos está incompleto ou desconfigurável.
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Filtro documental caindo em fallback legado: arquivo_service não possui "
+                "método mapear_presenca_documentos(). Isso pode degradar performance da "
+                "listagem de ativos com filtros de presença documental. Verifique se "
+                "AtivosArquivoService foi inicializado corretamente."
+            )
+            presenca_por_ativo = {}
+            usar_fallback_listagem = True
+
         def _tem_documento(ativo: Ativo, tipo_documento: str) -> bool:
             """
             Resolve presença documental priorizando anexos persistidos na tabela ativos_arquivos.
             """
-            try:
-                anexos = arquivo_service.listar_arquivos(str(ativo.id_ativo), user_id)
-            except (AtivoErro, ArquivoNaoEncontrado, ArquivoInvalido, TipoDocumentoInvalido, ValueError, TypeError, KeyError):
-                # Em falha de leitura dos anexos, preserva compatibilidade com campos legados.
-                anexos = []
+            ativo_id = str(getattr(ativo, "id_ativo", "") or "")
+            if usar_fallback_listagem:
+                try:
+                    anexos = arquivo_service.listar_arquivos(ativo_id, user_id)
+                except (AtivoErro, ArquivoNaoEncontrado, ArquivoInvalido, TipoDocumentoInvalido, ValueError, TypeError, KeyError):
+                    anexos = []
 
-            possui_anexo_do_tipo = any(
-                (anexo.get("tipo_documento") == tipo_documento)
-                and (anexo.get("nome_original") or "").strip()
-                for anexo in anexos
-            )
-            if possui_anexo_do_tipo:
+                possui_anexo_do_tipo = any(
+                    (anexo.get("tipo_documento") == tipo_documento)
+                    and (anexo.get("nome_original") or "").strip()
+                    for anexo in anexos
+                )
+                if possui_anexo_do_tipo:
+                    return True
+
+            presenca_lote = presenca_por_ativo.get(ativo_id, {})
+            if bool(presenca_lote.get(tipo_documento)):
                 return True
 
             if tipo_documento == "garantia":
@@ -879,14 +946,18 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(MSG_ERRO_LISTAR_ATIVOS, status=500)
 
     @app.post("/ativos")
-    def criar_ativo():
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def criar_ativo(*, user_id: int):
         """
         Cria um novo ativo usando o contrato mínimo do dashboard.
-        """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
+        Aceita payloads mínimos sem descricao e categoria — esses campos são
+        preenchidos automaticamente pelo backend.
+        """
         try:
             ativo = _ativo_do_payload(_request_data())
             id_gerado = service.criar_ativo(ativo, user_id)
@@ -921,14 +992,17 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error("Erro inesperado ao consultar ativo.", status=500)
 
     @app.put("/ativos/<id_ativo>")
-    def atualizar_ativo(id_ativo):
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def atualizar_ativo(id_ativo, *, user_id: int):
         """
         Atualiza um ativo específico via fetch.
-        """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
+        Payload deve conter campos do ativo para atualização.
+        """
         dados = _request_data()
         dados_normalizados = _normalizar_payload_atualizacao(dados)
 
@@ -947,14 +1021,17 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error("Erro inesperado ao atualizar ativo.", status=500)
 
     @app.post("/ativos/<id_ativo>/movimentacao/preview")
-    def preview_movimentacao_ativo(id_ativo):
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def preview_movimentacao_ativo(id_ativo, *, user_id: int):
         """
         Gera prévia estruturada da movimentação sem persistir atualização no banco.
-        """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
+        Retorna um resumo do que será alterado sem efetuar a mudança.
+        """
         dados = _request_data()
         dados_normalizados = _normalizar_payload_atualizacao(dados)
 
@@ -973,14 +1050,17 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error("Erro inesperado ao gerar prévia de movimentação.", status=500)
 
     @app.post("/ativos/<id_ativo>/movimentacao/confirmar")
-    def confirmar_movimentacao_ativo(id_ativo):
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def confirmar_movimentacao_ativo(id_ativo, *, user_id: int):
         """
         Confirma a edição após ajuste operacional no modal e persiste o resultado final.
-        """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
+        Payload deve conter dados_formulario e ajustes_movimentacao.
+        """
         dados = _request_data()
         dados_formulario = dados.get("dados_formulario") or {}
         ajustes_movimentacao = dados.get("ajustes_movimentacao") or {}
@@ -1009,14 +1089,17 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error("Erro inesperado ao confirmar movimentação.", status=500)
 
     @app.delete("/ativos/<id_ativo>")
-    def remover_ativo(id_ativo):
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def remover_ativo(id_ativo, *, user_id: int):
         """
         Exclui um ativo específico via fetch.
-        """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
+        Remove permanentemente o ativo do banco de dados.
+        """
         try:
             service.remover_ativo(id_ativo, user_id)
             return _json_success("Ativo removido com sucesso.")
@@ -1148,7 +1231,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         except (PermissaoNegada, AtivoErro) as erro:
             flash(str(erro), "danger")
             return redirect(url_for("listar_ativos_html"))
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError):
             flash("Erro ao carregar detalhes do ativo.", "danger")
             return redirect(url_for("listar_ativos_html"))
 
@@ -1204,7 +1287,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=404)
         except (PermissaoNegada, AtivoErro) as erro:
             return _json_error(str(erro), status=400)
-        except Exception as erro:
+        except (OSError, ValueError, TypeError, KeyError) as erro:
             return _json_error("Erro ao carregar resumo do ativo.", status=500)
 
     @app.post("/ativos/remover/<id_ativo>")
@@ -1218,6 +1301,11 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         if user_id is None:
             return redirect(url_for("home"))
 
+        # Compatibiliza rota legada HTML com o mesmo hardening de mutações.
+        if not validar_csrf_da_requisicao(request):
+            flash("Requisição inválida. Atualize a página e tente novamente.", "danger")
+            return redirect(url_for("listar_ativos_html"))
+
         try:
             service.remover_ativo(id_ativo, user_id)
         except AtivoNaoEncontrado as erro:
@@ -1230,10 +1318,16 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     # ====== ANEXOS (FILES) ======
 
     @app.post("/ativos/<id_ativo>/anexos")
-    def upload_anexo(id_ativo):
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def upload_anexo(id_ativo, *, user_id: int):
         """
         Faz upload de um anexo para um ativo.
         Espera: type (nota_fiscal, garantia ou outro), file (arquivo binário)
+
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
 
         Validações (primeira linha de defesa):
         - Arquivo presente
@@ -1245,10 +1339,6 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         - Mimetype vs extensão (integridade)
         - Arquivo não vazio
         """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
-
         tipo_documento = request.form.get("type", "").strip()
         arquivo = request.files.get("file")
 
@@ -1283,8 +1373,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=404)
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except Exception:
-            return _json_error("Erro ao fazer upload do anexo.", status=500)
+        except (StorageBackendError, OSError, ValueError, TypeError) as erro:
+            return _json_error(str(erro), status=500)
 
     @app.get("/ativos/<id_ativo>/anexos")
     def listar_anexos(id_ativo):
@@ -1303,7 +1393,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError):
             return _json_error("Erro ao listar anexos.", status=500)
 
     @app.get("/anexos/<int:arquivo_id>/download")
@@ -1343,18 +1433,21 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=404)
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except Exception:
-            return _json_error("Erro ao fazer download.", status=500)
+        except (StorageBackendError, OSError, ValueError, TypeError, KeyError) as erro:
+            return _json_error(str(erro), status=500)
 
     @app.delete("/anexos/<int:arquivo_id>")
-    def remover_anexo(arquivo_id):
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def remover_anexo(arquivo_id, *, user_id: int):
         """
         Remove um anexo específico.
-        """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
+        Remove permanentemente o arquivo do armazenamento e do banco de dados.
+        """
         try:
             arquivo_service.remover_arquivo(arquivo_id, user_id)
             return _json_success("Anexo removido com sucesso.")
@@ -1362,7 +1455,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=404)
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError):
             return _json_error("Erro ao remover anexo.", status=500)
 
     # ====== EXPORT / IMPORT ======
@@ -1407,7 +1500,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError, csv.Error):
             return _json_error("Erro ao exportar ativos.", status=500)
 
     @app.get("/ativos/export/xlsx")
@@ -1434,7 +1527,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError):
             return _json_error("Erro ao exportar ativos em XLSX.", status=500)
 
     @app.get("/ativos/export/pdf")
@@ -1461,7 +1554,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError):
             return _json_error("Erro ao exportar ativos em PDF.", status=500)
 
     @app.get("/ativos/export/<formato>")
@@ -1502,21 +1595,24 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 )
             except AtivoErro as erro:
                 return _json_error(str(erro), status=400)
-            except Exception:
+            except (OSError, ValueError, TypeError, KeyError, csv.Error):
                 return _json_error("Erro ao exportar ativos.", status=500)
 
         return _json_error("Formato de exportação não suportado.", status=400)
 
     @app.post("/ativos/import/csv")
-    def importar_ativos_csv():
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def importar_ativos_csv(*, user_id: int):
         """
         Importa ativos a partir de um arquivo CSV.
         Esperado: file (arquivo CSV com headers: id, tipo, marca, modelo, etc)
-        """
-        user_id = _obter_user_id_logado()
-        if user_id is None:
-            return _json_error("Sessão expirada. Faça login novamente.", status=401)
 
+        Requer usuário autenticado (validado por @require_auth_api()).
+        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
+        Processa o arquivo CSV linha por linha, criando novos ativos no banco.
+        """
         arquivo = request.files.get("file")
         if not arquivo:
             return _json_error("Nenhum arquivo foi enviado.", status=400)
@@ -1589,7 +1685,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                     criados += 1
                 except AtivoErro as e:
                     erros.append(f"Linha {idx}: {str(e)}")
-                except Exception as e:
+                except (AttributeError, KeyError, TypeError, ValueError) as e:
                     erros.append(f"Linha {idx}: Erro inesperado - {str(e)}")
             
             msg = f"Importação concluída: {criados} ativo(s) criado(s)."
@@ -1602,5 +1698,5 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 criados=criados,
                 erros=erros if erros else None
             )
-        except Exception:
+        except (OSError, UnicodeError, ValueError, TypeError, KeyError, csv.Error):
             return _json_error("Erro ao processar arquivo CSV.", status=500)

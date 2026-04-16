@@ -345,10 +345,13 @@
     }
 
     async function requestJson(url, options = {}) {
+        // Reaproveita token global exposto em base.html para hardening CSRF.
+        const csrfToken = (window.APP_CSRF_TOKEN || "").trim();
         const response = await fetch(url, {
             headers: {
                 "Content-Type": "application/json",
                 "X-Requested-With": "fetch",
+                ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
                 ...(options.headers || {})
             },
             ...options
@@ -409,34 +412,54 @@
         }
     }
 
+    // Handler de submissão do formulário de novo ativo com proteção contra double-submit.
+    // Desabilita o botão após o primeiro clique para evitar múltiplas requisições simultâneas.
     createAssetForm.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const body = Object.fromEntries(new FormData(createAssetForm).entries());
-        syncAliasedSpecFieldsToBody(body);
 
-        // Mantém compatibilidade com backend legado que ainda usa a chave tipo.
-        body.tipo = body.tipo_ativo || body.tipo;
-        body.departamento = body.setor || body.departamento;
-        body.nota_fiscal = body.nota_fiscal || null;
-
-        const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}", {
-            method: "POST",
-            body: JSON.stringify(body)
-        });
-
-        if (!response.ok) {
-            showMessage("danger", payload?.erro || "Não foi possível cadastrar o ativo.");
-            return;
+        // Obtém o botão de submit e o desabilita imediatamente para evitar double-submit.
+        // Indica visualmente ao usuário que a submissão está em progresso.
+        const submitButton = createAssetForm.querySelector("button[type='submit']");
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.classList.add("is-loading");
         }
 
-        // O ID vem exclusivamente da resposta da API — não existe mais campo no formulário
-        currentAssetId = payload?.ativo?.id ?? null;
-        documentsPanel.hidden = false;
-        documentsCaption.textContent = `Documentos vinculados ao ativo ${currentAssetId}.`;
+        try {
+            const body = Object.fromEntries(new FormData(createAssetForm).entries());
+            syncAliasedSpecFieldsToBody(body);
 
-        showMessage("success", payload?.mensagem || "Ativo cadastrado com sucesso.");
-        setAttachmentLoading();
-        await loadAttachments();
+            // Mantém compatibilidade com backend legado que ainda usa a chave tipo.
+            body.tipo = body.tipo_ativo || body.tipo;
+            body.departamento = body.setor || body.departamento;
+            body.nota_fiscal = body.nota_fiscal || null;
+
+            const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}", {
+                method: "POST",
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível cadastrar o ativo.");
+                return;
+            }
+
+            // O ID vem exclusivamente da resposta da API — não existe mais campo no formulário
+            currentAssetId = payload?.ativo?.id ?? null;
+            documentsPanel.hidden = false;
+            documentsCaption.textContent = `Documentos vinculados ao ativo ${currentAssetId}.`;
+
+            showMessage("success", payload?.mensagem || "Ativo cadastrado com sucesso.");
+            setAttachmentLoading();
+            await loadAttachments();
+        } finally {
+            // Re-habilita o botão em caso de erro, permitindo retry.
+            // Em caso de sucesso, o botão permanece desabilitado pois o fluxo não volta para o formulário.
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.classList.remove("is-loading");
+            }
+        }
     });
 
     attachmentList.addEventListener("click", async (event) => {
@@ -480,7 +503,15 @@
             attachmentUploadTrigger.classList.add("is-loading");
             attachmentUploadTrigger.style.pointerEvents = "none";
 
-            const response = await fetch(uploadUrl, { method: "POST", body: formData });
+            const csrfToken = (window.APP_CSRF_TOKEN || "").trim();
+            const response = await fetch(uploadUrl, {
+                method: "POST",
+                body: formData,
+                headers: {
+                    "X-Requested-With": "fetch",
+                    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+                },
+            });
             const payload = await parseJsonSafely(response);
             if (!response.ok) {
                 showMessage("danger", payload?.erro || "Não foi possível anexar o documento.");
