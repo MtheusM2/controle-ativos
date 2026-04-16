@@ -196,6 +196,22 @@ class FakeArquivosService:
         """Retorna contagem simulada de anexos por ativo (1 por ativo)."""
         return {ativo_id: 1 for ativo_id in ativo_ids}
 
+    def mapear_presenca_documentos(self, ativo_ids: list[str], _user_id: int) -> dict[str, dict[str, bool]]:
+        """Simula presença documental em lote usando a própria lista de arquivos fake."""
+        mapa = {
+            ativo_id: {"nota_fiscal": False, "garantia": False}
+            for ativo_id in ativo_ids
+        }
+
+        for ativo_id in ativo_ids:
+            for arquivo in self.listar_arquivos(ativo_id, _user_id):
+                tipo = str(arquivo.get("tipo_documento") or "")
+                nome = str(arquivo.get("nome_original") or "").strip()
+                if tipo in {"nota_fiscal", "garantia"} and nome:
+                    mapa[ativo_id][tipo] = True
+
+        return mapa
+
 
 @pytest.fixture()
 def app_fixture():
@@ -226,6 +242,10 @@ def authenticated_client(request):
         session_data["user_perfil"] = "usuario"
         session_data["user_empresa_id"] = 10
         session_data["user_empresa_nome"] = "Empresa Demo"
+
+    # Aproxima o comportamento do frontend real, que sempre envia token CSRF em fetch mutável.
+    test_client.environ_base["HTTP_X_CSRF_TOKEN"] = gerar_csrf_token_para_teste(flask_app, user_id=1)
+    test_client.environ_base["HTTP_X_REQUESTED_WITH"] = "fetch"
     return test_client
 
 
@@ -239,3 +259,22 @@ def gerar_csrf_token_para_teste(flask_app, user_id: int) -> str:
     with flask_app.app_context():
         serializer = URLSafeTimedSerializer(flask_app.config["SECRET_KEY"], salt="csrf")
         return serializer.dumps(f"user:{user_id}")
+
+
+def gerar_headers_csrf_para_teste(flask_app, user_id: int) -> dict[str, str]:
+    """
+    Retorna headers padrão de requisições fetch autenticadas para testes HTTP.
+    """
+    return {
+        "X-CSRF-Token": gerar_csrf_token_para_teste(flask_app, user_id=user_id),
+        "X-Requested-With": "fetch",
+    }
+
+
+def aplicar_headers_csrf_no_client_teste(test_client, flask_app, user_id: int) -> None:
+    """
+    Aplica headers padrão de CSRF diretamente no client de teste para requests mutáveis.
+    """
+    headers = gerar_headers_csrf_para_teste(flask_app, user_id=user_id)
+    test_client.environ_base["HTTP_X_CSRF_TOKEN"] = headers["X-CSRF-Token"]
+    test_client.environ_base["HTTP_X_REQUESTED_WITH"] = headers["X-Requested-With"]

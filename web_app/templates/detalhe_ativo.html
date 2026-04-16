@@ -188,7 +188,15 @@
             if (!confirmacao) return;
 
             try {
-                const response = await fetch(`/ativos/${encodeURIComponent(ativoId)}`, { method: "DELETE" });
+                // Reutiliza o token global exposto em base.html para manter a exclusão compatível com a rota protegida.
+                const csrfToken = (window.APP_CSRF_TOKEN || "").trim();
+                const response = await fetch(`/ativos/${encodeURIComponent(ativoId)}`, {
+                    method: "DELETE",
+                    headers: {
+                        "X-Requested-With": "fetch",
+                        ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+                    },
+                });
                 if (!response.ok) {
                     const payload = await response.json().catch(() => ({}));
                     alert(payload?.erro || "Não foi possível excluir o ativo. Tente novamente.");

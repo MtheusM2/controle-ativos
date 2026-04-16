@@ -667,10 +667,13 @@
     }
 
     async function requestJson(url, options = {}) {
+        // Reaproveita token global exposto em base.html para hardening CSRF.
+        const csrfToken = (window.APP_CSRF_TOKEN || "").trim();
         const response = await fetch(url, {
             headers: {
                 "Content-Type": "application/json",
                 "X-Requested-With": "fetch",
+                ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
                 ...(options.headers || {})
             },
             ...options
@@ -861,7 +864,15 @@
                 attachmentUploadTrigger.classList.add("is-loading");
                 attachmentUploadTrigger.style.pointerEvents = "none";
 
-                const response = await fetch(uploadUrl, { method: "POST", body: formData });
+                const csrfToken = (window.APP_CSRF_TOKEN || "").trim();
+                const response = await fetch(uploadUrl, {
+                    method: "POST",
+                    body: formData,
+                    headers: {
+                        "X-Requested-With": "fetch",
+                        ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+                    },
+                });
                 const payload = await parseJsonSafely(response);
                 if (!response.ok) {
                     showMessage("danger", payload?.erro || "Não foi possível anexar o documento.");
@@ -910,7 +921,15 @@
                     const uploadUrl = buildAssetAttachmentsUrl(ativoId);
                     if (!uploadUrl) continue;
 
-                    const response = await fetch(uploadUrl, { method: "POST", body: formData });
+                    const csrfToken = (window.APP_CSRF_TOKEN || "").trim();
+                    const response = await fetch(uploadUrl, {
+                        method: "POST",
+                        body: formData,
+                        headers: {
+                            "X-Requested-With": "fetch",
+                            ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+                        },
+                    });
                     if (!response.ok) {
                         console.warn(`Falha ao anexar ${file.name}:`, response.statusText);
                     }

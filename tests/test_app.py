@@ -94,7 +94,12 @@ def test_asset_create_route_exposes_automatic_timestamps():
                 data_ultima_movimentacao=None,
             )
 
-    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
 
     app = create_app(
         {"TESTING": True, "DEBUG": True},
@@ -109,6 +114,7 @@ def test_asset_create_route_exposes_automatic_timestamps():
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.post(
         "/ativos",
@@ -169,7 +175,12 @@ def test_asset_update_route_returns_movement_summary():
         def buscar_ativo(self, id_ativo, _user_id):
             return SimpleNamespace(id_ativo=id_ativo)
 
-    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
 
     app = create_app(
         {"TESTING": True, "DEBUG": True},
@@ -184,6 +195,7 @@ def test_asset_update_route_returns_movement_summary():
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.put(
         "/ativos/OPU-000999",
@@ -244,7 +256,12 @@ def test_asset_preview_route_returns_summary_without_persisting():
         def atualizar_ativo(self, *_args, **_kwargs):
             raise AssertionError("A rota de preview não pode persistir dados.")
 
-    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
 
     service = PreviewOnlyAtivosService()
     app = create_app(
@@ -260,6 +277,7 @@ def test_asset_preview_route_returns_summary_without_persisting():
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.post(
         "/ativos/OPU-000999/movimentacao/preview",
@@ -326,7 +344,12 @@ def test_asset_confirm_route_applies_operational_adjustments():
                 },
             )
 
-    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
 
     service = ConfirmFlowAtivosService()
     app = create_app(
@@ -342,6 +365,7 @@ def test_asset_confirm_route_applies_operational_adjustments():
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.post(
         "/ativos/OPU-000999/movimentacao/confirmar",
@@ -410,7 +434,12 @@ def test_asset_confirm_route_accepts_sparse_form_payload_without_cadastro_fields
                 resumo_movimentacao={"tipo_movimentacao": "entrega_para_colaborador", "campos_alterados": []},
             )
 
-    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
 
     app = create_app(
         {"TESTING": True, "DEBUG": True},
@@ -425,6 +454,7 @@ def test_asset_confirm_route_accepts_sparse_form_payload_without_cadastro_fields
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.post(
         "/ativos/OPU-000999/movimentacao/confirmar",
@@ -460,7 +490,12 @@ def test_asset_preview_route_keeps_permission_contract():
             del id_ativo, dados, user_id
             raise PermissaoNegada("Sem permissão para visualizar este ativo.")
 
-    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
 
     app = create_app(
         {"TESTING": True, "DEBUG": True},
@@ -475,6 +510,7 @@ def test_asset_preview_route_keeps_permission_contract():
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.post(
         "/ativos/OPU-000999/movimentacao/preview",
@@ -535,7 +571,7 @@ def test_asset_details_page_shows_garantia_and_complementar_from_attachments():
         def remover_arquivo(self, _arquivo_id, _user_id):
             return None
 
-    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService, aplicar_headers_csrf_no_client_teste
 
     app = create_app(
         {"TESTING": True, "DEBUG": True},
@@ -553,6 +589,7 @@ def test_asset_details_page_shows_garantia_and_complementar_from_attachments():
         session_data["user_perfil"] = "usuario"
         session_data["user_empresa_id"] = 10
         session_data["user_empresa_nome"] = "Empresa Demo"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.get("/ativos/detalhes/A-001")
     assert response.status_code == 200
@@ -918,7 +955,7 @@ def test_attachment_upload_invalid_type_returns_400():
         def remover_arquivo(self, _arquivo_id, _user_id):
             return None
 
-    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService, aplicar_headers_csrf_no_client_teste
 
     app = create_app(
         {"TESTING": True, "DEBUG": True},
@@ -933,6 +970,7 @@ def test_attachment_upload_invalid_type_returns_400():
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.post(
         "/ativos/A-001/anexos",
@@ -966,7 +1004,7 @@ def test_attachment_delete_route_uses_correct_attachment_id():
         def remover_arquivo(self, arquivo_id, _user_id):
             self.removed_ids.append(arquivo_id)
 
-    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService, aplicar_headers_csrf_no_client_teste
 
     fake_arquivos = FakeArquivosDeleteTracking()
     app = create_app(
@@ -982,6 +1020,7 @@ def test_attachment_delete_route_uses_correct_attachment_id():
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     response = client.delete("/anexos/7")
     assert response.status_code == 200
@@ -989,6 +1028,8 @@ def test_attachment_delete_route_uses_correct_attachment_id():
 
 
 def test_service_delete_keeps_db_cleanup_when_physical_file_is_missing(tmp_path):
+    # Mantém a assinatura do pytest para futura expansão do cenário de filesystem.
+    del tmp_path
     from unittest.mock import MagicMock
     from services.ativos_arquivo_service import AtivosArquivoService
     from services.storage_backend import StorageBackendError
@@ -1056,6 +1097,8 @@ def test_export_json_uses_linked_documents_for_nota_fiscal_and_garantia():
             return self.listar_ativos(1)
 
         def buscar_ativo(self, id_ativo, _user_id):
+            # O identificador é recebido apenas para manter o contrato do fake.
+            del id_ativo
             return self.listar_ativos(1)[0]
 
     class FakeArquivosExport:
@@ -1157,6 +1200,8 @@ def test_export_xlsx_uses_linked_documents_for_columns():
             return self.listar_ativos(1)
 
         def buscar_ativo(self, id_ativo, _user_id):
+            # O identificador é recebido apenas para manter o contrato do fake.
+            del id_ativo
             return self.listar_ativos(1)[0]
 
     class FakeArquivosExport:
@@ -1249,6 +1294,8 @@ def test_export_json_fallbacks_to_legacy_fields_without_attachments():
             return self.listar_ativos(1)
 
         def buscar_ativo(self, id_ativo, _user_id):
+            # O identificador é recebido apenas para manter o contrato do fake.
+            del id_ativo
             return self.listar_ativos(1)[0]
 
     class FakeArquivosVazio:
@@ -1397,6 +1444,91 @@ def test_csrf_invalid_token_blocks_password_change(authenticated_client):
     assert "Requisição inválida" in html
 
 
+def test_csrf_missing_token_blocks_asset_create_json_route():
+    """POST /ativos deve bloquear mutação JSON quando o token CSRF não é enviado."""
+    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+
+    class MinimalAtivosService:
+        def criar_ativo(self, _ativo, _user_id):
+            return "NTB-123"
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return SimpleNamespace(
+                id_ativo=id_ativo,
+                tipo="Notebook",
+                tipo_ativo="Notebook",
+                marca="Dell",
+                modelo="XPS",
+                usuario_responsavel="",
+                departamento="TI",
+                setor="TI",
+                status="Disponível",
+                data_entrada="2026-04-15",
+                data_saida=None,
+            )
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": MinimalAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos",
+        json={"tipo_ativo": "Notebook", "marca": "Dell", "modelo": "XPS", "status": "Disponível", "data_entrada": "2026-04-15", "setor": "TI"},
+    )
+    assert response.status_code == 403
+
+
+def test_csrf_missing_token_blocks_attachment_upload_multipart_route():
+    """POST /ativos/<id>/anexos deve bloquear upload multipart sem token CSRF."""
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    class UploadArquivosService:
+        upload_base_dir = "."
+
+        def salvar_arquivo(self, **_kwargs):
+            return 77
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            return []
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": UploadArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/A-001/anexos",
+        data={"type": "nota_fiscal", "file": (BytesIO(b"abc"), "teste.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 403
+
+
 def test_asset_create_route_accepts_sparse_payload_without_descricao_categoria():
     """
     Testa que a rota de criação aceita payload esparso SEM descricao e categoria.
@@ -1428,7 +1560,12 @@ def test_asset_create_route_accepts_sparse_payload_without_descricao_categoria()
                 data_ultima_movimentacao=None,
             )
 
-    from tests.conftest import FakeArquivosService as _FakeArquivosService, FakeAuthService, FakeEmpresaService
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
 
     app = create_app(
         {"TESTING": True, "DEBUG": True},
@@ -1443,6 +1580,7 @@ def test_asset_create_route_accepts_sparse_payload_without_descricao_categoria()
     with client.session_transaction() as session_data:
         session_data["user_id"] = 1
         session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
 
     # Payload SEM descricao e categoria — como vem do novo formulário da Fase 3
     response = client.post(
@@ -1546,6 +1684,102 @@ def test_asset_filter_presenca_documental_uses_real_attachments():
     assert payload["ativos"][0]["id"] == "NTB-002"
 
 
+def test_asset_filter_presenca_documental_uses_batch_mapping_without_n_plus_one():
+    """
+    Garante que o filtro documental utiliza leitura em lote em vez de listar_arquivos por ativo.
+    """
+    from tests.conftest import FakeAuthService, FakeEmpresaService
+
+    class BatchFilterAtivosService:
+        def listar_ativos(self, _user_id):
+            return [
+                SimpleNamespace(
+                    id_ativo="NTB-101",
+                    tipo="Notebook",
+                    tipo_ativo="Notebook",
+                    marca="Dell",
+                    modelo="XPS",
+                    usuario_responsavel="Ana",
+                    departamento="TI",
+                    setor="TI",
+                    status="Disponível",
+                    data_entrada="2026-04-01",
+                    data_saida=None,
+                    garantia=None,
+                    nota_fiscal=None,
+                ),
+                SimpleNamespace(
+                    id_ativo="NTB-102",
+                    tipo="Notebook",
+                    tipo_ativo="Notebook",
+                    marca="Lenovo",
+                    modelo="ThinkPad",
+                    usuario_responsavel="Bruno",
+                    departamento="TI",
+                    setor="TI",
+                    status="Disponível",
+                    data_entrada="2026-04-02",
+                    data_saida=None,
+                    garantia=None,
+                    nota_fiscal=None,
+                ),
+            ]
+
+        def filtrar_ativos(self, user_id, **_kwargs):
+            return self.listar_ativos(user_id)
+
+    class BatchFilterArquivosService:
+        upload_base_dir = "."
+
+        def __init__(self):
+            self.batch_calls = 0
+            self.listar_calls = 0
+
+        def mapear_presenca_documentos(self, ativo_ids, _user_id):
+            # A lista de IDs é ignorada porque o fake retorna uma resposta fixa.
+            del ativo_ids
+            self.batch_calls += 1
+            return {
+                "NTB-101": {"nota_fiscal": True, "garantia": False},
+                "NTB-102": {"nota_fiscal": False, "garantia": False},
+            }
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            self.listar_calls += 1
+            raise AssertionError("listar_arquivos não deveria ser chamado quando há batch mapping")
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    arquivos_service = BatchFilterArquivosService()
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": BatchFilterAtivosService(),
+            "ativos_arquivo_service": arquivos_service,
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.get("/ativos?tem_nota_fiscal=sim")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert [item["id"] for item in payload["ativos"]] == ["NTB-101"]
+    assert arquivos_service.batch_calls == 1
+    assert arquivos_service.listar_calls == 0
+
+
 def test_asset_edit_template_does_not_reference_removed_fields():
     """
     Validação contínua: editar_ativo.html não deve tentar preencher ou referenciar
@@ -1607,6 +1841,8 @@ def test_filter_modal_has_select_for_tipo_e_departamento(app_fixture):
     Essa validação garante que usuários escolham de opções oficiais
     e não possam digitar valores livres nesses campos.
     """
+    # O fixture é mantido para compatibilidade com o contrato de execução do pytest.
+    del app_fixture
     from pathlib import Path
 
     # Lê o template ativos.html
@@ -1779,6 +2015,8 @@ def test_asset_summary_shows_technical_fields_to_admin(authenticated_client):
     Nota: Este teste valida a função _resumo_ativo_para_modal com dados mock,
     pois o FakeAtivosService não persiste todos os campos técnicos.
     """
+    # O cliente autenticado é mantido como fixture para garantir o contexto de sessão.
+    del authenticated_client
     # Testa a função _resumo_ativo_para_modal diretamente com dados mock
     from web_app.routes.ativos_routes import _resumo_ativo_para_modal
 

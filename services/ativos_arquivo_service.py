@@ -374,3 +374,50 @@ class AtivosArquivoService:
             contagem[row["ativo_id"]] = int(row["total"])
 
         return contagem
+
+    def mapear_presenca_documentos(self, ativo_ids: list[str], user_id: int) -> dict[str, dict[str, bool]]:
+        """
+        Retorna presença de documentos por ativo em lote, sem N+1.
+
+        Estrutura de retorno:
+        {
+            "NTB-001": {"nota_fiscal": True, "garantia": False},
+            ...
+        }
+
+        Observação de escopo:
+        esta função recebe IDs já filtrados pelo fluxo de listagem do usuário,
+        portanto não amplia superfície de acesso além do contexto autorizado.
+        """
+        del user_id  # Escopo já garantido pelos IDs recebidos da listagem autorizada.
+
+        if not ativo_ids:
+            return {}
+
+        placeholders = ", ".join(["%s"] * len(ativo_ids))
+        mapa = {
+            ativo_id: {"nota_fiscal": False, "garantia": False}
+            for ativo_id in ativo_ids
+        }
+
+        with cursor_mysql(dictionary=True) as (_conn, cur):
+            cur.execute(
+                f"""
+                SELECT ativo_id, tipo_documento, COUNT(*) AS total
+                FROM ativos_arquivos
+                WHERE ativo_id IN ({placeholders})
+                  AND tipo_documento IN ('nota_fiscal', 'garantia')
+                  AND COALESCE(NULLIF(TRIM(nome_original), ''), '') <> ''
+                GROUP BY ativo_id, tipo_documento
+                """,
+                tuple(ativo_ids),
+            )
+            rows = cur.fetchall()
+
+        for row in rows:
+            ativo_id = str(row.get("ativo_id") or "")
+            tipo_documento = str(row.get("tipo_documento") or "")
+            if ativo_id in mapa and tipo_documento in {"nota_fiscal", "garantia"}:
+                mapa[ativo_id][tipo_documento] = int(row.get("total") or 0) > 0
+
+        return mapa

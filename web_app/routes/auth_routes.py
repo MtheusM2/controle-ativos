@@ -13,7 +13,7 @@ from services.auth_service import (
     UsuarioNaoEncontrado,
 )
 from services.empresa_service import EmpresaService
-from utils.csrf import validar_token_csrf
+from utils.csrf import require_csrf, validar_token_csrf
 
 REMEMBER_EMAIL_COOKIE = "remember_email"
 REMEMBER_ACTIVE_COOKIE = "remember_active"
@@ -448,6 +448,7 @@ def registrar_rotas_auth(app, *, auth_service: AuthService, empresa_service: Emp
             return redirect(url_for("configuracoes_page"))
 
     @app.post("/logout")
+    @require_csrf()
     def logout():
         """
         Limpa a sessao e informa o frontend para retornar a tela inicial.

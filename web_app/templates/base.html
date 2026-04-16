@@ -4,6 +4,8 @@
     <!-- Metadados principais da base do sistema -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Token CSRF global para requisições fetch/JSON/multipart no frontend. -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Sistema de Controle de Ativos{% endblock %}</title>
 
     <!-- Folha de estilo global reutilizável da interface Flask/Jinja -->
@@ -49,6 +51,11 @@
             </section>
         </main>
     </div>
+
+    <!-- Exposição global do token para scripts de página sem duplicar lógica de leitura. -->
+    <script>
+        window.APP_CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    </script>
 
     <!-- Bloco opcional para scripts específicos de cada template -->
     {% block scripts %}{% endblock %}
