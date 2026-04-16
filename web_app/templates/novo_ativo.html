@@ -210,6 +210,38 @@
     </div>
 </section>
 
+<!-- Modal de confirmação de cadastro — mostra dados preenchidos antes de salvar -->
+<div id="confirm-asset-modal" class="modal" hidden>
+    <div class="modal-content modal-content-medium">
+        <div class="modal-header">
+            <h3>Confirmar cadastro de ativo</h3>
+            <button type="button" class="btn btn-close" data-close-modal="confirm-asset-modal">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <p style="margin-bottom: 1.5rem; color: #666;">Verifique os dados do ativo antes de confirmar:</p>
+
+            <!-- Bloco de visualização dos dados preenchidos para confirmação -->
+            <div id="confirm-asset-details" class="detail-section" style="
+                background: #f5f5f5;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 1rem;
+                margin-bottom: 1rem;
+            ">
+                <p>Carregando dados...</p>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <!-- Botão voltar permite que usuário volte para editar dados -->
+            <button type="button" class="btn btn-secondary" data-close-modal="confirm-asset-modal">Voltar para editar</button>
+            <!-- Botão confirmar envia realmente o ativo para o banco -->
+            <button type="button" class="btn btn-primary" id="confirm-asset-button">Confirmar e salvar</button>
+        </div>
+    </div>
+</div>
+
 <section class="panel form-panel" id="documents-panel" hidden>
     <div class="panel-header">
         <h3 class="title-section">Documentos do ativo</h3>
@@ -412,53 +444,162 @@
         }
     }
 
-    // Handler de submissão do formulário de novo ativo com proteção contra double-submit.
-    // Desabilita o botão após o primeiro clique para evitar múltiplas requisições simultâneas.
+    // ========== FLUXO DE CADASTRO COM CONFIRMAÇÃO ==========
+    // Novo fluxo de 2 etapas:
+    // 1. Usuário preenche formulário e clica "Salvar" → abre modal de confirmação
+    // 2. Usuário verifica dados na modal → clica "Confirmar" → envia para API
+    // 3. Proteção contra double-submit: botão desabilitado durante qualquer envio
+
+    // Variável para armazenar dados coletados do formulário antes de confirmar.
+    // Será usado para renderizar a modal de confirmação.
+    let pendingAssetData = null;
+
+    // Handler de submissão do formulário: coleta dados e abre modal de confirmação.
+    // NÃO envia para o backend imediatamente — pede confirmação antes.
     createAssetForm.addEventListener("submit", async (event) => {
         event.preventDefault();
 
-        // Obtém o botão de submit e o desabilita imediatamente para evitar double-submit.
-        // Indica visualmente ao usuário que a submissão está em progresso.
-        const submitButton = createAssetForm.querySelector("button[type='submit']");
-        if (submitButton) {
-            submitButton.disabled = true;
-            submitButton.classList.add("is-loading");
+        // Coleta dados do formulário sem enviar ainda.
+        const body = Object.fromEntries(new FormData(createAssetForm).entries());
+        syncAliasedSpecFieldsToBody(body);
+
+        // Normaliza campos (compatibilidade com backend).
+        body.tipo = body.tipo_ativo || body.tipo;
+        body.departamento = body.setor || body.departamento;
+        body.nota_fiscal = body.nota_fiscal || null;
+
+        // Armazena dados para usar na confirmação.
+        pendingAssetData = body;
+
+        // Renderiza a modal com os dados coletados.
+        renderConfirmationModal(body);
+
+        // Abre a modal de confirmação.
+        const confirmModal = document.getElementById("confirm-asset-modal");
+        if (confirmModal) {
+            confirmModal.hidden = false;
         }
+    });
 
-        try {
-            const body = Object.fromEntries(new FormData(createAssetForm).entries());
-            syncAliasedSpecFieldsToBody(body);
+    // Renderiza o conteúdo da modal de confirmação com dados preenchidos.
+    // Mostra ao usuário os principais campos antes de confirmar.
+    function renderConfirmationModal(data) {
+        const detailsDiv = document.getElementById("confirm-asset-details");
+        if (!detailsDiv) return;
 
-            // Mantém compatibilidade com backend legado que ainda usa a chave tipo.
-            body.tipo = body.tipo_ativo || body.tipo;
-            body.departamento = body.setor || body.departamento;
-            body.nota_fiscal = body.nota_fiscal || null;
+        // Mapeia dados para exibição amigável (só mostra campos preenchidos).
+        const fields = [
+            { label: "Tipo", value: data.tipo_ativo || data.tipo },
+            { label: "Marca", value: data.marca },
+            { label: "Modelo", value: data.modelo },
+            { label: "Serial", value: data.serial },
+            { label: "Responsável", value: data.usuario_responsavel },
+            { label: "Setor", value: data.setor || data.departamento },
+            { label: "Localidade", value: data.localizacao },
+            { label: "Condição", value: data.condicao },
+            { label: "Status", value: data.status || "Disponível" },
+            { label: "Observações", value: data.observacoes }
+        ];
 
-            const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}", {
-                method: "POST",
-                body: JSON.stringify(body)
-            });
+        // Renderiza apenas campos com valores (não vazio).
+        const fieldsHtml = fields
+            .filter(f => f.value && String(f.value).trim())
+            .map(f => `
+                <div style="display: flex; margin-bottom: 0.5rem;">
+                    <strong style="min-width: 120px; color: #333;">${f.label}:</strong>
+                    <span style="color: #666;">${escapeHtml(String(f.value))}</span>
+                </div>
+            `)
+            .join("");
 
-            if (!response.ok) {
-                showMessage("danger", payload?.erro || "Não foi possível cadastrar o ativo.");
-                return;
+        detailsDiv.innerHTML = fieldsHtml || "<p>Nenhum dado preenchido.</p>";
+    }
+
+    // Handler do botão "Confirmar e salvar" na modal de confirmação.
+    // Nesta etapa, envia de verdade para o backend.
+    const confirmButton = document.getElementById("confirm-asset-button");
+    if (confirmButton) {
+        confirmButton.addEventListener("click", async () => {
+            if (!pendingAssetData) return;
+
+            // Desabilita o botão de confirmação durante o envio.
+            confirmButton.disabled = true;
+            confirmButton.classList.add("is-loading");
+
+            try {
+                // Envia dados para a API.
+                const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}", {
+                    method: "POST",
+                    body: JSON.stringify(pendingAssetData)
+                });
+
+                if (!response.ok) {
+                    showMessage("danger", payload?.erro || "Não foi possível cadastrar o ativo.");
+                    confirmButton.disabled = false;
+                    confirmButton.classList.remove("is-loading");
+                    return;
+                }
+
+                // Cadastro bem-sucedido — obtém ID do novo ativo.
+                const newAssetId = payload?.ativo?.id ?? null;
+                if (newAssetId) {
+                    // Fecha a modal de confirmação.
+                    const confirmModal = document.getElementById("confirm-asset-modal");
+                    if (confirmModal) {
+                        confirmModal.hidden = true;
+                    }
+
+                    showMessage("success", "Ativo cadastrado com sucesso! Redirecionando...");
+
+                    // Aguarda um momento para o usuário ver a mensagem de sucesso.
+                    // Depois redireciona para a listagem, destacando o novo ativo.
+                    setTimeout(() => {
+                        // Redireciona para listagem com query param destacando o novo ativo.
+                        const redirectUrl = "{{ url_for('listar_ativos_html') }}?highlight=" + encodeURIComponent(newAssetId);
+                        window.location.href = redirectUrl;
+                    }, 1500);
+                } else {
+                    showMessage("danger", "Cadastro realizado, mas não foi possível obter o ID. Atualize a página.");
+                    confirmButton.disabled = false;
+                    confirmButton.classList.remove("is-loading");
+                }
+            } catch (error) {
+                console.error("Erro ao cadastrar ativo:", error);
+                showMessage("danger", "Erro ao cadastrar ativo. Tente novamente.");
+                confirmButton.disabled = false;
+                confirmButton.classList.remove("is-loading");
             }
+        });
+    }
 
-            // O ID vem exclusivamente da resposta da API — não existe mais campo no formulário
-            currentAssetId = payload?.ativo?.id ?? null;
-            documentsPanel.hidden = false;
-            documentsCaption.textContent = `Documentos vinculados ao ativo ${currentAssetId}.`;
-
-            showMessage("success", payload?.mensagem || "Ativo cadastrado com sucesso.");
-            setAttachmentLoading();
-            await loadAttachments();
-        } finally {
-            // Re-habilita o botão em caso de erro, permitindo retry.
-            // Em caso de sucesso, o botão permanece desabilitado pois o fluxo não volta para o formulário.
-            if (submitButton) {
-                submitButton.disabled = false;
-                submitButton.classList.remove("is-loading");
+    // Handler de fechamento da modal de confirmação.
+    // Permite que usuário volte para editar dados sem perder o que digitou.
+    document.querySelectorAll("[data-close-modal='confirm-asset-modal']").forEach((button) => {
+        button.addEventListener("click", () => {
+            const confirmModal = document.getElementById("confirm-asset-modal");
+            if (confirmModal) {
+                confirmModal.hidden = true;
             }
+            // Dados permanecem preenchidos no formulário — usuário pode ajustar.
+        });
+    });
+
+    // Fecha modal de confirmação ao clicar fora do conteúdo.
+    const confirmModal = document.getElementById("confirm-asset-modal");
+    if (confirmModal) {
+        confirmModal.addEventListener("click", (event) => {
+            if (event.target === confirmModal) {
+                confirmModal.hidden = true;
+            }
+        });
+    }
+
+    // Fecha modal de confirmação ao pressionar ESC.
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        const confirmModal = document.getElementById("confirm-asset-modal");
+        if (confirmModal && !confirmModal.hidden) {
+            confirmModal.hidden = true;
         }
     });
 

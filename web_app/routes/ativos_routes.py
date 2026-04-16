@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
+import json
+import time
 from datetime import datetime
 
 from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -29,6 +32,61 @@ from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS,
 # Mensagens padronizadas para manter respostas da camada web consistentes.
 MSG_SESSAO_EXPIRADA = "Sessão expirada. Faça login novamente."
 MSG_ERRO_LISTAR_ATIVOS = "Erro inesperado ao listar ativos."
+
+# ========== PROTEÇÃO CONTRA DUPLICAÇÃO DE CADASTRO ==========
+# Cache em memória para rastrear requisições de criação recentes.
+# Evita duplicação quando usuário clica múltiplas vezes em "Confirmar".
+# Chave: hash(dados_do_ativo + user_id), Valor: (ativo_id, timestamp)
+# Expire automático: requisições com >10 segundos são ignoradas (nova criação)
+_creation_dedup_cache = {}
+
+def _gerar_chave_dedup(dados: dict, user_id: int) -> str:
+    """
+    Gera uma chave única (hash) para deduplicação baseada nos dados principais do ativo.
+    Ignora campos que mudam automaticamente (id, criado_em, atualizado_em).
+    """
+    # Campos utilizados para deduplicação.
+    # Se esses campos forem iguais, consideramos a criação como duplicada.
+    chaves_dedup = [
+        "tipo", "tipo_ativo", "marca", "modelo", "serial",
+        "usuario_responsavel", "setor", "departamento", "localizacao",
+        "condicao", "status"
+    ]
+
+    # Extrai apenas os campos relevantes e cria uma string normalizada.
+    dados_norm = {k: str(dados.get(k, "")).strip().lower() for k in chaves_dedup}
+
+    # Concatena dados + user_id e gera hash SHA256.
+    chave_str = f"{json.dumps(dados_norm, sort_keys=True)}#{user_id}"
+    return hashlib.sha256(chave_str.encode()).hexdigest()
+
+def _verificar_duplicacao(chave_dedup: str, user_id: int, ativo_id_novo: str) -> tuple[bool, str | None]:
+    """
+    Verifica se uma criação é duplicada (requisição recente com mesmos dados).
+    Se sim, retorna (True, id_do_ativo_existente).
+    Se não, registra esta criação e retorna (False, None).
+
+    Limpeza automática: remove entradas com >10 segundos.
+    """
+    tempo_atual = time.time()
+
+    # Limpa cache: remove entradas antigas.
+    chaves_expiradas = [
+        k for k, (_, timestamp) in _creation_dedup_cache.items()
+        if tempo_atual - timestamp > 10
+    ]
+    for k in chaves_expiradas:
+        del _creation_dedup_cache[k]
+
+    # Verifica se esta chave foi criada recentemente.
+    if chave_dedup in _creation_dedup_cache:
+        ativo_id_existente, _ = _creation_dedup_cache[chave_dedup]
+        # Duplicação detectada — retorna ativo já criado.
+        return (True, ativo_id_existente)
+
+    # Nova criação — registra no cache.
+    _creation_dedup_cache[chave_dedup] = (ativo_id_novo, tempo_atual)
+    return (False, None)
 
 
 def _obter_user_id_logado() -> int | None:
@@ -957,10 +1015,37 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
         Aceita payloads mínimos sem descricao e categoria — esses campos são
         preenchidos automaticamente pelo backend.
+
+        Implementa proteção contra duplicidade:
+        - Detecta requisições duplicadas baseado em hash dos dados principais
+        - Retorna ativo já criado se a mesma requisição é recebida novamente em <10s
+        - Evita múltiplas criações por cliques repetidos do usuário
         """
         try:
-            ativo = _ativo_do_payload(_request_data())
+            dados = _request_data()
+            ativo = _ativo_do_payload(dados)
+
+            # ========== PROTEÇÃO CONTRA DUPLICIDADE ==========
+            # Gera uma chave de deduplicação baseada nos dados principais do ativo.
+            # Se a mesma chave foi criada nos últimos 10s, retorna ativo existente.
+            chave_dedup = _gerar_chave_dedup(dados, user_id)
+            eh_duplicada, id_existente = _verificar_duplicacao(chave_dedup, user_id, None)
+
+            if eh_duplicada and id_existente:
+                # Duplicação detectada — retorna ativo já criado.
+                criado = service.buscar_ativo(id_existente, user_id)
+                return _json_success(
+                    "Ativo já havia sido cadastrado. Retornando ativo existente.",
+                    status=201,
+                    ativo=_serializar_ativo(criado),
+                )
+
+            # Não é duplicação — procede com criação normal.
             id_gerado = service.criar_ativo(ativo, user_id)
+
+            # Atualiza cache com o ID real gerado.
+            _verificar_duplicacao(chave_dedup, user_id, id_gerado)
+
             criado = service.buscar_ativo(id_gerado, user_id)
             return _json_success(
                 "Ativo cadastrado com sucesso.",
