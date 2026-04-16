@@ -72,6 +72,118 @@ PERFIS_VALIDOS = [
 ]
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+CODIGO_INTERNO_REGEX = re.compile(r"^[A-Z0-9._/-]+$")
+SERIAL_REGEX = re.compile(r"^[A-Z0-9._/-]+$")
+
+
+def _somente_digitos(valor: str | None) -> str:
+    """
+    Remove qualquer caractere não numérico para normalização de campos telefônicos/IMEI.
+    """
+    return "".join(ch for ch in str(valor or "") if ch.isdigit())
+
+
+def normalizar_numero_linha(numero_linha: str | None) -> str | None:
+    """
+    Normaliza número de linha para apenas dígitos, preservando compatibilidade com DDI opcional.
+    """
+    digitos = _somente_digitos(numero_linha)
+    return digitos or None
+
+
+def validar_numero_linha(numero_linha: str | None) -> tuple[bool, str]:
+    """
+    Valida número de linha/chip.
+
+    Aceita:
+    - 10 ou 11 dígitos (DDD + número nacional)
+    - 12 ou 13 dígitos iniciando com 55 (com DDI do Brasil)
+    """
+    digitos = _somente_digitos(numero_linha)
+    if not digitos:
+        return True, ""
+
+    tamanho = len(digitos)
+    if tamanho in {10, 11}:
+        return True, ""
+
+    if tamanho in {12, 13} and digitos.startswith("55"):
+        return True, ""
+
+    return False, (
+        "O campo numero_linha deve conter 10 ou 11 dígitos "
+        "(ou 12/13 com DDI 55)."
+    )
+
+
+def normalizar_imei(imei: str | None) -> str | None:
+    """
+    Normaliza IMEI para apenas dígitos.
+    """
+    digitos = _somente_digitos(imei)
+    return digitos or None
+
+
+def _luhn_valido(numero: str) -> bool:
+    """
+    Aplica o algoritmo de Luhn para validação robusta de IMEI.
+    """
+    soma = 0
+    for indice, digito in enumerate(reversed(numero), start=1):
+        valor = int(digito)
+        if indice % 2 == 0:
+            valor *= 2
+            if valor > 9:
+                valor -= 9
+        soma += valor
+    return soma % 10 == 0
+
+
+def validar_imei(imei: str | None, nome_campo: str) -> tuple[bool, str]:
+    """
+    Valida IMEI com 15 dígitos e checksum de Luhn.
+    """
+    digitos = _somente_digitos(imei)
+    if not digitos:
+        return True, ""
+
+    if len(digitos) != 15:
+        return False, f"O campo {nome_campo} deve conter exatamente 15 dígitos."
+
+    if not _luhn_valido(digitos):
+        return False, f"O campo {nome_campo} possui IMEI inválido."
+
+    return True, ""
+
+
+def normalizar_valor_monetario(valor: str | None) -> str | None:
+    """
+    Normaliza valor monetário para formato decimal canônico com ponto.
+
+    Exemplos aceitos:
+    - "R$ 1.250,00" -> "1250.00"
+    - "1250,5"      -> "1250.50"
+    - "1250.50"     -> "1250.50"
+    """
+    bruto = (valor or "").strip()
+    if not bruto:
+        return None
+
+    sem_moeda = bruto.replace("R$", "").replace(" ", "")
+
+    # Quando há vírgula, assume padrão pt-BR com ponto de milhar.
+    if "," in sem_moeda:
+        sem_moeda = sem_moeda.replace(".", "").replace(",", ".")
+
+    try:
+        numero = float(sem_moeda)
+    except ValueError as exc:
+        raise ValueError("O campo valor deve ser numérico.") from exc
+
+    if numero < 0:
+        raise ValueError("O campo valor não pode ser negativo.")
+
+    return f"{numero:.2f}"
 
 
 def validar_email(email: str) -> bool:
@@ -436,9 +548,17 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
     if not ok:
         raise ValueError(msg)
 
+    codigo_interno = (getattr(ativo, "codigo_interno", None) or "").strip().upper()
+    if codigo_interno and not CODIGO_INTERNO_REGEX.match(codigo_interno):
+        raise ValueError("O campo codigo_interno contém caracteres inválidos.")
+
     ok, msg = validar_texto_opcional(getattr(ativo, "serial", None), "serial", tamanho_maximo=120)
     if not ok:
         raise ValueError(msg)
+
+    serial = (getattr(ativo, "serial", None) or "").strip().upper()
+    if serial and not SERIAL_REGEX.match(serial):
+        raise ValueError("O campo serial contém caracteres inválidos.")
 
     ok, msg = validar_condicao(getattr(ativo, "condicao", None))
     if not ok:
@@ -465,6 +585,18 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
     if not ok:
         raise ValueError(msg)
 
+    ok, msg = validar_numero_linha(getattr(ativo, "numero_linha", None))
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_imei(getattr(ativo, "imei_1", None), "imei_1")
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_imei(getattr(ativo, "imei_2", None), "imei_2")
+    if not ok:
+        raise ValueError(msg)
+
     ok, msg = validar_texto_opcional(getattr(ativo, "detalhes_tecnicos", None), "detalhes_tecnicos", tamanho_maximo=255)
     if not ok:
         raise ValueError(msg)
@@ -479,13 +611,8 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
 
     valor_bruto = (getattr(ativo, "valor", None) or "").strip()
     if valor_bruto:
-        valor_normalizado = valor_bruto.replace(",", ".")
-        try:
-            valor_numerico = float(valor_normalizado)
-        except ValueError as exc:
-            raise ValueError("O campo valor deve ser numérico.") from exc
-        if valor_numerico < 0:
-            raise ValueError("O campo valor não pode ser negativo.")
+        # Reaproveita normalização central para manter consistência entre frontend e backend.
+        normalizar_valor_monetario(valor_bruto)
 
     ok, msg = validar_texto_opcional(ativo.nota_fiscal, "nota_fiscal")
     if not ok:

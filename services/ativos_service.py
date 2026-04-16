@@ -13,7 +13,10 @@ from utils.validators import (
     validar_ativo,
     validar_id_ativo,
     padronizar_texto,
-    validar_data_iso_opcional
+    validar_data_iso_opcional,
+    normalizar_numero_linha,
+    normalizar_imei,
+    normalizar_valor_monetario,
 )
 
 
@@ -144,6 +147,13 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
     """
     # `tipo_ativo` é a autoridade de negócio no novo cadastro; `tipo` fica apenas como legado.
     tipo_ativo_normalizado = padronizar_texto(ativo.tipo_ativo or ativo.tipo, "title")
+    serial_normalizado = padronizar_texto(_normalizar_documento(ativo.serial), "upper")
+    codigo_interno_normalizado = padronizar_texto(_normalizar_documento(ativo.codigo_interno), "upper")
+    valor_normalizado = normalizar_valor_monetario(_normalizar_documento(ativo.valor))
+    numero_linha_normalizado = normalizar_numero_linha(_normalizar_documento(ativo.numero_linha))
+    imei_1_normalizado = normalizar_imei(_normalizar_documento(ativo.imei_1))
+    imei_2_normalizado = normalizar_imei(_normalizar_documento(ativo.imei_2))
+
     # `descricao` pode receber fallback técnico apenas para fluxos legados/importações antigas.
     descricao_fallback = (
         _normalizar_documento(ativo.descricao)
@@ -155,8 +165,8 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         tipo=tipo_ativo_normalizado,
         marca=padronizar_texto(ativo.marca, "title"),
         modelo=padronizar_texto(ativo.modelo, "upper"),
-        serial=_normalizar_documento(ativo.serial),
-        codigo_interno=_normalizar_documento(ativo.codigo_interno),
+        serial=serial_normalizado,
+        codigo_interno=codigo_interno_normalizado,
         # Mantém compatibilidade: caso não informado, usa descrição técnica mínima.
         descricao=descricao_fallback,
         # `setor` é o campo oficial; `departamento` entra apenas como compatibilidade legada.
@@ -175,7 +185,7 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         data_entrada=(ativo.data_entrada or "").strip(),
         data_saida=(ativo.data_saida or "").strip() or None,
         data_compra=(ativo.data_compra or "").strip() or None,
-        valor=_normalizar_documento(ativo.valor),
+        valor=valor_normalizado,
         observacoes=_normalizar_documento(ativo.observacoes),
         detalhes_tecnicos=_normalizar_documento(ativo.detalhes_tecnicos),
         processador=_normalizar_documento(ativo.processador),
@@ -187,9 +197,9 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         anydesk_id=_normalizar_documento(ativo.anydesk_id),
         nome_equipamento=_normalizar_documento(ativo.nome_equipamento),
         hostname=_normalizar_documento(ativo.hostname),
-        imei_1=_normalizar_documento(ativo.imei_1),
-        imei_2=_normalizar_documento(ativo.imei_2),
-        numero_linha=_normalizar_documento(ativo.numero_linha),
+        imei_1=imei_1_normalizado,
+        imei_2=imei_2_normalizado,
+        numero_linha=numero_linha_normalizado,
         operadora=padronizar_texto(ativo.operadora, "title"),
         conta_vinculada=_normalizar_documento(ativo.conta_vinculada),
         polegadas=_normalizar_documento(ativo.polegadas),

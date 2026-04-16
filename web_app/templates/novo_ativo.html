@@ -28,7 +28,7 @@
 
             <div class="field-group">
                 <label for="codigo_interno">Patrimônio / Código interno</label>
-                <input type="text" id="codigo_interno" name="codigo_interno" class="input-control" maxlength="50">
+                <input type="text" id="codigo_interno" name="codigo_interno" class="input-control" maxlength="50" autocomplete="off">
             </div>
 
             <!-- Removido em Fase 3 Round 2: descricao e categoria são auto-gerados no backend -->
@@ -72,7 +72,7 @@
 
             <div class="field-group">
                 <label for="serial">Serial</label>
-                <input type="text" id="serial" name="serial" class="input-control">
+                <input type="text" id="serial" name="serial" class="input-control" maxlength="120" autocomplete="off">
             </div>
 
             <div class="field-group">
@@ -138,7 +138,7 @@
 
             <div class="field-group">
                 <label for="valor">Valor</label>
-                <input type="number" id="valor" name="valor" class="input-control" step="0.01" min="0">
+                <input type="text" id="valor" name="valor" class="input-control" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off">
             </div>
 
             <div class="field-group">
@@ -180,9 +180,9 @@
             </div>
 
             <div id="specs-celular" class="asset-specs-group" hidden>
-                <div class="field-group"><label for="imei_1">IMEI 1</label><input type="text" id="imei_1" name="imei_1" class="input-control"></div>
-                <div class="field-group"><label for="imei_2">IMEI 2</label><input type="text" id="imei_2" name="imei_2" class="input-control"></div>
-                <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control"></div>
+                <div class="field-group"><label for="imei_1">IMEI 1</label><input type="text" id="imei_1" name="imei_1" class="input-control" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="99 999999 999999 9"></div>
+                <div class="field-group"><label for="imei_2">IMEI 2</label><input type="text" id="imei_2" name="imei_2" class="input-control" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="99 999999 999999 9"></div>
+                <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" inputmode="tel" maxlength="19" autocomplete="off" placeholder="(11) 98765-4321"></div>
                 <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
                 <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control"></div>
                 <div class="field-group"><label for="celular_armazenamento">Armazenamento</label><input type="text" id="celular_armazenamento" data-field-alias="armazenamento" class="input-control"></div>
@@ -340,6 +340,200 @@
         return div.innerHTML;
     }
 
+    function onlyDigits(value) {
+        return String(value || "").replace(/\D+/g, "");
+    }
+
+    function normalizeIdentifier(value) {
+        return String(value || "").trim().toUpperCase();
+    }
+
+    function isValidPhoneDigits(value) {
+        const digits = onlyDigits(value);
+        if (!digits) return true;
+
+        if (digits.length === 10 || digits.length === 11) return true;
+        return (digits.length === 12 || digits.length === 13) && digits.startsWith("55");
+    }
+
+    function luhnIsValid(number) {
+        let sum = 0;
+        const reversed = number.split("").reverse();
+
+        for (let i = 0; i < reversed.length; i += 1) {
+            let digit = Number(reversed[i]);
+            if ((i + 1) % 2 === 0) {
+                digit *= 2;
+                if (digit > 9) digit -= 9;
+            }
+            sum += digit;
+        }
+
+        return sum % 10 === 0;
+    }
+
+    function isValidImei(value) {
+        const digits = onlyDigits(value);
+        if (!digits) return true;
+        return digits.length === 15 && luhnIsValid(digits);
+    }
+
+    function normalizeMoneyToBackend(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+
+        let normalized = raw.replace(/R\$/gi, "").replace(/\s+/g, "");
+        if (normalized.includes(",")) {
+            normalized = normalized.replace(/\./g, "").replace(",", ".");
+        }
+
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed)) return null;
+        if (parsed < 0) return null;
+        return parsed.toFixed(2);
+    }
+
+    function formatMoneyForDisplay(value) {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) return value;
+        return parsed.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+
+    function formatPhoneForDisplay(value) {
+        const digits = onlyDigits(value);
+        if (!digits) return "";
+
+        const national = digits.startsWith("55") && digits.length >= 12 ? digits.slice(2) : digits;
+        const ddd = national.slice(0, 2);
+        const prefix = national.length > 10 ? national.slice(2, 7) : national.slice(2, 6);
+        const suffix = national.length > 10 ? national.slice(7, 11) : national.slice(6, 10);
+        const body = [prefix, suffix].filter(Boolean).join("-");
+        const formatted = ddd ? `(${ddd}) ${body}`.trim() : body;
+
+        if (digits.startsWith("55") && digits.length >= 12) {
+            return `+55 ${formatted}`.trim();
+        }
+
+        return formatted;
+    }
+
+    function formatImeiForDisplay(value) {
+        const digits = onlyDigits(value).slice(0, 15);
+        if (!digits) return "";
+        const g1 = digits.slice(0, 2);
+        const g2 = digits.slice(2, 8);
+        const g3 = digits.slice(8, 14);
+        const g4 = digits.slice(14, 15);
+        return [g1, g2, g3, g4].filter(Boolean).join(" ");
+    }
+
+    function validatePayloadBeforeConfirmation(body) {
+        const codigoInternoRegex = /^[A-Z0-9._/-]+$/;
+        const serialRegex = /^[A-Z0-9._/-]+$/;
+        const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+        const normalizedMoney = normalizeMoneyToBackend(body.valor);
+
+        if (body.codigo_interno && !codigoInternoRegex.test(body.codigo_interno)) {
+            return "Código interno inválido. Use apenas letras, números e . _ / -.";
+        }
+
+        if (body.serial && !serialRegex.test(body.serial)) {
+            return "Serial inválido. Use apenas letras, números e . _ / -.";
+        }
+
+        if (!isValidPhoneDigits(body.numero_linha)) {
+            return "Número da linha inválido. Informe 10 ou 11 dígitos (ou 12/13 com DDI 55).";
+        }
+
+        if (!isValidImei(body.imei_1)) {
+            return "IMEI 1 inválido. Informe 15 dígitos válidos.";
+        }
+
+        if (!isValidImei(body.imei_2)) {
+            return "IMEI 2 inválido. Informe 15 dígitos válidos.";
+        }
+
+        if (body.email_responsavel && !emailRegex.test(body.email_responsavel)) {
+            return "E-mail do responsável inválido.";
+        }
+
+        if (String(body.valor || "").trim() && normalizedMoney === null) {
+            return "Valor inválido. Informe um número positivo (ex.: R$ 1.250,00).";
+        }
+
+        if (body.status === "Em Uso" && !String(body.usuario_responsavel || "").trim()) {
+            return "Quando o status for Em Uso, informe o responsável.";
+        }
+
+        if (body.data_entrada && body.data_saida && body.data_saida < body.data_entrada) {
+            return "A data de saída não pode ser anterior à data de entrada.";
+        }
+
+        if (body.data_compra && body.data_entrada && body.data_compra > body.data_entrada) {
+            return "A data da compra não pode ser posterior à data de entrada.";
+        }
+
+        return null;
+    }
+
+    function normalizePayloadForBackend(body) {
+        body.codigo_interno = normalizeIdentifier(body.codigo_interno);
+        body.serial = normalizeIdentifier(body.serial);
+        body.email_responsavel = String(body.email_responsavel || "").trim().toLowerCase();
+        body.numero_linha = onlyDigits(body.numero_linha);
+        body.imei_1 = onlyDigits(body.imei_1);
+        body.imei_2 = onlyDigits(body.imei_2);
+
+        const normalizedMoney = normalizeMoneyToBackend(body.valor);
+        body.valor = normalizedMoney === null ? body.valor : normalizedMoney;
+    }
+
+    function setupInputMasks() {
+        const codigoInternoInput = document.getElementById("codigo_interno");
+        const serialInput = document.getElementById("serial");
+        const valorInput = document.getElementById("valor");
+        const numeroLinhaInput = document.getElementById("numero_linha");
+        const imei1Input = document.getElementById("imei_1");
+        const imei2Input = document.getElementById("imei_2");
+
+        if (codigoInternoInput) {
+            codigoInternoInput.addEventListener("input", () => {
+                codigoInternoInput.value = normalizeIdentifier(codigoInternoInput.value);
+            });
+        }
+
+        if (serialInput) {
+            serialInput.addEventListener("input", () => {
+                serialInput.value = normalizeIdentifier(serialInput.value);
+            });
+        }
+
+        if (valorInput) {
+            valorInput.addEventListener("input", () => {
+                const digits = onlyDigits(valorInput.value);
+                if (!digits) {
+                    valorInput.value = "";
+                    return;
+                }
+                const value = Number(digits) / 100;
+                valorInput.value = formatMoneyForDisplay(value);
+            });
+        }
+
+        if (numeroLinhaInput) {
+            numeroLinhaInput.addEventListener("input", () => {
+                numeroLinhaInput.value = formatPhoneForDisplay(numeroLinhaInput.value);
+            });
+        }
+
+        [imei1Input, imei2Input].forEach((input) => {
+            if (!input) return;
+            input.addEventListener("input", () => {
+                input.value = formatImeiForDisplay(input.value);
+            });
+        });
+    }
+
     function setAttachmentLoading(message = "Carregando documentos...") {
         attachmentList.innerHTML = `<p>${message}</p>`;
     }
@@ -476,6 +670,14 @@
             body.departamento = body.setor || body.departamento;
             body.nota_fiscal = body.nota_fiscal || null;
 
+            normalizePayloadForBackend(body);
+
+            const validationError = validatePayloadBeforeConfirmation(body);
+            if (validationError) {
+                showMessage("danger", validationError);
+                return;
+            }
+
             // Armazena dados para usar na confirmação.
             pendingAssetData = body;
 
@@ -528,7 +730,7 @@
             ],
             "Valor e Documentação": [
                 { label: "Data de Compra", value: data.data_compra },
-                { label: "Valor", value: data.valor },
+                { label: "Valor", value: data.valor ? formatMoneyForDisplay(data.valor) : "" },
                 { label: "Garantia", value: data.garantia },
                 { label: "Nota Fiscal", value: data.nota_fiscal }
             ],
@@ -722,6 +924,7 @@
     });
 
     document.getElementById("tipo_ativo").addEventListener("change", setSpecsVisibility);
+    setupInputMasks();
     setSpecsVisibility();
 </script>
 {% endblock %}

@@ -442,7 +442,7 @@
             const detailUrl = "{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodedId);
 
             return `
-                <tr ${rowStyle}>
+                <tr data-asset-id="${escapeHtml(asset.id)}" ${rowStyle}>
                     <td>
                         ${escapeHtml(asset.id)}
                         ${isNewAsset ? '<span style="margin-left: 0.5rem; display: inline-block; background: #ffc107; color: #333; padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: bold;">NOVO</span>' : ''}
@@ -472,7 +472,8 @@
 
         // Se há ativo para destacar, faz scroll até ele.
         if (highlightId) {
-            const highlightedRow = assetTableBody.querySelector('tr:has(span:contains("NOVO"))');
+            const highlightedRow = Array.from(assetTableBody.querySelectorAll("tr[data-asset-id]"))
+                .find((row) => String(row.dataset.assetId || "").trim() === String(highlightId).trim());
             if (highlightedRow) {
                 setTimeout(() => {
                     highlightedRow.scrollIntoView({ behavior: 'smooth', block: 'center' });

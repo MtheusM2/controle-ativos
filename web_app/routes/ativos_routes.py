@@ -60,7 +60,7 @@ def _gerar_chave_dedup(dados: dict, user_id: int) -> str:
     chave_str = f"{json.dumps(dados_norm, sort_keys=True)}#{user_id}"
     return hashlib.sha256(chave_str.encode()).hexdigest()
 
-def _verificar_duplicacao(chave_dedup: str, user_id: int, ativo_id_novo: str) -> tuple[bool, str | None]:
+def _verificar_duplicacao(chave_dedup: str, ativo_id_novo: str) -> tuple[bool, str | None]:
     """
     Verifica se uma criação é duplicada (requisição recente com mesmos dados).
     Se sim, retorna (True, id_do_ativo_existente).
@@ -81,6 +81,13 @@ def _verificar_duplicacao(chave_dedup: str, user_id: int, ativo_id_novo: str) ->
     # Verifica se esta chave foi criada recentemente.
     if chave_dedup in _creation_dedup_cache:
         ativo_id_existente, _ = _creation_dedup_cache[chave_dedup]
+
+        # Primeiro request pode registrar a chave sem ID; quando o ID for conhecido,
+        # atualiza o cache para que replays posteriores retornem o mesmo ativo.
+        if not ativo_id_existente and ativo_id_novo:
+            _creation_dedup_cache[chave_dedup] = (ativo_id_novo, tempo_atual)
+            return (False, None)
+
         # Duplicação detectada — retorna ativo já criado.
         return (True, ativo_id_existente)
 
@@ -1029,7 +1036,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             # Gera uma chave de deduplicação baseada nos dados principais do ativo.
             # Se a mesma chave foi criada nos últimos 10s, retorna ativo existente.
             chave_dedup = _gerar_chave_dedup(dados, user_id)
-            eh_duplicada, id_existente = _verificar_duplicacao(chave_dedup, user_id, None)
+            eh_duplicada, id_existente = _verificar_duplicacao(chave_dedup, None)
 
             if eh_duplicada and id_existente:
                 # Duplicação detectada — retorna ativo já criado.
@@ -1044,7 +1051,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             id_gerado = service.criar_ativo(ativo, user_id)
 
             # Atualiza cache com o ID real gerado.
-            _verificar_duplicacao(chave_dedup, user_id, id_gerado)
+            _verificar_duplicacao(chave_dedup, id_gerado)
 
             criado = service.buscar_ativo(id_gerado, user_id)
             return _json_success(
@@ -1054,7 +1061,9 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
-        except (ValueError, KeyError, TypeError):
+        except ValueError as erro:
+            return _json_error(str(erro), status=400)
+        except (KeyError, TypeError):
             return _json_error("Erro inesperado ao cadastrar ativo.", status=500)
 
     @app.get("/ativos/<id_ativo>")
@@ -1102,7 +1111,9 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=404)
         except (PermissaoNegada, AtivoErro) as erro:
             return _json_error(str(erro), status=400)
-        except (ValueError, KeyError, TypeError):
+        except ValueError as erro:
+            return _json_error(str(erro), status=400)
+        except (KeyError, TypeError):
             return _json_error("Erro inesperado ao atualizar ativo.", status=500)
 
     @app.post("/ativos/<id_ativo>/movimentacao/preview")

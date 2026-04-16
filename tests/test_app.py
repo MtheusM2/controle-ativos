@@ -1623,6 +1623,76 @@ def test_asset_create_route_accepts_sparse_payload_without_descricao_categoria()
     assert payload["ativo"]["id"] == "NTB-001"
 
 
+def test_asset_create_route_returns_400_for_validation_value_error():
+    """
+    ValueError de validação deve retornar 400 com mensagem de negócio,
+    não erro genérico 500.
+    """
+
+    class ValidationErrorAtivosService:
+        def criar_ativo(self, _ativo, _user_id):
+            raise ValueError("IMEI 1 inválido.")
+
+        def buscar_ativo(self, _id_ativo, _user_id):
+            return None
+
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": ValidationErrorAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
+
+    response = client.post(
+        "/ativos",
+        json={
+            "tipo_ativo": "Celular",
+            "marca": "Samsung",
+            "modelo": "S23",
+            "status": "Disponível",
+            "setor": "T.I",
+            "data_entrada": "2026-04-15",
+            "imei_1": "490154203237519",
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["ok"] is False
+    assert "IMEI" in payload.get("erro", "")
+
+
+def test_assets_list_template_avoids_non_standard_selector_for_highlight(app_fixture):
+    """
+    Regressão de runtime: evitar seletor CSS não suportado (:contains)
+    no destaque de ativo recém-criado.
+    """
+    del app_fixture
+    from pathlib import Path
+
+    template_path = Path(__file__).parent.parent / "web_app" / "templates" / "ativos.html"
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_content = f.read()
+
+    assert "tr:has(span:contains(\"NOVO\"))" not in template_content
+    assert "tr[data-asset-id]" in template_content
+
+
 def test_asset_filter_presenca_documental_uses_real_attachments():
     """
     Testa que o filtro de presença documental usa anexos reais da tabela ativos_arquivos.

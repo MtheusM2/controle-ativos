@@ -213,6 +213,55 @@ def test_validar_ativo_rejeita_data_compra_maior_que_data_entrada():
         raise AssertionError("Era esperado ValueError para data_compra maior que data_entrada.")
 
 
+def test_validar_ativo_rejeita_numero_linha_com_tamanho_invalido():
+    """
+    Número da linha deve ter 10/11 dígitos (ou 12/13 com DDI 55).
+    """
+    ativo = make_valid_ativo(numero_linha="12345")
+
+    with pytest.raises(ValueError) as erro:
+        validar_ativo(ativo, validar_id=False)
+
+    assert "numero_linha" in str(erro.value)
+
+
+def test_validar_ativo_rejeita_imei_com_checksum_invalido():
+    """
+    IMEI com 15 dígitos mas checksum inválido deve ser bloqueado.
+    """
+    ativo = make_valid_ativo(imei_1="490154203237519")
+
+    with pytest.raises(ValueError) as erro:
+        validar_ativo(ativo, validar_id=False)
+
+    assert "imei_1" in str(erro.value).lower()
+
+
+def test_validar_ativo_aceita_imei_e_numero_linha_validos():
+    """
+    Backend deve aceitar IMEI válido e número de linha em formato nacional.
+    """
+    ativo = make_valid_ativo(
+        imei_1="490154203237518",
+        numero_linha="(11) 98765-4321",
+    )
+
+    # Não deve lançar exceção.
+    validar_ativo(ativo, validar_id=False)
+
+
+def test_validar_ativo_rejeita_serial_com_caracter_invalido():
+    """
+    Serial e código interno aceitam somente padrão alfanumérico com separadores seguros.
+    """
+    ativo = make_valid_ativo(serial="SN@001")
+
+    with pytest.raises(ValueError) as erro:
+        validar_ativo(ativo, validar_id=False)
+
+    assert "serial" in str(erro.value).lower()
+
+
 def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
     """
     O service mantém compatibilidade com payload legado usando tipo e departamento.
