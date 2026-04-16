@@ -436,6 +436,10 @@
             // Verifica se este ativo deve ser destacado com badge "NOVO".
             const isNewAsset = highlightId && String(asset.id).trim() === String(highlightId).trim();
             const rowStyle = isNewAsset ? 'style="background-color: #fffacd; border-left: 4px solid #ffc107;"' : '';
+            // Resolve URLs por linha sem encadear replace em Array (evita erro JS em runtime).
+            const encodedId = encodeURIComponent(asset.id || "");
+            const editUrl = "{{ url_for('editar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodedId);
+            const detailUrl = "{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodedId);
 
             return `
                 <tr ${rowStyle}>
@@ -457,14 +461,13 @@
                     <td class="action-cell">
                         <div class="row-actions">
                             <button type="button" class="btn btn-secondary btn-mini view-asset-btn" data-asset-id="${asset.id}">Visualizar</button>
-                            <a href="{{ url_for('editar_ativo_html', id_ativo='__ID__') }}" class="btn btn-secondary btn-mini">Editar</a>
-                            <a href="{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}" class="btn-icon" title="Ver documentos e detalhes">📋</a>
+                            <a href="${editUrl}" class="btn btn-secondary btn-mini">Editar</a>
+                            <a href="${detailUrl}" class="btn-icon" title="Ver documentos e detalhes">📋</a>
                         </div>
                     </td>
                 </tr>
             `;
         })
-        .replaceAll("__ID__", encodeURIComponent(asset.id))
         .join("");
 
         // Se há ativo para destacar, faz scroll até ele.
@@ -482,17 +485,24 @@
     // @param {Object} filters - Filtros a aplicar na busca
     // @param {string} highlightId - ID do ativo a destacar com badge "NOVO" (opcional)
     async function loadAssets(filters = currentFilters, highlightId = null) {
-        currentFilters = filters;
-        const queryString = buildQueryString(filters);
+        try {
+            currentFilters = filters;
+            const queryString = buildQueryString(filters);
 
-        const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}" + queryString, { method: "GET" });
-        if (!response.ok) {
-            showMessage("danger", payload?.erro || "Não foi possível carregar os ativos.");
-            return;
+            const { response, payload } = await requestJson("{{ url_for('listar_ativos') }}" + queryString, { method: "GET" });
+            if (!response.ok) {
+                showMessage("danger", payload?.erro || "Não foi possível carregar os ativos.");
+                return;
+            }
+
+            clearMessage();
+            renderAssets(payload.ativos || [], highlightId);
+        } catch (error) {
+            // Mantém o usuário informado quando ocorrer exceção de script no fluxo da listagem.
+            console.error("Falha no fluxo de listagem de ativos:", error);
+            showMessage("danger", "Falha ao renderizar a listagem de ativos. Recarregue a página.");
+            assetTableBody.innerHTML = `<tr><td colspan="10">Erro ao carregar ativos.</td></tr>`;
         }
-
-        clearMessage();
-        renderAssets(payload.ativos || [], highlightId);
     }
 
     function openModal(id) {

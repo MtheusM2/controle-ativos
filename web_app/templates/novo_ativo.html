@@ -333,6 +333,13 @@
         assetFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${message}</span></div>`;
     }
 
+    function escapeHtml(text) {
+        // Sanitiza conteúdo textual antes de injetar no HTML da modal de confirmação.
+        const div = document.createElement("div");
+        div.appendChild(document.createTextNode(text || ""));
+        return div.innerHTML;
+    }
+
     function setAttachmentLoading(message = "Carregando documentos...") {
         attachmentList.innerHTML = `<p>${message}</p>`;
     }
@@ -459,25 +466,31 @@
     createAssetForm.addEventListener("submit", async (event) => {
         event.preventDefault();
 
-        // Coleta dados do formulário sem enviar ainda.
-        const body = Object.fromEntries(new FormData(createAssetForm).entries());
-        syncAliasedSpecFieldsToBody(body);
+        try {
+            // Coleta dados do formulário sem enviar ainda.
+            const body = Object.fromEntries(new FormData(createAssetForm).entries());
+            syncAliasedSpecFieldsToBody(body);
 
-        // Normaliza campos (compatibilidade com backend).
-        body.tipo = body.tipo_ativo || body.tipo;
-        body.departamento = body.setor || body.departamento;
-        body.nota_fiscal = body.nota_fiscal || null;
+            // Normaliza campos (compatibilidade com backend).
+            body.tipo = body.tipo_ativo || body.tipo;
+            body.departamento = body.setor || body.departamento;
+            body.nota_fiscal = body.nota_fiscal || null;
 
-        // Armazena dados para usar na confirmação.
-        pendingAssetData = body;
+            // Armazena dados para usar na confirmação.
+            pendingAssetData = body;
 
-        // Renderiza a modal com os dados coletados.
-        renderConfirmationModal(body);
+            // Renderiza a modal com os dados coletados.
+            renderConfirmationModal(body);
 
-        // Abre a modal de confirmação.
-        const confirmModal = document.getElementById("confirm-asset-modal");
-        if (confirmModal) {
-            confirmModal.hidden = false;
+            // Abre a modal de confirmação.
+            const confirmModal = document.getElementById("confirm-asset-modal");
+            if (confirmModal) {
+                confirmModal.hidden = false;
+            }
+        } catch (error) {
+            // Exibe feedback visível para o usuário quando houver falha antes do envio ao backend.
+            console.error("Falha ao preparar confirmação de cadastro:", error);
+            showMessage("danger", "Não foi possível abrir a confirmação do cadastro. Revise os dados e tente novamente.");
         }
     });
 

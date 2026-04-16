@@ -45,6 +45,28 @@ def test_asset_create_page_uses_safe_attachment_int_route_builder(authenticated_
     assert "templateUrl.replace(/\\/0(?=\\/|$)/" in html
 
 
+def test_assets_listing_template_does_not_chain_replaceall_on_mapped_array(authenticated_client):
+    """
+    Regressão: a tabela de ativos não pode usar replaceAll diretamente no resultado de map(),
+    pois isso quebra o carregamento com TypeError em runtime.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert ").replaceAll(\"__ID__\"" not in html
+
+
+def test_asset_create_template_includes_escape_html_for_confirmation_modal(authenticated_client):
+    """
+    Regressão: a modal de confirmação do cadastro depende de escapeHtml().
+    Se a função não existir, o submit fica silenciosamente interrompido.
+    """
+    response = authenticated_client.get("/ativos/novo")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "function escapeHtml(text)" in html
+
+
 def test_asset_edit_page_authenticated(authenticated_client):
     response = authenticated_client.get("/ativos/editar/A-001")
     assert response.status_code == 200
