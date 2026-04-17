@@ -78,7 +78,7 @@ SERIAL_REGEX = re.compile(r"^[A-Z0-9._/-]+$")
 
 def _somente_digitos(valor: str | None) -> str:
     """
-    Remove qualquer caractere não numérico para normalização de campos telefônicos/IMEI.
+    Remove qualquer caractere não numérico para normalização de campos telefônicos.
     """
     return "".join(ch for ch in str(valor or "") if ch.isdigit())
 
@@ -116,42 +116,109 @@ def validar_numero_linha(numero_linha: str | None) -> tuple[bool, str]:
     )
 
 
-def normalizar_imei(imei: str | None) -> str | None:
-    """
-    Normaliza IMEI para apenas dígitos.
-    """
-    digitos = _somente_digitos(imei)
-    return digitos or None
+# Removido em Fase 3 Round 3: funções de normalização e validação de IMEI
+# normalizar_imei(), _luhn_valido(), validar_imei() — não mais necessárias no fluxo de celular
 
 
-def _luhn_valido(numero: str) -> bool:
+def validar_teamviewer_id(teamviewer_id: str | None) -> tuple[bool, str]:
     """
-    Aplica o algoritmo de Luhn para validação robusta de IMEI.
-    """
-    soma = 0
-    for indice, digito in enumerate(reversed(numero), start=1):
-        valor = int(digito)
-        if indice % 2 == 0:
-            valor *= 2
-            if valor > 9:
-                valor -= 9
-        soma += valor
-    return soma % 10 == 0
+    Valida identificador do TeamViewer para acesso remoto.
 
+    Regras:
+    - Campo opcional (vazio é permitido)
+    - Se fornecido: máximo 100 caracteres
+    - Aceita apenas identificadores plausíveis: alfanuméricos, hífen, sublinhado
+    - Rejeita padrões que parecem credencial (caracteres especiais demais)
 
-def validar_imei(imei: str | None, nome_campo: str) -> tuple[bool, str]:
+    Exemplos válidos:
+    - "123456789" (numérico típico do TeamViewer)
+    - "ABC-123-DEF" (com hífens)
+    - "team_viewer_123" (com sublinhado)
+
+    Exemplos inválidos:
+    - "pass@123!secure" (caracteres especiais de senha)
+    - "!@#$%^&*()" (apenas caracteres especiais)
+    - Vazio é OK (campo opcional)
     """
-    Valida IMEI com 15 dígitos e checksum de Luhn.
-    """
-    digitos = _somente_digitos(imei)
-    if not digitos:
+    teamviewer_id = (teamviewer_id or "").strip()
+
+    # Campo opcional — permite vazio
+    if not teamviewer_id:
         return True, ""
 
-    if len(digitos) != 15:
-        return False, f"O campo {nome_campo} deve conter exatamente 15 dígitos."
+    # Limite de tamanho razoável (campo VARCHAR(100) no BD)
+    if len(teamviewer_id) > 100:
+        return False, "O identificador TeamViewer não pode exceder 100 caracteres."
 
-    if not _luhn_valido(digitos):
-        return False, f"O campo {nome_campo} possui IMEI inválido."
+    # Rejeitar padrões que parecem credencial (muitos caracteres especiais)
+    caracteres_especiais = sum(1 for c in teamviewer_id if not c.isalnum() and c not in "-_")
+    if caracteres_especiais > 3:
+        return (
+            False,
+            "O identificador TeamViewer contém muitos caracteres especiais. "
+            "Não importar credenciais sensíveis em texto puro."
+        )
+
+    # Permitir apenas alfanuméricos, hífen e sublinhado
+    # Rejeitar símbolos típicos de senha como @, !, $, etc.
+    caracteres_proibidos = set("!@#$%^&*()[]{}/<>\\|:;\"'")
+    if any(c in caracteres_proibidos for c in teamviewer_id):
+        return (
+            False,
+            "O identificador TeamViewer contém caracteres inválidos. "
+            "Use apenas letras, números, hífen e sublinhado."
+        )
+
+    return True, ""
+
+
+def validar_anydesk_id(anydesk_id: str | None) -> tuple[bool, str]:
+    """
+    Valida identificador do AnyDesk para acesso remoto.
+
+    Regras:
+    - Campo opcional (vazio é permitido)
+    - Se fornecido: máximo 100 caracteres
+    - Aceita apenas identificadores plausíveis: alfanuméricos, hífen
+    - Rejeita padrões que parecem credencial (caracteres especiais demais)
+
+    Exemplos válidos:
+    - "123456789012345" (numérico típico do AnyDesk)
+    - "ABC-123-DEF-GHI" (com hífens)
+
+    Exemplos inválidos:
+    - "pass@123!secure" (caracteres especiais de senha)
+    - "!@#$%^&*()" (apenas caracteres especiais)
+    - Vazio é OK (campo opcional)
+    """
+    anydesk_id = (anydesk_id or "").strip()
+
+    # Campo opcional — permite vazio
+    if not anydesk_id:
+        return True, ""
+
+    # Limite de tamanho razoável (campo VARCHAR(100) no BD)
+    if len(anydesk_id) > 100:
+        return False, "O identificador AnyDesk não pode exceder 100 caracteres."
+
+    # Rejeitar padrões que parecem credencial (muitos caracteres especiais)
+    caracteres_especiais = sum(1 for c in anydesk_id if not c.isalnum() and c != "-")
+    if caracteres_especiais > 2:
+        return (
+            False,
+            "O identificador AnyDesk contém muitos caracteres especiais. "
+            "Não importar credenciais sensíveis em texto puro."
+        )
+
+    # Permitir apenas alfanuméricos e hífen
+    # Rejeitar símbolos típicos de senha como @, !, $, _, etc.
+    caracteres_proibidos = set("!@#$%^&*()[]{}/<>\\|:;\"'_")
+    if any(c in caracteres_proibidos for c in anydesk_id):
+        return (
+            False,
+            "O identificador AnyDesk contém caracteres inválidos. "
+            "Use apenas letras, números e hífen."
+        )
 
     return True, ""
 
@@ -503,6 +570,32 @@ def validar_regras_ativo(
     return True, ""
 
 
+def validar_especificacoes_por_tipo(ativo, tipo_principal: str) -> tuple[bool, str]:
+    """
+    Valida coerência mínima das especificações técnicas por tipo.
+
+    Nesta etapa, monitor foi simplificado para manter apenas `polegadas`.
+    Os demais campos legados de monitor continuam opcionais para compatibilidade,
+    sem exigência no fluxo atual.
+    """
+    tipo_fmt = (tipo_principal or "").strip().title()
+
+    if tipo_fmt != "Monitor":
+        return True, ""
+
+    ok, msg = validar_texto_opcional(getattr(ativo, "polegadas", None), "polegadas", tamanho_maximo=40)
+    if not ok:
+        return False, msg
+
+    # Campos legados aceitos apenas como compatibilidade histórica.
+    for nome_campo in ["resolucao", "tipo_painel", "entrada_video", "fonte_ou_cabo"]:
+        ok, msg = validar_texto_opcional(getattr(ativo, nome_campo, None), nome_campo, tamanho_maximo=120)
+        if not ok:
+            return False, msg
+
+    return True, ""
+
+
 def validar_ativo(ativo, *, validar_id: bool = True) -> None:
     """
     Valida o objeto Ativo completo.
@@ -529,6 +622,10 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
             raise ValueError(msg)
 
     ok, msg = validar_tipo_ativo(tipo_principal)
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_especificacoes_por_tipo(ativo, tipo_principal)
     if not ok:
         raise ValueError(msg)
 
@@ -589,13 +686,7 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
     if not ok:
         raise ValueError(msg)
 
-    ok, msg = validar_imei(getattr(ativo, "imei_1", None), "imei_1")
-    if not ok:
-        raise ValueError(msg)
-
-    ok, msg = validar_imei(getattr(ativo, "imei_2", None), "imei_2")
-    if not ok:
-        raise ValueError(msg)
+    # IMEI removido em Fase 3 Round 3 — não mais validado no fluxo de celular
 
     ok, msg = validar_texto_opcional(getattr(ativo, "detalhes_tecnicos", None), "detalhes_tecnicos", tamanho_maximo=255)
     if not ok:
@@ -620,6 +711,15 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
 
     # Valida o campo opcional de garantia mantendo o mesmo limite textual.
     ok, msg = validar_texto_opcional(ativo.garantia, "garantia")
+    if not ok:
+        raise ValueError(msg)
+
+    # Validar identificadores de acesso remoto (TeamViewer e AnyDesk)
+    ok, msg = validar_teamviewer_id(getattr(ativo, "teamviewer_id", None))
+    if not ok:
+        raise ValueError(msg)
+
+    ok, msg = validar_anydesk_id(getattr(ativo, "anydesk_id", None))
     if not ok:
         raise ValueError(msg)
 

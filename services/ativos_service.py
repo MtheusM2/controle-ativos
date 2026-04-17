@@ -15,7 +15,7 @@ from utils.validators import (
     padronizar_texto,
     validar_data_iso_opcional,
     normalizar_numero_linha,
-    normalizar_imei,
+    # normalizar_imei removido em Fase 3 Round 3 — não mais necessário
     normalizar_valor_monetario,
 )
 
@@ -141,6 +141,25 @@ def _normalizar_email(valor: str | None) -> str | None:
     return valor
 
 
+def _aplicar_politica_especificacoes_por_tipo(ativo: Ativo) -> Ativo:
+    """
+    Aplica regras de serialização por tipo para manter cadastro coerente.
+
+    Nesta etapa:
+    - Monitor mantém apenas `polegadas` na ficha técnica.
+    - Campos legados de monitor são limpos para evitar persistência residual.
+    """
+    tipo_normalizado = padronizar_texto(ativo.tipo_ativo or ativo.tipo, "lower")
+
+    if tipo_normalizado == "monitor":
+        ativo.resolucao = None
+        ativo.tipo_painel = None
+        ativo.entrada_video = None
+        ativo.fonte_ou_cabo = None
+
+    return ativo
+
+
 def _padronizar_ativo(ativo: Ativo) -> Ativo:
     """
     Padroniza campos textuais do ativo antes da persistência.
@@ -151,8 +170,7 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
     codigo_interno_normalizado = padronizar_texto(_normalizar_documento(ativo.codigo_interno), "upper")
     valor_normalizado = normalizar_valor_monetario(_normalizar_documento(ativo.valor))
     numero_linha_normalizado = normalizar_numero_linha(_normalizar_documento(ativo.numero_linha))
-    imei_1_normalizado = normalizar_imei(_normalizar_documento(ativo.imei_1))
-    imei_2_normalizado = normalizar_imei(_normalizar_documento(ativo.imei_2))
+    # IMEI removido em Fase 3 Round 3 — não mais normalizado no serviço
 
     # `descricao` pode receber fallback técnico apenas para fluxos legados/importações antigas.
     descricao_fallback = (
@@ -160,7 +178,7 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         or _normalizar_documento(" ".join(part for part in [ativo.tipo, ativo.marca, ativo.modelo] if (part or "").strip()))
     )
 
-    return Ativo(
+    ativo_norm = Ativo(
         id_ativo=(ativo.id_ativo or "").strip(),
         tipo=tipo_ativo_normalizado,
         marca=padronizar_texto(ativo.marca, "title"),
@@ -197,8 +215,9 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         anydesk_id=_normalizar_documento(ativo.anydesk_id),
         nome_equipamento=_normalizar_documento(ativo.nome_equipamento),
         hostname=_normalizar_documento(ativo.hostname),
-        imei_1=imei_1_normalizado,
-        imei_2=imei_2_normalizado,
+        # IMEI removido em Fase 3 Round 3
+        imei_1=None,
+        imei_2=None,
         numero_linha=numero_linha_normalizado,
         operadora=padronizar_texto(ativo.operadora, "title"),
         conta_vinculada=_normalizar_documento(ativo.conta_vinculada),
@@ -212,6 +231,8 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         data_ultima_movimentacao=getattr(ativo, "data_ultima_movimentacao", None),
         criado_por=ativo.criado_por
     )
+
+    return _aplicar_politica_especificacoes_por_tipo(ativo_norm)
 
 
 # Rótulos legíveis para o resumo estruturado de movimentação.
@@ -244,8 +265,7 @@ CAMPO_ROTULOS_MOVIMENTACAO = {
     "anydesk_id": "AnyDesk ID",
     "nome_equipamento": "Nome do equipamento",
     "hostname": "Hostname",
-    "imei_1": "IMEI 1",
-    "imei_2": "IMEI 2",
+    # IMEI removido em Fase 3 Round 3
     "numero_linha": "Número da linha",
     "operadora": "Operadora",
     "conta_vinculada": "Conta vinculada",

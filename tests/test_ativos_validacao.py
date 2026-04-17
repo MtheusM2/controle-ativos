@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
+
 from datetime import date, timedelta
 
 import pytest
@@ -225,29 +227,59 @@ def test_validar_ativo_rejeita_numero_linha_com_tamanho_invalido():
     assert "numero_linha" in str(erro.value)
 
 
-def test_validar_ativo_rejeita_imei_com_checksum_invalido():
+def test_validar_ativo_aceita_numero_linha_valido_sem_imei():
     """
-    IMEI com 15 dígitos mas checksum inválido deve ser bloqueado.
-    """
-    ativo = make_valid_ativo(imei_1="490154203237519")
-
-    with pytest.raises(ValueError) as erro:
-        validar_ativo(ativo, validar_id=False)
-
-    assert "imei_1" in str(erro.value).lower()
-
-
-def test_validar_ativo_aceita_imei_e_numero_linha_validos():
-    """
-    Backend deve aceitar IMEI válido e número de linha em formato nacional.
+    Fase 3 Round 3: celular sem IMEI — backend deve aceitar apenas numero_linha válido.
     """
     ativo = make_valid_ativo(
-        imei_1="490154203237518",
         numero_linha="(11) 98765-4321",
     )
 
     # Não deve lançar exceção.
     validar_ativo(ativo, validar_id=False)
+
+
+def test_validar_ativo_monitor_aceita_apenas_polegadas():
+    """
+    Monitor simplificado deve continuar válido com apenas a medida em polegadas,
+    sem exigir campos técnicos legados.
+    """
+    ativo = make_valid_ativo(
+        tipo="Monitor",
+        tipo_ativo="Monitor",
+        polegadas="24",
+        resolucao=None,
+        tipo_painel=None,
+        entrada_video=None,
+        fonte_ou_cabo=None,
+    )
+
+    # Não deve lançar exceção.
+    validar_ativo(ativo, validar_id=False)
+
+
+def test_padronizar_ativo_monitor_limpa_campos_legados_de_spec():
+    """
+    Serialização de monitor deve remover campos legados descontinuados
+    para evitar persistência residual no fluxo principal.
+    """
+    ativo = make_valid_ativo(
+        tipo="Monitor",
+        tipo_ativo="Monitor",
+        polegadas="27",
+        resolucao="1920x1080",
+        tipo_painel="IPS",
+        entrada_video="HDMI",
+        fonte_ou_cabo="Fonte externa",
+    )
+
+    ativo_norm = getattr(ativos_service_module, "_padronizar_ativo")(ativo)
+
+    assert ativo_norm.polegadas == "27"
+    assert ativo_norm.resolucao is None
+    assert ativo_norm.tipo_painel is None
+    assert ativo_norm.entrada_video is None
+    assert ativo_norm.fonte_ou_cabo is None
 
 
 def test_validar_ativo_rejeita_serial_com_caracter_invalido():
@@ -523,3 +555,237 @@ def test_criar_ativo_legado_mantem_compatibilidade_com_tipo_e_departamento(monke
 
     assert id_gerado == "OPU-000001"
     assert any("INSERT INTO ativos" in sql for sql, _params in cursor.statements)
+
+
+# Fase 3 Round 3: Testes de celular sem IMEI
+
+
+def test_celular_sem_imei_validacao_aceita():
+    """
+    Fase 3 Round 3: Celular sem IMEI deve ser válido para validação.
+    O validator deve aceitar ativo de tipo celular com apenas numero_linha, operadora, conta_vinculada, armazenamento.
+    """
+    ativo = make_valid_ativo(
+        tipo="Celular",
+        tipo_ativo="Celular",
+        numero_linha="(11) 98765-4321",
+        operadora="Vivo",
+        conta_vinculada="Carlos Silva",
+        armazenamento="128GB",
+    )
+
+    # Não deve lançar exceção de validação.
+    validar_ativo(ativo, validar_id=False)
+
+
+def test_celular_sem_imei_padronizar_limpa_imei_fields():
+    """
+    Fase 3 Round 3: _padronizar_ativo deve garantir que imei_1 e imei_2 sejam None
+    após normalização de um ativo do tipo celular.
+    """
+    ativo = make_valid_ativo(
+        tipo="Celular",
+        tipo_ativo="Celular",
+        numero_linha="(11) 98765-4321",
+        operadora="Vivo",
+        conta_vinculada="Carlos Silva",
+        armazenamento="128GB",
+    )
+
+    ativo_norm = getattr(ativos_service_module, "_padronizar_ativo")(ativo)
+
+    assert ativo_norm.imei_1 is None
+    assert ativo_norm.imei_2 is None
+    # numero_linha é normalizado para apenas dígitos
+    assert ativo_norm.numero_linha == "11987654321"
+    assert ativo_norm.operadora == "Vivo"
+
+
+def test_celular_sem_imei_nao_exige_campo_imei():
+    """
+    Fase 3 Round 3: Regressão — celular deve funcionar completamente sem IMEI.
+    Se IMEI for fornecido (valor não-None), não deve estar no resultado normalizado.
+    """
+    ativo = make_valid_ativo(
+        tipo="Celular",
+        tipo_ativo="Celular",
+        numero_linha="(11) 98765-4321",
+        operadora="Claro",
+        conta_vinculada="João",
+        armazenamento="64GB",
+    )
+
+    # Simulando payload que poderia vir do frontend (sem IMEI).
+    ativo_limpo = Ativo(
+        id_ativo=ativo.id_ativo,
+        tipo=ativo.tipo,
+        tipo_ativo=ativo.tipo_ativo,
+        marca=ativo.marca,
+        modelo=ativo.modelo,
+        serial=ativo.serial,
+        usuario_responsavel=ativo.usuario_responsavel,
+        departamento=ativo.departamento,
+        status=ativo.status,
+        data_entrada=ativo.data_entrada,
+        data_saida=ativo.data_saida,
+        criado_por=ativo.criado_por,
+        codigo_interno=ativo.codigo_interno,
+        descricao=ativo.descricao,
+        categoria=ativo.categoria,
+        condicao=ativo.condicao,
+        localizacao=ativo.localizacao,
+        setor=ativo.setor,
+        email_responsavel=ativo.email_responsavel,
+        data_compra=ativo.data_compra,
+        valor=ativo.valor,
+        observacoes=ativo.observacoes,
+        numero_linha="(11) 98765-4321",
+        operadora="Claro",
+        conta_vinculada="João",
+        armazenamento="64GB",
+    )
+
+    ativo_norm = getattr(ativos_service_module, "_padronizar_ativo")(ativo_limpo)
+
+    # Regressão: IMEI não deve reaparecer no fluxo.
+    assert ativo_norm.imei_1 is None
+    assert ativo_norm.imei_2 is None
+    # Validação deve aceitar sem exceção.
+    validar_ativo(ativo_norm, validar_id=False)
+
+
+# Fase 4: Testes de acesso remoto (TeamViewer e AnyDesk)
+
+
+def test_validar_ativo_aceita_teamviewer_id_valido():
+    """
+    Identifcador válido do TeamViewer deve ser aceito durante validação.
+    """
+    ativo = make_valid_ativo(teamviewer_id="123456789")
+    # Não deve lançar exceção
+    validar_ativo(ativo, validar_id=False)
+
+
+def test_validar_ativo_aceita_anydesk_id_valido():
+    """
+    Identificador válido do AnyDesk deve ser aceito durante validação.
+    """
+    ativo = make_valid_ativo(anydesk_id="987654321012345")
+    # Não deve lançar exceção
+    validar_ativo(ativo, validar_id=False)
+
+
+def test_validar_ativo_aceita_teamviewer_com_hifen():
+    """
+    TeamViewer com hífens deve ser aceito (padrão comum em IDs).
+    """
+    ativo = make_valid_ativo(teamviewer_id="123-456-789")
+    validar_ativo(ativo, validar_id=False)
+
+
+def test_validar_ativo_aceita_teamviewer_com_sublinhado():
+    """
+    TeamViewer com sublinhado deve ser aceito (padrão comum em aliases).
+    """
+    ativo = make_valid_ativo(teamviewer_id="team_viewer_123")
+    validar_ativo(ativo, validar_id=False)
+
+
+def test_validar_ativo_rejeita_teamviewer_com_muitos_especiais():
+    """
+    TeamViewer com muitos caracteres especiais deve ser rejeitado (padrão de senha).
+    """
+    ativo = make_valid_ativo(teamviewer_id="pass@123!secure#456")
+
+    with pytest.raises(ValueError) as erro:
+        validar_ativo(ativo, validar_id=False)
+
+    assert "teamviewer" in str(erro.value).lower()
+    # Pode rejeitar por caracteres inválidos ou por muitos especiais — ambos significam recusa correta
+    assert any(
+        word in str(erro.value).lower()
+        for word in ["especiais", "inválidos", "invalidos"]
+    )
+
+
+def test_validar_ativo_rejeita_teamviewer_muito_longo():
+    """
+    TeamViewer com mais de 100 caracteres deve ser rejeitado.
+    """
+    ativo = make_valid_ativo(teamviewer_id="a" * 101)
+
+    with pytest.raises(ValueError) as erro:
+        validar_ativo(ativo, validar_id=False)
+
+    assert "teamviewer" in str(erro.value).lower()
+    assert "100" in str(erro.value)
+
+
+def test_validar_ativo_rejeita_anydesk_com_muitos_especiais():
+    """
+    AnyDesk com muitos caracteres especiais deve ser rejeitado (padrão de senha).
+    """
+    ativo = make_valid_ativo(anydesk_id="pass@123!secure")
+
+    with pytest.raises(ValueError) as erro:
+        validar_ativo(ativo, validar_id=False)
+
+    assert "anydesk" in str(erro.value).lower()
+    # Pode rejeitar por caracteres inválidos ou por muitos especiais — ambos significam recusa correta
+    assert any(
+        word in str(erro.value).lower()
+        for word in ["especiais", "inválidos", "invalidos"]
+    )
+
+
+def test_validar_ativo_rejeita_anydesk_muito_longo():
+    """
+    AnyDesk com mais de 100 caracteres deve ser rejeitado.
+    """
+    ativo = make_valid_ativo(anydesk_id="a" * 101)
+
+    with pytest.raises(ValueError) as erro:
+        validar_ativo(ativo, validar_id=False)
+
+    assert "anydesk" in str(erro.value).lower()
+    assert "100" in str(erro.value)
+
+
+def test_validar_ativo_aceita_teamviewer_anydesk_vazios():
+    """
+    Ambos TeamViewer e AnyDesk são opcionais — devem ser aceitos vazios.
+    """
+    ativo = make_valid_ativo(teamviewer_id=None, anydesk_id=None)
+    validar_ativo(ativo, validar_id=False)
+
+    ativo2 = make_valid_ativo(teamviewer_id="", anydesk_id="")
+    validar_ativo(ativo2, validar_id=False)
+
+
+def test_criar_ativo_preserva_teamviewer_anydesk_normalizados(monkeypatch):
+    """
+    Ao criar ativo, TeamViewer e AnyDesk devem ser normalizados e preservados.
+    """
+    service = AtivosService()
+    cursor = FakeCursor()
+
+    monkeypatch.setattr(
+        service,
+        "_obter_contexto_acesso",
+        lambda _user_id: {"empresa_id": 1, "perfil": "usuario"},
+    )
+    monkeypatch.setattr(service, "_gerar_id_sequencial", lambda _empresa_id, _conn, _cur: "OPU-000001")
+    monkeypatch.setattr(ativos_service_module, "cursor_mysql", lambda dictionary=True: FakeCursorContext(cursor))
+
+    ativo = make_valid_ativo(teamviewer_id="123456789", anydesk_id="ABC-DEF-GHI")
+
+    id_gerado = service.criar_ativo(ativo, user_id=1)
+
+    assert id_gerado == "OPU-000001"
+    insert_statements = [item for item in cursor.statements if "INSERT INTO ativos" in item[0]]
+    assert insert_statements
+    # Verificar que teamviewer_id e anydesk_id estão nos parâmetros
+    sql, params = insert_statements[0]
+    # teamviewer_id é o 29º parâmetro, anydesk_id é o 30º (após carregador)
+    assert "123456789" in params
+    assert "ABC-DEF-GHI" in params
