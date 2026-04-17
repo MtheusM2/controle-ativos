@@ -179,9 +179,9 @@
                 <div class="field-group"><label for="desktop_anydesk_id">AnyDesk ID</label><input type="text" id="desktop_anydesk_id" data-field-alias="anydesk_id" class="input-control"></div>
             </div>
 
-            <!-- Fase 3 Round 3: Celular simplificado sem IMEI -->
+            <!-- Celular: campos simplificados sem IMEI (removido em Fase 3 Round 3). -->
             <div id="specs-celular" class="asset-specs-group" hidden>
-                <!-- Removido: IMEI 1, IMEI 2 — escopo reduzido conforme requisitos atualizados -->
+                <!-- Celular contém apenas: número de linha, operadora, conta vinculada e armazenamento. -->
                 <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" inputmode="tel" maxlength="19" autocomplete="off" placeholder="(11) 98765-4321"></div>
                 <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
                 <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control"></div>
@@ -189,11 +189,8 @@
             </div>
 
             <div id="specs-monitor" class="asset-specs-group" hidden>
+                <!-- Monitor simplificado: manter apenas medida principal usada no dia a dia. -->
                 <div class="field-group"><label for="polegadas">Polegadas</label><input type="text" id="polegadas" name="polegadas" class="input-control"></div>
-                <div class="field-group"><label for="resolucao">Resolução</label><input type="text" id="resolucao" name="resolucao" class="input-control"></div>
-                <div class="field-group"><label for="tipo_painel">Tipo de painel</label><input type="text" id="tipo_painel" name="tipo_painel" class="input-control"></div>
-                <div class="field-group"><label for="entrada_video">Entrada de vídeo</label><input type="text" id="entrada_video" name="entrada_video" class="input-control"></div>
-                <div class="field-group"><label for="fonte_ou_cabo">Fonte ou cabo</label><input type="text" id="fonte_ou_cabo" name="fonte_ou_cabo" class="input-control"></div>
             </div>
 
             <div id="specs-simples" class="asset-specs-group" hidden>
@@ -328,6 +325,17 @@
         });
     }
 
+    function pruneDeprecatedSpecsByType(body) {
+        const normalizedType = normalizeType(body.tipo_ativo || body.tipo);
+
+        // Monitor foi simplificado: mantém apenas polegadas no fluxo atual.
+        if (normalizedType === "monitor") {
+            ["resolucao", "tipo_painel", "entrada_video", "fonte_ou_cabo"].forEach((fieldName) => {
+                delete body[fieldName];
+            });
+        }
+    }
+
     function showMessage(type, message) {
         assetFeedback.hidden = false;
         assetFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${message}</span></div>`;
@@ -355,15 +363,6 @@
         if (digits.length === 10 || digits.length === 11) return true;
         return (digits.length === 12 || digits.length === 13) && digits.startsWith("55");
     }
-
-    // Removido em Fase 3 Round 3: validação de Luhn para IMEI não mais necessária
-
-    // Removido em Fase 3 Round 3: validação de IMEI não mais necessária
-    // function isValidImei(value) {
-    //     const digits = onlyDigits(value);
-    //     if (!digits) return true;
-    //     return digits.length === 15 && luhnIsValid(digits);
-    // }
 
     function normalizeMoneyToBackend(value) {
         const raw = String(value || "").trim();
@@ -424,7 +423,7 @@
             return "Número da linha inválido. Informe 10 ou 11 dígitos (ou 12/13 com DDI 55).";
         }
 
-        // Removido em Fase 3 Round 3: validação de IMEI não mais necessária no escopo
+        // IMEI é validado no backend; frontend mantém checagens essenciais de UX.
 
         if (body.email_responsavel && !emailRegex.test(body.email_responsavel)) {
             return "E-mail do responsável inválido.";
@@ -454,18 +453,60 @@
         body.serial = normalizeIdentifier(body.serial);
         body.email_responsavel = String(body.email_responsavel || "").trim().toLowerCase();
         body.numero_linha = onlyDigits(body.numero_linha);
-        // Removido em Fase 3 Round 3: normalização de IMEI não mais necessária
+        // IMEI removido em Fase 3 Round 3 — não mais normalizado no payload
 
         const normalizedMoney = normalizeMoneyToBackend(body.valor);
         body.valor = normalizedMoney === null ? body.valor : normalizedMoney;
     }
 
+    function collectTypeSpecificSpecificationRows(data) {
+        const normalizedType = normalizeType(data.tipo_ativo || data.tipo);
+
+        const fieldsByType = {
+            notebook: [
+                ["Processador", data.processador],
+                ["RAM", data.ram],
+                ["Armazenamento", data.armazenamento],
+                ["Sistema operacional", data.sistema_operacional],
+                ["Carregador", data.carregador],
+                ["TeamViewer ID", data.teamviewer_id],
+                ["AnyDesk ID", data.anydesk_id],
+                ["Nome do equipamento", data.nome_equipamento],
+            ],
+            desktop: [
+                ["Processador", data.processador],
+                ["RAM", data.ram],
+                ["Armazenamento", data.armazenamento],
+                ["Sistema operacional", data.sistema_operacional],
+                ["Hostname", data.hostname],
+                ["TeamViewer ID", data.teamviewer_id],
+                ["AnyDesk ID", data.anydesk_id],
+            ],
+            celular: [
+                // IMEI removido em Fase 3 Round 3
+                ["Número da linha", data.numero_linha],
+                ["Operadora", data.operadora],
+                ["Conta vinculada", data.conta_vinculada],
+                ["Armazenamento", data.armazenamento],
+            ],
+            monitor: [
+                ["Polegadas", data.polegadas],
+            ],
+        };
+
+        const selected = fieldsByType[normalizedType] || [];
+        return selected
+            .map(([label, value]) => ({ label, value: String(value || "").trim() }))
+            .filter((item) => item.value);
+    }
+
     function setupInputMasks() {
+        // Input mask setup para campos com formatação especial
         const codigoInternoInput = document.getElementById("codigo_interno");
         const serialInput = document.getElementById("serial");
         const valorInput = document.getElementById("valor");
         const numeroLinhaInput = document.getElementById("numero_linha");
-        // Removido em Fase 3 Round 3: máscaras de IMEI não mais necessárias
+        // IMEI removido em Fase 3 Round 3 — não mais necessário para celular
 
         if (codigoInternoInput) {
             codigoInternoInput.addEventListener("input", () => {
@@ -496,6 +537,9 @@
                 numeroLinhaInput.value = formatPhoneForDisplay(numeroLinhaInput.value);
             });
         }
+
+        // Fase 3 Round 3: IMEI removido — código morto eliminado
+        // (Inputs de IMEI não existem mais na template)
     }
 
     function setAttachmentLoading(message = "Carregando documentos...") {
@@ -618,6 +662,8 @@
     // Variável para armazenar dados coletados do formulário antes de confirmar.
     // Será usado para renderizar a modal de confirmação.
     let pendingAssetData = null;
+    // Guarda estado de envio final para bloquear clique duplo no botão de confirmação.
+    let isCreateSubmitting = false;
 
     // Handler de submissão do formulário: coleta dados e abre modal de confirmação.
     // NÃO envia para o backend imediatamente — pede confirmação antes.
@@ -633,6 +679,9 @@
             body.tipo = body.tipo_ativo || body.tipo;
             body.departamento = body.setor || body.departamento;
             body.nota_fiscal = body.nota_fiscal || null;
+
+            // Remove campos descontinuados por tipo para evitar serialização residual.
+            pruneDeprecatedSpecsByType(body);
 
             normalizePayloadForBackend(body);
 
@@ -665,6 +714,8 @@
     function renderConfirmationModal(data) {
         const detailsDiv = document.getElementById("confirm-asset-details");
         if (!detailsDiv) return;
+
+        const typeSpecificationRows = collectTypeSpecificSpecificationRows(data);
 
         // Organiza dados em seções para melhor visualização na confirmação.
         const sections = {
@@ -701,7 +752,8 @@
             "Detalhes Técnicos": [
                 { label: "Observações", value: data.observacoes },
                 { label: "Especificações", value: data.detalhes_tecnicos }
-            ]
+            ],
+            "Especificações por tipo": typeSpecificationRows
         };
 
         // Renderiza seções com dados preenchidos.
@@ -737,10 +789,16 @@
     if (confirmButton) {
         confirmButton.addEventListener("click", async () => {
             if (!pendingAssetData) return;
+            if (isCreateSubmitting) return;
+
+            isCreateSubmitting = true;
+            const originalConfirmLabel = confirmButton.textContent;
+            let submittedSuccessfully = false;
 
             // Desabilita o botão de confirmação durante o envio.
             confirmButton.disabled = true;
             confirmButton.classList.add("is-loading");
+            confirmButton.textContent = "Salvando...";
 
             try {
                 // Envia dados para a API.
@@ -751,14 +809,13 @@
 
                 if (!response.ok) {
                     showMessage("danger", payload?.erro || "Não foi possível cadastrar o ativo.");
-                    confirmButton.disabled = false;
-                    confirmButton.classList.remove("is-loading");
                     return;
                 }
 
                 // Cadastro bem-sucedido — obtém ID do novo ativo.
                 const newAssetId = payload?.ativo?.id ?? null;
                 if (newAssetId) {
+                    submittedSuccessfully = true;
                     // Fecha a modal de confirmação.
                     const confirmModal = document.getElementById("confirm-asset-modal");
                     if (confirmModal) {
@@ -776,14 +833,20 @@
                     }, 1500);
                 } else {
                     showMessage("danger", "Cadastro realizado, mas não foi possível obter o ID. Atualize a página.");
-                    confirmButton.disabled = false;
-                    confirmButton.classList.remove("is-loading");
                 }
             } catch (error) {
                 console.error("Erro ao cadastrar ativo:", error);
                 showMessage("danger", "Erro ao cadastrar ativo. Tente novamente.");
+            } finally {
+                // Em sucesso mantém bloqueado até redirecionar; em erro restaura interação.
+                if (submittedSuccessfully) {
+                    return;
+                }
+
+                isCreateSubmitting = false;
                 confirmButton.disabled = false;
                 confirmButton.classList.remove("is-loading");
+                confirmButton.textContent = originalConfirmLabel;
             }
         });
     }
