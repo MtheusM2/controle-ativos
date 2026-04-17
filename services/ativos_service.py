@@ -6,6 +6,12 @@
 # - adm vê ativos de todas as empresas
 # - criado_por deixa de ser regra de acesso e passa a ser campo de auditoria
 
+import csv
+import io
+import re
+import unicodedata
+from difflib import get_close_matches
+
 from models.ativos import Ativo
 from database.connection import cursor_mysql
 from utils.validators import (
@@ -305,6 +311,266 @@ def _snapshot_movimentacao(ativo: Ativo) -> dict:
     }
 
 
+# Contrato schema-first da importação em massa:
+# apenas estes campos podem entrar no domínio.
+CAMPOS_IMPORTACAO_SCHEMA = {
+    "tipo_ativo",
+    "tipo",
+    "marca",
+    "modelo",
+    "serial",
+    "codigo_interno",
+    "descricao",
+    "categoria",
+    "condicao",
+    "localizacao",
+    "setor",
+    "departamento",
+    "usuario_responsavel",
+    "email_responsavel",
+    "status",
+    "data_entrada",
+    "data_saida",
+    "data_compra",
+    "valor",
+    "observacoes",
+    "detalhes_tecnicos",
+    "processador",
+    "ram",
+    "armazenamento",
+    "sistema_operacional",
+    "carregador",
+    "teamviewer_id",
+    "anydesk_id",
+    "nome_equipamento",
+    "hostname",
+    "numero_linha",
+    "operadora",
+    "conta_vinculada",
+    "polegadas",
+    "resolucao",
+    "tipo_painel",
+    "entrada_video",
+    "fonte_ou_cabo",
+    "nota_fiscal",
+    "garantia",
+}
+
+# Colunas proibidas na importação por regra de segurança/escopo.
+CAMPOS_IMPORTACAO_BLOQUEADOS = {"pc", "conta", "imei", "imei1", "imei2", "imei_1", "imei_2"}
+
+# Aliases aceitos como sugestão (nunca importados automaticamente).
+ALIASES_IMPORTACAO_SUGERIDOS = {
+    "tipoativo": "tipo_ativo",
+    "tipo do ativo": "tipo_ativo",
+    "tipo de ativo": "tipo_ativo",
+    "responsavel": "usuario_responsavel",
+    "usuario responsavel": "usuario_responsavel",
+    "responsavel usuario": "usuario_responsavel",
+    "email responsavel": "email_responsavel",
+    "codigointerno": "codigo_interno",
+    "codigo interno": "codigo_interno",
+    "id teamviewer": "teamviewer_id",
+    "teamviewer id": "teamviewer_id",
+    "id anydesk": "anydesk_id",
+    "anydesk id": "anydesk_id",
+    "nome equipamento": "nome_equipamento",
+    "conta vinculada": "conta_vinculada",
+    "tipo painel": "tipo_painel",
+    "entrada de video": "entrada_video",
+    "fonte ou cabo": "fonte_ou_cabo",
+}
+
+# Palavras que identificam dados sensíveis que não devem ser importados.
+PADROES_SENSIVEIS_IMPORTACAO = (
+    "senha",
+    "password",
+    "secret",
+    "token",
+    "chave",
+    "credencial",
+    "pin",
+)
+
+
+def _normalizar_nome_coluna_importacao(nome_coluna: str | None) -> str:
+    """
+    Normaliza cabeçalhos de CSV para comparação estável no contrato schema-first.
+    """
+    valor = (nome_coluna or "").strip().lower()
+    if not valor:
+        return ""
+
+    # Remove acentos para reduzir ruído entre planilhas de origens diferentes.
+    sem_acentos = "".join(
+        caractere
+        for caractere in unicodedata.normalize("NFD", valor)
+        if unicodedata.category(caractere) != "Mn"
+    )
+
+    # Mantém apenas caracteres úteis para identificação de campos.
+    sem_ruido = re.sub(r"[^a-z0-9_ ]+", "", sem_acentos)
+    return re.sub(r"\s+", " ", sem_ruido).strip()
+
+
+def _eh_coluna_sensivel_importacao(coluna_normalizada: str) -> bool:
+    """
+    Detecta colunas sensíveis por palavras-chave explícitas no cabeçalho.
+    """
+    return any(padrao in coluna_normalizada for padrao in PADROES_SENSIVEIS_IMPORTACAO)
+
+
+def _classificar_colunas_importacao(headers: list[str]) -> dict:
+    """
+    Classifica colunas em exatas, sugeridas e ignoradas para o fluxo de confirmação.
+    """
+    exatas: list[dict] = []
+    sugeridas: list[dict] = []
+    ignoradas: list[dict] = []
+    mapeamento_exato: dict[str, str] = {}
+    campos_ja_mapeados = set()
+
+    for header in headers:
+        coluna = (header or "").strip()
+        coluna_norm = _normalizar_nome_coluna_importacao(coluna)
+        coluna_sem_espaco = coluna_norm.replace(" ", "")
+
+        if not coluna_norm:
+            ignoradas.append({"coluna_origem": coluna, "motivo": "Cabeçalho vazio."})
+            continue
+
+        if coluna_norm in CAMPOS_IMPORTACAO_BLOQUEADOS or coluna_sem_espaco in CAMPOS_IMPORTACAO_BLOQUEADOS:
+            ignoradas.append(
+                {
+                    "coluna_origem": coluna,
+                    "motivo": "Coluna bloqueada pelo contrato (ex.: PC, CONTA, IMEI).",
+                }
+            )
+            continue
+
+        if _eh_coluna_sensivel_importacao(coluna_norm):
+            ignoradas.append(
+                {
+                    "coluna_origem": coluna,
+                    "motivo": "Coluna sensível bloqueada por segurança.",
+                }
+            )
+            continue
+
+        # Correspondência exata é aplicada automaticamente.
+        if coluna_norm in CAMPOS_IMPORTACAO_SCHEMA:
+            if coluna_norm in campos_ja_mapeados:
+                ignoradas.append(
+                    {
+                        "coluna_origem": coluna,
+                        "motivo": f"Campo duplicado para '{coluna_norm}'.",
+                    }
+                )
+                continue
+
+            mapeamento_exato[coluna] = coluna_norm
+            campos_ja_mapeados.add(coluna_norm)
+            exatas.append({"coluna_origem": coluna, "campo_destino": coluna_norm})
+            continue
+
+        # Alias explícito: entra apenas como sugestão e exige confirmação.
+        campo_sugerido = ALIASES_IMPORTACAO_SUGERIDOS.get(coluna_norm)
+        if not campo_sugerido:
+            campo_sugerido = ALIASES_IMPORTACAO_SUGERIDOS.get(coluna_sem_espaco)
+
+        # Fallback leve por similaridade para reduzir trabalho manual do usuário.
+        if not campo_sugerido:
+            candidatos = get_close_matches(coluna_norm, sorted(CAMPOS_IMPORTACAO_SCHEMA), n=1, cutoff=0.82)
+            campo_sugerido = candidatos[0] if candidatos else None
+
+        if campo_sugerido and campo_sugerido not in campos_ja_mapeados:
+            sugeridas.append(
+                {
+                    "coluna_origem": coluna,
+                    "campo_sugerido": campo_sugerido,
+                    "confirmado": False,
+                    "motivo": "Semelhança de nomenclatura; exige confirmação do usuário.",
+                }
+            )
+            continue
+
+        ignoradas.append(
+            {
+                "coluna_origem": coluna,
+                "motivo": "Sem correspondência válida no schema do sistema.",
+            }
+        )
+
+    return {
+        "exatas": exatas,
+        "sugeridas": sugeridas,
+        "ignoradas": ignoradas,
+        "mapeamento_exato": mapeamento_exato,
+    }
+
+
+def _aplicar_mapeamento_linha_importacao(row: dict, mapeamento_colunas: dict[str, str]) -> dict:
+    """
+    Aplica mapeamento aprovado na linha do CSV e devolve payload alinhado ao domínio.
+    """
+    dados_mapeados: dict[str, str] = {}
+
+    for coluna_origem, campo_destino in mapeamento_colunas.items():
+        valor = (row.get(coluna_origem) or "").strip()
+        if not valor:
+            continue
+        dados_mapeados[campo_destino] = valor
+
+    # Mantém compatibilidade entre campo oficial e legado.
+    if "tipo_ativo" not in dados_mapeados and "tipo" in dados_mapeados:
+        dados_mapeados["tipo_ativo"] = dados_mapeados["tipo"]
+    if "tipo" not in dados_mapeados and "tipo_ativo" in dados_mapeados:
+        dados_mapeados["tipo"] = dados_mapeados["tipo_ativo"]
+
+    # Mantém sincronia entre setor (oficial) e departamento (legado).
+    if "setor" not in dados_mapeados and "departamento" in dados_mapeados:
+        dados_mapeados["setor"] = dados_mapeados["departamento"]
+    if "departamento" not in dados_mapeados and "setor" in dados_mapeados:
+        dados_mapeados["departamento"] = dados_mapeados["setor"]
+
+    # IMEI não pode ser reintroduzido por importação.
+    dados_mapeados.pop("imei_1", None)
+    dados_mapeados.pop("imei_2", None)
+    dados_mapeados.pop("imei", None)
+    return dados_mapeados
+
+
+def _carregar_csv_em_memoria(conteudo_csv: bytes) -> tuple[list[str], list[tuple[int, dict]]]:
+    """
+    Carrega CSV em memória e retorna cabeçalhos + linhas com número real do arquivo.
+    """
+    if not conteudo_csv:
+        raise AtivoErro("Arquivo CSV vazio.")
+
+    try:
+        texto = conteudo_csv.decode("utf-8-sig")
+    except UnicodeDecodeError as erro:
+        raise AtivoErro("CSV inválido: utilize codificação UTF-8.") from erro
+
+    stream = io.StringIO(texto, newline="")
+    reader = csv.DictReader(stream)
+
+    if not reader.fieldnames:
+        raise AtivoErro("CSV inválido: cabeçalho ausente.")
+
+    linhas: list[tuple[int, dict]] = []
+    for numero_linha, row in enumerate(reader, start=2):
+        linha_limpa = {str(chave or "").strip(): (valor or "").strip() for chave, valor in row.items()}
+        # Ignora linhas totalmente vazias para evitar ruído operacional.
+        if any(valor for valor in linha_limpa.values()):
+            linhas.append((numero_linha, linha_limpa))
+
+    if not linhas:
+        raise AtivoErro("CSV sem linhas de dados para importação.")
+
+    return [str(header or "").strip() for header in reader.fieldnames], linhas
+
+
 class AtivosService:
     """
     Serviço responsável pelas regras de negócio e persistência dos ativos.
@@ -395,6 +661,251 @@ class AtivosService:
             )
 
         return dados_finais
+
+    def _construir_ativo_para_importacao(self, dados: dict) -> Ativo:
+        """
+        Monta Ativo para validação/importação sem duplicar regras de normalização.
+        """
+        tipo_ativo = dados.get("tipo_ativo", dados.get("tipo", ""))
+        setor = dados.get("setor", dados.get("departamento", ""))
+
+        return Ativo(
+            id_ativo=None,
+            tipo=tipo_ativo,
+            marca=dados.get("marca", ""),
+            modelo=dados.get("modelo", ""),
+            serial=dados.get("serial"),
+            codigo_interno=dados.get("codigo_interno"),
+            descricao=dados.get("descricao"),
+            categoria=dados.get("categoria"),
+            tipo_ativo=tipo_ativo,
+            condicao=dados.get("condicao"),
+            localizacao=dados.get("localizacao"),
+            setor=setor,
+            usuario_responsavel=dados.get("usuario_responsavel"),
+            email_responsavel=dados.get("email_responsavel"),
+            departamento=dados.get("departamento", setor),
+            nota_fiscal=dados.get("nota_fiscal"),
+            garantia=dados.get("garantia"),
+            status=dados.get("status", ""),
+            data_entrada=dados.get("data_entrada", ""),
+            data_saida=dados.get("data_saida"),
+            data_compra=dados.get("data_compra"),
+            valor=dados.get("valor"),
+            observacoes=dados.get("observacoes"),
+            detalhes_tecnicos=dados.get("detalhes_tecnicos"),
+            processador=dados.get("processador"),
+            ram=dados.get("ram"),
+            armazenamento=dados.get("armazenamento"),
+            sistema_operacional=dados.get("sistema_operacional"),
+            carregador=dados.get("carregador"),
+            teamviewer_id=dados.get("teamviewer_id"),
+            anydesk_id=dados.get("anydesk_id"),
+            nome_equipamento=dados.get("nome_equipamento"),
+            hostname=dados.get("hostname"),
+            # IMEI não integra mais o domínio ativo para importação em massa.
+            imei_1=None,
+            imei_2=None,
+            numero_linha=dados.get("numero_linha"),
+            operadora=dados.get("operadora"),
+            conta_vinculada=dados.get("conta_vinculada"),
+            polegadas=dados.get("polegadas"),
+            resolucao=dados.get("resolucao"),
+            tipo_painel=dados.get("tipo_painel"),
+            entrada_video=dados.get("entrada_video"),
+            fonte_ou_cabo=dados.get("fonte_ou_cabo"),
+        )
+
+    def _validar_linha_importacao(self, dados: dict, numero_linha: int) -> Ativo:
+        """
+        Valida linha de importação e devolve objeto pronto para persistência.
+        """
+        ativo = self._construir_ativo_para_importacao(dados)
+        ativo_norm = _padronizar_ativo(ativo)
+        try:
+            # validar_id=False porque ID é gerado no momento do INSERT.
+            validar_ativo(ativo_norm, validar_id=False)
+        except ValueError as erro:
+            raise AtivoErro(f"Linha {numero_linha}: {str(erro)}") from erro
+        return ativo_norm
+
+    def _resolver_mapeamento_confirmado(
+        self,
+        classificacao: dict,
+        sugestoes_confirmadas: dict[str, str] | None,
+    ) -> tuple[dict[str, str], list[str]]:
+        """
+        Aplica confirmações do usuário sobre colunas sugeridas sem violar o schema-first.
+        """
+        mapeamento_final = dict(classificacao.get("mapeamento_exato", {}))
+        avisos_confirmacao: list[str] = []
+        sugestoes_confirmadas = sugestoes_confirmadas or {}
+
+        sugestoes_validas = {
+            item["coluna_origem"]: item["campo_sugerido"]
+            for item in classificacao.get("sugeridas", [])
+        }
+        campos_destino_ja_usados = set(mapeamento_final.values())
+
+        for coluna_origem, campo_solicitado in sugestoes_confirmadas.items():
+            campo_solicitado_norm = _normalizar_nome_coluna_importacao(campo_solicitado)
+            campo_sugerido = sugestoes_validas.get(coluna_origem)
+            if not campo_sugerido:
+                avisos_confirmacao.append(
+                    f"Confirmação ignorada para coluna '{coluna_origem}' (não está entre as sugestões)."
+                )
+                continue
+
+            if campo_solicitado_norm != campo_sugerido:
+                avisos_confirmacao.append(
+                    f"Confirmação inválida para '{coluna_origem}': destino divergente de '{campo_sugerido}'."
+                )
+                continue
+
+            if campo_sugerido in campos_destino_ja_usados:
+                avisos_confirmacao.append(
+                    f"Confirmação ignorada para '{coluna_origem}': campo '{campo_sugerido}' já mapeado."
+                )
+                continue
+
+            mapeamento_final[coluna_origem] = campo_sugerido
+            campos_destino_ja_usados.add(campo_sugerido)
+
+        return mapeamento_final, avisos_confirmacao
+
+    def gerar_preview_importacao_csv(self, conteudo_csv: bytes, user_id: int) -> dict:
+        """
+        Gera preview da importação em massa sem persistir alterações.
+        """
+        contexto = self._obter_contexto_acesso(user_id)
+        if not self._usuario_eh_admin(contexto):
+            raise PermissaoNegada("Apenas administradores podem importar ativos em massa.")
+
+        headers, linhas_csv = _carregar_csv_em_memoria(conteudo_csv)
+        classificacao = _classificar_colunas_importacao(headers)
+        mapeamento_exato = classificacao["mapeamento_exato"]
+
+        avisos = []
+        if classificacao["sugeridas"]:
+            avisos.append(
+                "Colunas sugeridas exigem confirmação antes da importação final."
+            )
+
+        linhas_validas = 0
+        erros: list[str] = []
+        linhas_preview: list[dict] = []
+
+        for indice, (numero_linha, row) in enumerate(linhas_csv):
+            dados_mapeados = _aplicar_mapeamento_linha_importacao(row, mapeamento_exato)
+
+            if indice < 5:
+                # Expõe apenas amostra para UX rápida, sem carregar arquivo inteiro na tela.
+                linhas_preview.append(
+                    {
+                        "linha": numero_linha,
+                        "dados_mapeados": dados_mapeados,
+                    }
+                )
+
+            try:
+                self._validar_linha_importacao(dados_mapeados, numero_linha)
+                linhas_validas += 1
+            except AtivoErro as erro:
+                erros.append(str(erro))
+
+        return {
+            "colunas": {
+                "exatas": classificacao["exatas"],
+                "sugeridas": classificacao["sugeridas"],
+                "ignoradas": classificacao["ignoradas"],
+            },
+            "preview_linhas": linhas_preview,
+            "resumo_validacao": {
+                "total_linhas": len(linhas_csv),
+                "linhas_validas": linhas_validas,
+                "linhas_invalidas": len(linhas_csv) - linhas_validas,
+                "erros": erros,
+                "avisos": avisos,
+            },
+        }
+
+    def confirmar_importacao_csv(
+        self,
+        conteudo_csv: bytes,
+        sugestoes_confirmadas: dict[str, str] | None,
+        user_id: int,
+        *,
+        modo_tudo_ou_nada: bool = True,
+    ) -> dict:
+        """
+        Confirma importação em massa com schema-first e confirmação explícita de sugestões.
+        """
+        contexto = self._obter_contexto_acesso(user_id)
+        if not self._usuario_eh_admin(contexto):
+            raise PermissaoNegada("Apenas administradores podem importar ativos em massa.")
+
+        headers, linhas_csv = _carregar_csv_em_memoria(conteudo_csv)
+        classificacao = _classificar_colunas_importacao(headers)
+        mapeamento_final, avisos_confirmacao = self._resolver_mapeamento_confirmado(
+            classificacao,
+            sugestoes_confirmadas,
+        )
+
+        ativos_validos: list[Ativo] = []
+        erros: list[str] = []
+        for numero_linha, row in linhas_csv:
+            dados_mapeados = _aplicar_mapeamento_linha_importacao(row, mapeamento_final)
+            try:
+                ativos_validos.append(self._validar_linha_importacao(dados_mapeados, numero_linha))
+            except AtivoErro as erro:
+                erros.append(str(erro))
+
+        # Evita importação parcial silenciosa: padrão é bloquear persistência se houver erro.
+        if erros and modo_tudo_ou_nada:
+            return {
+                "ok_importacao": False,
+                "modo_tudo_ou_nada": True,
+                "importados": 0,
+                "falhas": len(erros),
+                "ids_criados": [],
+                "erros": erros,
+                "avisos": avisos_confirmacao,
+                "colunas": {
+                    "exatas": classificacao["exatas"],
+                    "sugeridas": classificacao["sugeridas"],
+                    "ignoradas": classificacao["ignoradas"],
+                },
+            }
+
+        ids_criados: list[str] = []
+        erros_persistencia: list[str] = []
+
+        for indice, ativo in enumerate(ativos_validos):
+            try:
+                ids_criados.append(self.criar_ativo(ativo, user_id))
+            except AtivoErro as erro:
+                erros_persistencia.append(
+                    f"Linha validada #{indice + 1}: falha ao persistir ({str(erro)})."
+                )
+                if modo_tudo_ou_nada:
+                    # Não há transação única entre múltiplas criações; a resposta deixa isso explícito.
+                    break
+
+        erros_finais = erros + erros_persistencia
+        return {
+            "ok_importacao": len(erros_finais) == 0,
+            "modo_tudo_ou_nada": modo_tudo_ou_nada,
+            "importados": len(ids_criados),
+            "falhas": len(erros_finais),
+            "ids_criados": ids_criados,
+            "erros": erros_finais,
+            "avisos": avisos_confirmacao,
+            "colunas": {
+                "exatas": classificacao["exatas"],
+                "sugeridas": classificacao["sugeridas"],
+                "ignoradas": classificacao["ignoradas"],
+            },
+        }
 
     def gerar_preview_atualizacao(self, id_ativo: str, dados: dict, user_id: int) -> dict:
         """

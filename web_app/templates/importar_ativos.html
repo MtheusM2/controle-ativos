@@ -1,0 +1,347 @@
+{% extends 'base.html' %}
+
+{% block title %}Importação em massa - Sistema de Controle de Ativos{% endblock %}
+
+{% block content %}
+<section class="page-intro">
+    <div>
+        <h2 class="page-title">Importação em massa de ativos</h2>
+        <p class="page-subtitle">Fluxo schema-first com pré-visualização, confirmação de sugestões e gravação segura.</p>
+    </div>
+
+    <div class="page-actions">
+        <!-- Atalho de retorno para manter navegação operacional simples. -->
+        <a href="{{ url_for('listar_ativos_html') }}" class="btn btn-secondary">Voltar para ativos</a>
+    </div>
+</section>
+
+<div id="import-feedback" class="flash-stack" hidden></div>
+
+<section class="panel">
+    <div class="panel-header panel-header-split">
+        <h3 class="title-section">Upload e análise do CSV</h3>
+    </div>
+    <div class="panel-body">
+        <form id="import-form" class="form-grid" enctype="multipart/form-data">
+            <div class="field-group">
+                <label for="csv-file-input">Arquivo CSV</label>
+                <!-- Aceita somente CSV para manter o escopo desta etapa. -->
+                <input type="file" id="csv-file-input" class="input-control" accept=".csv,text/csv" required>
+            </div>
+            <div class="field-group">
+                <label>&nbsp;</label>
+                <button type="button" class="btn btn-primary" id="preview-import-btn">Analisar e pré-visualizar</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="panel" id="import-preview-panel" hidden>
+    <div class="panel-header panel-header-split">
+        <h3 class="title-section">Pré-visualização</h3>
+    </div>
+    <div class="panel-body">
+        <div id="import-summary" class="field-group"></div>
+
+        <div class="field-group">
+            <h4>Colunas com correspondência exata</h4>
+            <div id="exact-columns-container"></div>
+        </div>
+
+        <div class="field-group">
+            <h4>Colunas sugeridas (confirmar antes de importar)</h4>
+            <div id="suggested-columns-container"></div>
+        </div>
+
+        <div class="field-group">
+            <h4>Colunas ignoradas</h4>
+            <div id="ignored-columns-container"></div>
+        </div>
+
+        <div class="field-group">
+            <h4>Preview das linhas</h4>
+            <div class="table-wrapper">
+                <table class="table-premium table-aligned">
+                    <thead id="preview-table-head"></thead>
+                    <tbody id="preview-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="field-group">
+            <h4>Erros e avisos</h4>
+            <div id="validation-messages-container"></div>
+        </div>
+
+        <div class="field-group">
+            <button type="button" class="btn btn-primary" id="confirm-import-btn">Confirmar importação</button>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Referências do fluxo de importação.
+    const importFeedback = document.getElementById("import-feedback");
+    const previewPanel = document.getElementById("import-preview-panel");
+    const previewButton = document.getElementById("preview-import-btn");
+    const confirmButton = document.getElementById("confirm-import-btn");
+    const fileInput = document.getElementById("csv-file-input");
+    const exactColumnsContainer = document.getElementById("exact-columns-container");
+    const suggestedColumnsContainer = document.getElementById("suggested-columns-container");
+    const ignoredColumnsContainer = document.getElementById("ignored-columns-container");
+    const importSummaryContainer = document.getElementById("import-summary");
+    const validationMessagesContainer = document.getElementById("validation-messages-container");
+    const previewTableHead = document.getElementById("preview-table-head");
+    const previewTableBody = document.getElementById("preview-table-body");
+
+    // Estado do último preview para montar confirmação sem ambiguidade.
+    let currentPreview = null;
+
+    function escapeHtml(text) {
+        const raw = String(text ?? "");
+        return raw
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;")
+            .replaceAll("'", "&#39;");
+    }
+
+    function showMessage(type, message) {
+        importFeedback.hidden = false;
+        importFeedback.innerHTML = `<div class="flash-message flash-${type}"><span>${escapeHtml(message)}</span></div>`;
+    }
+
+    function clearMessage() {
+        importFeedback.hidden = true;
+        importFeedback.innerHTML = "";
+    }
+
+    function montarFormDataBasico() {
+        const file = fileInput.files?.[0];
+        if (!file) {
+            throw new Error("Selecione um arquivo CSV para continuar.");
+        }
+        const formData = new FormData();
+        formData.append("file", file);
+        return formData;
+    }
+
+    function renderSimpleList(items, emptyText, mapper) {
+        if (!items?.length) {
+            return `<p>${escapeHtml(emptyText)}</p>`;
+        }
+        return `
+            <ul>
+                ${items.map((item) => `<li>${mapper(item)}</li>`).join("")}
+            </ul>
+        `;
+    }
+
+    function renderSummary(preview) {
+        const resumo = preview.resumo_validacao || {};
+        importSummaryContainer.innerHTML = `
+            <p><strong>Total de linhas:</strong> ${resumo.total_linhas ?? 0}</p>
+            <p><strong>Linhas válidas:</strong> ${resumo.linhas_validas ?? 0}</p>
+            <p><strong>Linhas inválidas:</strong> ${resumo.linhas_invalidas ?? 0}</p>
+        `;
+    }
+
+    function renderColumns(preview) {
+        const colunas = preview.colunas || {};
+
+        exactColumnsContainer.innerHTML = renderSimpleList(
+            colunas.exatas || [],
+            "Nenhuma correspondência exata encontrada.",
+            (item) => `${escapeHtml(item.coluna_origem)} → <strong>${escapeHtml(item.campo_destino)}</strong>`
+        );
+
+        // Sugestões vêm com checkbox para confirmação explícita do usuário.
+        if (!colunas.sugeridas?.length) {
+            suggestedColumnsContainer.innerHTML = "<p>Nenhuma sugestão pendente.</p>";
+        } else {
+            suggestedColumnsContainer.innerHTML = `
+                <ul>
+                    ${colunas.sugeridas.map((item, index) => `
+                        <li>
+                            <label for="suggestion-check-${index}">
+                                <input
+                                    type="checkbox"
+                                    id="suggestion-check-${index}"
+                                    class="suggestion-check"
+                                    data-coluna-origem="${escapeHtml(item.coluna_origem)}"
+                                    data-campo-sugerido="${escapeHtml(item.campo_sugerido)}"
+                                    checked
+                                >
+                                ${escapeHtml(item.coluna_origem)} → <strong>${escapeHtml(item.campo_sugerido)}</strong>
+                                <span>(${escapeHtml(item.motivo || "sugestão")})</span>
+                            </label>
+                        </li>
+                    `).join("")}
+                </ul>
+            `;
+        }
+
+        ignoredColumnsContainer.innerHTML = renderSimpleList(
+            colunas.ignoradas || [],
+            "Nenhuma coluna ignorada.",
+            (item) => `${escapeHtml(item.coluna_origem)} — ${escapeHtml(item.motivo || "ignorada")}`
+        );
+    }
+
+    function renderPreviewRows(preview) {
+        const linhas = preview.preview_linhas || [];
+        const campos = Array.from(new Set(linhas.flatMap((linha) => Object.keys(linha.dados_mapeados || {}))));
+
+        if (!linhas.length || !campos.length) {
+            previewTableHead.innerHTML = "<tr><th>Sem dados mapeados na prévia</th></tr>";
+            previewTableBody.innerHTML = "";
+            return;
+        }
+
+        previewTableHead.innerHTML = `
+            <tr>
+                <th>Linha</th>
+                ${campos.map((campo) => `<th>${escapeHtml(campo)}</th>`).join("")}
+            </tr>
+        `;
+
+        previewTableBody.innerHTML = linhas.map((linha) => `
+            <tr>
+                <td>${escapeHtml(linha.linha)}</td>
+                ${campos.map((campo) => `<td>${escapeHtml((linha.dados_mapeados || {})[campo] || "")}</td>`).join("")}
+            </tr>
+        `).join("");
+    }
+
+    function renderValidationMessages(preview) {
+        const resumo = preview.resumo_validacao || {};
+        const erros = resumo.erros || [];
+        const avisos = resumo.avisos || [];
+
+        const blocos = [];
+        if (erros.length) {
+            blocos.push(`
+                <div class="flash-message flash-danger">
+                    <strong>Erros:</strong>
+                    <ul>${erros.map((erro) => `<li>${escapeHtml(erro)}</li>`).join("")}</ul>
+                </div>
+            `);
+        }
+        if (avisos.length) {
+            blocos.push(`
+                <div class="flash-message flash-warning">
+                    <strong>Avisos:</strong>
+                    <ul>${avisos.map((aviso) => `<li>${escapeHtml(aviso)}</li>`).join("")}</ul>
+                </div>
+            `);
+        }
+
+        if (!blocos.length) {
+            validationMessagesContainer.innerHTML = "<p>Sem erros e sem avisos na prévia.</p>";
+            return;
+        }
+
+        validationMessagesContainer.innerHTML = blocos.join("");
+    }
+
+    function coletarConfirmacoesSugestoes() {
+        const confirmacoes = {};
+        document.querySelectorAll(".suggestion-check").forEach((checkbox) => {
+            if (!checkbox.checked) return;
+            const colunaOrigem = checkbox.dataset.colunaOrigem || "";
+            const campoSugerido = checkbox.dataset.campoSugerido || "";
+            if (!colunaOrigem || !campoSugerido) return;
+            confirmacoes[colunaOrigem] = campoSugerido;
+        });
+        return confirmacoes;
+    }
+
+    async function executarPreview() {
+        clearMessage();
+        previewButton.disabled = true;
+        previewButton.textContent = "Analisando...";
+
+        try {
+            const formData = montarFormDataBasico();
+            const response = await fetch("{{ url_for('importar_ativos_preview') }}", {
+                method: "POST",
+                headers: {
+                    "X-CSRF-Token": window.APP_CSRF_TOKEN,
+                    "X-Requested-With": "fetch",
+                },
+                body: formData,
+            });
+
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.erro || "Falha ao gerar pré-visualização.");
+            }
+
+            currentPreview = payload.preview;
+            previewPanel.hidden = false;
+            renderSummary(currentPreview);
+            renderColumns(currentPreview);
+            renderPreviewRows(currentPreview);
+            renderValidationMessages(currentPreview);
+            showMessage("success", payload.mensagem || "Pré-visualização concluída.");
+        } catch (error) {
+            showMessage("danger", error.message || "Erro ao analisar CSV.");
+        } finally {
+            previewButton.disabled = false;
+            previewButton.textContent = "Analisar e pré-visualizar";
+        }
+    }
+
+    async function executarConfirmacao() {
+        clearMessage();
+        confirmButton.disabled = true;
+        confirmButton.textContent = "Importando...";
+
+        try {
+            if (!currentPreview) {
+                throw new Error("Gere a pré-visualização antes de confirmar.");
+            }
+
+            const formData = montarFormDataBasico();
+            // Envia somente sugestões explicitamente confirmadas pelo usuário.
+            formData.append("sugestoes_confirmadas", JSON.stringify(coletarConfirmacoesSugestoes()));
+
+            const response = await fetch("{{ url_for('importar_ativos_confirmar') }}", {
+                method: "POST",
+                headers: {
+                    "X-CSRF-Token": window.APP_CSRF_TOKEN,
+                    "X-Requested-With": "fetch",
+                },
+                body: formData,
+            });
+
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                const resultado = payload.resultado || {};
+                const falhas = Number(resultado.falhas || 0);
+                const importados = Number(resultado.importados || 0);
+                throw new Error(
+                    `${payload.erro || "Importação não concluída."} Importados: ${importados}. Falhas: ${falhas}.`
+                );
+            }
+
+            const resultado = payload.resultado || {};
+            showMessage(
+                "success",
+                `${payload.mensagem || "Importação concluída."} Importados: ${resultado.importados || 0}.`
+            );
+        } catch (error) {
+            showMessage("danger", error.message || "Erro ao confirmar importação.");
+        } finally {
+            confirmButton.disabled = false;
+            confirmButton.textContent = "Confirmar importação";
+        }
+    }
+
+    previewButton.addEventListener("click", executarPreview);
+    confirmButton.addEventListener("click", executarConfirmacao);
+</script>
+{% endblock %}

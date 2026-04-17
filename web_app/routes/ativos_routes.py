@@ -96,6 +96,16 @@ def _verificar_duplicacao(chave_dedup: str, ativo_id_novo: str) -> tuple[bool, s
     return (False, None)
 
 
+def _limpar_chave_dedup(chave_dedup: str) -> None:
+    """
+    Remove uma chave de deduplicação do cache.
+
+    Usado quando a criação falha para não manter o estado "em processamento"
+    bloqueando tentativas legítimas subsequentes.
+    """
+    _creation_dedup_cache.pop(chave_dedup, None)
+
+
 def _obter_user_id_logado() -> int | None:
     """
     Obtém o identificador do usuário autenticado na sessão.
@@ -1037,17 +1047,29 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             chave_dedup = _gerar_chave_dedup(dados, user_id)
             eh_duplicada, id_existente = _verificar_duplicacao(chave_dedup, None)
 
-            if eh_duplicada and id_existente:
-                # Duplicação detectada — retorna ativo já criado.
-                criado = service.buscar_ativo(id_existente, user_id)
-                return _json_success(
-                    "Ativo já havia sido cadastrado. Retornando ativo existente.",
-                    status=201,
-                    ativo=_serializar_ativo(criado),
+            if eh_duplicada:
+                if id_existente:
+                    # Duplicação detectada com ID conhecido — retorna ativo já criado.
+                    criado = service.buscar_ativo(id_existente, user_id)
+                    return _json_success(
+                        "Ativo já havia sido cadastrado. Retornando ativo existente.",
+                        status=201,
+                        ativo=_serializar_ativo(criado),
+                    )
+
+                # Duplicação detectada ainda em processamento da primeira requisição.
+                return _json_error(
+                    "Cadastro em processamento. Aguarde alguns segundos e tente novamente.",
+                    status=409,
                 )
 
             # Não é duplicação — procede com criação normal.
-            id_gerado = service.criar_ativo(ativo, user_id)
+            try:
+                id_gerado = service.criar_ativo(ativo, user_id)
+            except Exception:
+                # Libera a reserva de deduplicação quando a criação falhar.
+                _limpar_chave_dedup(chave_dedup)
+                raise
 
             # Atualiza cache com o ID real gerado.
             _verificar_duplicacao(chave_dedup, id_gerado)
@@ -1222,6 +1244,21 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             status_validos=STATUS_VALIDOS,
             tipos_validos=TIPOS_ATIVO_VALIDOS,
             setores_validos=SETORES_VALIDOS,
+            show_chrome=True,
+        )
+
+    @app.get("/ativos/importacao")
+    def importar_ativos_html():
+        """
+        Renderiza tela de importação em massa com preview e confirmação.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return redirect(url_for("home"))
+
+        return render_template(
+            "importar_ativos.html",
+            usuario_email=session.get("user_email"),
             show_chrome=True,
         )
 
@@ -1695,103 +1732,124 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         return _json_error("Formato de exportação não suportado.", status=400)
 
+    def _ler_upload_csv_importacao() -> bytes:
+        """
+        Extrai arquivo CSV do multipart e devolve bytes para análise/persistência.
+        """
+        arquivo = request.files.get("file")
+        if not arquivo:
+            raise AtivoErro("Nenhum arquivo CSV foi enviado.")
+        conteudo = arquivo.read()
+        if not conteudo:
+            raise AtivoErro("Arquivo CSV vazio.")
+        return conteudo
+
+    def _ler_sugestoes_confirmadas() -> dict[str, str]:
+        """
+        Lê o payload de confirmações de colunas sugeridas enviado pelo frontend.
+        """
+        bruto = (request.form.get("sugestoes_confirmadas") or "").strip()
+        if not bruto:
+            return {}
+
+        try:
+            dados = json.loads(bruto)
+        except json.JSONDecodeError as erro:
+            raise AtivoErro("Payload de confirmações inválido.") from erro
+
+        if not isinstance(dados, dict):
+            raise AtivoErro("Confirmações de sugestão devem ser enviadas em objeto JSON.")
+
+        confirmacoes: dict[str, str] = {}
+        for coluna_origem, campo_destino in dados.items():
+            if not isinstance(coluna_origem, str) or not isinstance(campo_destino, str):
+                continue
+            confirmacoes[coluna_origem.strip()] = campo_destino.strip()
+        return confirmacoes
+
+    @app.post("/ativos/importar/preview")
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def importar_ativos_preview(*, user_id: int):
+        """
+        Analisa CSV sem persistir e retorna classificação de colunas + preview de linhas.
+        """
+        try:
+            conteudo_csv = _ler_upload_csv_importacao()
+            preview = service.gerar_preview_importacao_csv(conteudo_csv, user_id)
+            return _json_success("Pré-visualização gerada com sucesso.", preview=preview)
+        except (AtivoErro, PermissaoNegada) as erro:
+            return _json_error(str(erro), status=400)
+        except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+            return _json_error("Erro inesperado ao gerar pré-visualização do CSV.", status=500)
+
+    @app.post("/ativos/importar/confirmar")
+    # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
+    @require_auth_api()
+    @require_csrf()
+    def importar_ativos_confirmar(*, user_id: int):
+        """
+        Confirma importação em massa usando somente schema aprovado e sugestões confirmadas.
+        """
+        try:
+            conteudo_csv = _ler_upload_csv_importacao()
+            sugestoes_confirmadas = _ler_sugestoes_confirmadas()
+            resultado = service.confirmar_importacao_csv(
+                conteudo_csv,
+                sugestoes_confirmadas,
+                user_id,
+                modo_tudo_ou_nada=True,
+            )
+
+            if not resultado.get("ok_importacao", False):
+                return _json_error(
+                    "Importação interrompida por erros de validação.",
+                    status=400,
+                    resultado=resultado,
+                )
+
+            return _json_success(
+                "Importação confirmada e concluída com sucesso.",
+                status=201,
+                resultado=resultado,
+            )
+        except (AtivoErro, PermissaoNegada) as erro:
+            return _json_error(str(erro), status=400)
+        except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+            return _json_error("Erro inesperado ao confirmar importação do CSV.", status=500)
+
     @app.post("/ativos/import/csv")
     # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
     @require_auth_api()
     @require_csrf()
     def importar_ativos_csv(*, user_id: int):
         """
-        Importa ativos a partir de um arquivo CSV.
-        Esperado: file (arquivo CSV com headers: id, tipo, marca, modelo, etc)
-
-        Requer usuário autenticado (validado por @require_auth_api()).
-        Requer token CSRF válido na requisição (validado pelo decorator @require_csrf()).
-        Processa o arquivo CSV linha por linha, criando novos ativos no banco.
+        Endpoint legado de importação CSV redirecionado para o novo contrato schema-first.
         """
-        arquivo = request.files.get("file")
-        if not arquivo:
-            return _json_error("Nenhum arquivo foi enviado.", status=400)
-
         try:
-            # Lê o arquivo CSV
-            stream = io.TextIOWrapper(arquivo.stream, encoding="utf-8")
-            reader = csv.DictReader(stream)
-            
-            if not reader.fieldnames:
-                return _json_error("Arquivo CSV vazio ou inválido.", status=400)
-            
-            criados = 0
-            erros = []
-            
-            for idx, row in enumerate(reader, start=2):  # start=2 pois header é linha 1
-                try:
-                    tipo_csv = row.get("tipo_ativo", row.get("tipo", "")).strip()
-                    marca_csv = row.get("marca", "").strip()
-                    modelo_csv = row.get("modelo", "").strip()
-
-                    ativo = Ativo(
-                        id_ativo=row.get("id", "").strip(),
-                        tipo=tipo_csv,
-                        tipo_ativo=tipo_csv,
-                        marca=marca_csv,
-                        modelo=modelo_csv,
-                        descricao=row.get("descricao", "").strip() or " ".join(
-                            part for part in [tipo_csv, marca_csv, modelo_csv] if part
-                        ),
-                        categoria=row.get("categoria", "").strip() or tipo_csv,
-                        codigo_interno=row.get("codigo_interno", "").strip() or None,
-                        serial=row.get("serial", "").strip() or None,
-                        condicao=row.get("condicao", "").strip() or None,
-                        localizacao=row.get("localizacao", "").strip() or None,
-                        setor=row.get("setor", row.get("departamento", "")).strip(),
-                        usuario_responsavel=row.get("usuario_responsavel", "").strip() or None,
-                        email_responsavel=row.get("email_responsavel", "").strip() or None,
-                        departamento=row.get("setor", row.get("departamento", "")).strip(),
-                        status=row.get("status", "").strip(),
-                        data_entrada=row.get("data_entrada", "").strip(),
-                        data_saida=row.get("data_saida", "").strip() or None,
-                        data_compra=row.get("data_compra", "").strip() or None,
-                        valor=row.get("valor", "").strip() or None,
-                        observacoes=row.get("observacoes", "").strip() or None,
-                        detalhes_tecnicos=row.get("detalhes_tecnicos", "").strip() or None,
-                        processador=row.get("processador", "").strip() or None,
-                        ram=row.get("ram", "").strip() or None,
-                        armazenamento=row.get("armazenamento", "").strip() or None,
-                        sistema_operacional=row.get("sistema_operacional", "").strip() or None,
-                        carregador=row.get("carregador", "").strip() or None,
-                        teamviewer_id=row.get("teamviewer_id", "").strip() or None,
-                        anydesk_id=row.get("anydesk_id", "").strip() or None,
-                        nome_equipamento=row.get("nome_equipamento", "").strip() or None,
-                        hostname=row.get("hostname", "").strip() or None,
-                        imei_1=row.get("imei_1", "").strip() or None,
-                        imei_2=row.get("imei_2", "").strip() or None,
-                        numero_linha=row.get("numero_linha", "").strip() or None,
-                        operadora=row.get("operadora", "").strip() or None,
-                        conta_vinculada=row.get("conta_vinculada", "").strip() or None,
-                        polegadas=row.get("polegadas", "").strip() or None,
-                        resolucao=row.get("resolucao", "").strip() or None,
-                        tipo_painel=row.get("tipo_painel", "").strip() or None,
-                        entrada_video=row.get("entrada_video", "").strip() or None,
-                        fonte_ou_cabo=row.get("fonte_ou_cabo", "").strip() or None,
-                        nota_fiscal=row.get("nota_fiscal", "").strip() or None,
-                        garantia=row.get("garantia", "").strip() or None,
-                    )
-                    service.criar_ativo(ativo, user_id)
-                    criados += 1
-                except AtivoErro as e:
-                    erros.append(f"Linha {idx}: {str(e)}")
-                except (AttributeError, KeyError, TypeError, ValueError) as e:
-                    erros.append(f"Linha {idx}: Erro inesperado - {str(e)}")
-            
-            msg = f"Importação concluída: {criados} ativo(s) criado(s)."
-            if erros:
-                msg += f" {len(erros)} erro(s)."
-            
-            return _json_success(
-                msg,
-                status=201,
-                criados=criados,
-                erros=erros if erros else None
+            conteudo_csv = _ler_upload_csv_importacao()
+            # Fluxo legado preserva apenas correspondências exatas (sem confirmações implícitas).
+            resultado = service.confirmar_importacao_csv(
+                conteudo_csv,
+                sugestoes_confirmadas={},
+                user_id=user_id,
+                modo_tudo_ou_nada=True,
             )
-        except (OSError, UnicodeError, ValueError, TypeError, KeyError, csv.Error):
-            return _json_error("Erro ao processar arquivo CSV.", status=500)
+
+            if not resultado.get("ok_importacao", False):
+                return _json_error(
+                    "Importação interrompida. Use o fluxo de pré-visualização para confirmar sugestões.",
+                    status=400,
+                    resultado=resultado,
+                )
+
+            return _json_success(
+                "Importação concluída pelo endpoint legado em modo schema-first.",
+                status=201,
+                resultado=resultado,
+            )
+        except (AtivoErro, PermissaoNegada) as erro:
+            return _json_error(str(erro), status=400)
+        except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+            return _json_error("Erro inesperado ao processar arquivo CSV.", status=500)

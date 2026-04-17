@@ -12,6 +12,8 @@
     <div class="page-actions">
         <button type="button" class="btn btn-secondary" id="open-filter-modal">Filtrar</button>
         <button type="button" class="btn btn-primary" id="open-export-modal">Exportar</button>
+        <!-- Atalho para fluxo schema-first de importação com prévia e confirmação explícita. -->
+        <a href="{{ url_for('importar_ativos_html') }}" class="btn btn-secondary">Importar em massa</a>
         <a href="{{ url_for('criar_ativo_html') }}" class="btn btn-secondary">Cadastrar ativo</a>
     </div>
 </section>
@@ -191,29 +193,27 @@
     </div>
 </div>
 
-<!-- Fase 3 Round 4: Popover de filtro rápido por coluna -->
-<!-- Renderizado dinamicamente quando usuário clica no ícone de funil -->
+<!--
+    Feature preservada para futura reativação:
+    popover de quick filter do cabeçalho foi DESATIVADO nesta etapa por decisão de UX.
+    Mantemos a base no template para reutilização, porém o fluxo principal não faz bind
+    nem expõe controles visuais quando QUICK_FILTERS_HEADER_ENABLED = false.
+-->
 <div id="quick-filter-popover" class="popover" hidden style="
+    display: none;
     position: fixed;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    padding: 1rem;
     z-index: 1000;
-    min-width: 200px;
-    max-width: 250px;
 ">
-    <div style="margin-bottom: 0.5rem;">
-        <button type="button" class="btn btn-close" id="close-quick-filter" style="float: right; padding: 0; width: auto; height: auto;">&times;</button>
-        <h4 id="quick-filter-title" style="margin: 0; font-size: 0.95rem;">Filtrar</h4>
+    <div class="quick-filter-header">
+        <button type="button" class="btn btn-close quick-filter-close" id="close-quick-filter">&times;</button>
+        <h4 id="quick-filter-title" class="quick-filter-title">Filtrar</h4>
     </div>
-    <div id="quick-filter-content">
+    <div id="quick-filter-content" class="quick-filter-content">
         <!-- Conteúdo dinâmico do filtro rápido -->
     </div>
-    <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" id="quick-filter-clear" style="font-size: 0.85rem;">Limpar</button>
-        <button type="button" class="btn btn-primary" id="quick-filter-apply" style="font-size: 0.85rem;">Aplicar</button>
+    <div class="quick-filter-actions">
+        <button type="button" class="btn btn-secondary quick-filter-action-btn" id="quick-filter-clear">Limpar</button>
+        <button type="button" class="btn btn-primary quick-filter-action-btn" id="quick-filter-apply">Aplicar</button>
     </div>
 </div>
 
@@ -296,13 +296,10 @@
 
     let currentFilters = {};
 
-    // Fase 3 Round 4: Estado de ordenação
-    let currentSort = {
-        field: "id",        // Campo de ordenação padrão
-        direction: "asc"    // Direção padrão: crescente
-    };
+    // Flag de rollout seguro: mantém base técnica disponível sem ativar a UX no cabeçalho.
+    const QUICK_FILTERS_HEADER_ENABLED = false;
 
-    // Fase 3 Round 4: Estado de filtros rápidos por coluna
+    // Estado preservado para futura reativação dos quick filters por coluna.
     let quickFilters = {
         status: null,           // Filtro rápido de status
         departamento: null,     // Filtro rápido de departamento/setor
@@ -310,18 +307,19 @@
         data_entrada: null      // Filtro rápido estratégico de data de entrada
     };
 
-    // Configuração de colunas ordenáveis e filtragens rápidas
+    // Configuração de colunas e filtros rápidos estratégicos.
+    // Nesta etapa o cabeçalho NÃO oferece ordenação por clique no nome.
     const SORTABLE_COLUMNS = {
-        id: { label: "ID", sortable: true, quickFilter: false },
-        tipo: { label: "Tipo", sortable: true, quickFilter: true },
-        marca: { label: "Marca", sortable: true, quickFilter: false },
-        modelo: { label: "Modelo", sortable: true, quickFilter: false },
-        usuario_responsavel: { label: "Responsável", sortable: true, quickFilter: false },
-        departamento: { label: "Departamento", sortable: true, quickFilter: true },
-        status: { label: "Status", sortable: true, quickFilter: true },
+        id: { label: "ID", quickFilter: false },
+        tipo: { label: "Tipo", quickFilter: true },
+        marca: { label: "Marca", quickFilter: false },
+        modelo: { label: "Modelo", quickFilter: false },
+        usuario_responsavel: { label: "Responsável", quickFilter: false },
+        departamento: { label: "Departamento", quickFilter: true },
+        status: { label: "Status", quickFilter: true },
         // Data é ponto estratégico para execução rápida; mantém filtro específico no cabeçalho.
-        data_entrada: { label: "Data entrada", sortable: true, quickFilter: true },
-        data_saida: { label: "Data saída", sortable: true, quickFilter: false }
+        data_entrada: { label: "Data entrada", quickFilter: true },
+        data_saida: { label: "Data saída", quickFilter: false }
     };
 
     // let currentAttachmentAssetId = null;
@@ -472,6 +470,9 @@
     }
 
     function applyQuickFiltersToParams(params) {
+        // Feature flag OFF: impede parâmetros residuais de quick filter no fluxo principal.
+        if (!QUICK_FILTERS_HEADER_ENABLED) return;
+
         // Campos estratégicos textuais seguem contrato direto com a API.
         if (quickFilters.tipo) params.set("tipo", quickFilters.tipo);
         if (quickFilters.departamento) params.set("departamento", quickFilters.departamento);
@@ -480,6 +481,10 @@
         // Filtro de data usa atalhos traduzidos para os parâmetros já suportados no backend.
         const dateShortcut = quickFilters.data_entrada;
         if (!dateShortcut) return;
+
+        // Remove intervalo legado antes de aplicar novo atalho para evitar conflito de parâmetros.
+        params.delete("data_entrada_inicial");
+        params.delete("data_entrada_final");
 
         const today = getTodayIsoDate();
         if (dateShortcut === "hoje") {
@@ -497,6 +502,30 @@
         if (dateShortcut === "este_mes") {
             params.set("data_entrada_inicial", getMonthStartIsoDate(today));
             params.set("data_entrada_final", today);
+            return;
+        }
+
+        if (dateShortcut === "mais_recentes") {
+            params.set("ordenar_por", "data_entrada");
+            params.set("ordem", "desc");
+            return;
+        }
+
+        if (dateShortcut === "mais_antigos") {
+            params.set("ordenar_por", "data_entrada");
+            params.set("ordem", "asc");
+        }
+    }
+
+    function normalizeAssetId(value) {
+        // Normaliza ID para comparação estável entre query string e payload da API.
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+
+        try {
+            return decodeURIComponent(raw).trim().toLowerCase();
+        } catch (_error) {
+            return raw.toLowerCase();
         }
     }
 
@@ -523,8 +552,8 @@
     }
 
     /**
-     * Fase 3 Round 4: Renderiza headers dinâmicos com suporte a ordenação e filtro rápido
-     * Renderização dinâmica garante que indicadores visuais estejam sempre sincronizados
+     * Renderiza headers dinâmicos com filtros rápidos em pontos estratégicos.
+     * Nesta etapa o nome da coluna é apenas informativo, sem ação de ordenação.
      */
     function renderTableHeaders() {
         const headerRow = document.querySelector("#table-head tr");
@@ -536,52 +565,23 @@
             const th = document.createElement("th");
             th.setAttribute("data-sort-field", fieldKey);
 
-            // Indicador visual de ordenação ativa
-            const isActive = fieldKey === currentSort.field;
-            const indicator = isActive ? (currentSort.direction === "asc" ? " ↑" : " ↓") : "";
+            // Nomes de colunas permanecem estáveis, sem comportamento de clique.
+            th.style.color = "#555";
 
-            // Estilo dinâmico: coluna ativa em destaque
-            if (isActive) {
-                th.style.fontWeight = "bold";
-                th.style.color = "#2c3e50";
-            } else {
-                th.style.color = "#555";
-            }
-
-            // Estrutura em dois alvos claros: botão de ordenação e botão de filtro rápido.
+            // Estrutura com nome da coluna (não clicável) e botão de filtro rápido dedicado.
             const wrapper = document.createElement("div");
             wrapper.className = "header-interaction-wrap";
             wrapper.style.display = "inline-flex";
             wrapper.style.alignItems = "center";
             wrapper.style.gap = "0.35rem";
 
-            const sortButton = document.createElement("button");
-            sortButton.type = "button";
-            sortButton.className = "header-sort-button";
-            sortButton.style.background = "transparent";
-            sortButton.style.border = "none";
-            sortButton.style.padding = "0";
-            sortButton.style.margin = "0";
-            sortButton.style.cursor = "pointer";
-            sortButton.style.font = "inherit";
-            sortButton.style.color = "inherit";
-            sortButton.textContent = colConfig.label + indicator;
-            sortButton.setAttribute("aria-label", `Ordenar por ${colConfig.label}`);
+            const labelSpan = document.createElement("span");
+            labelSpan.className = "header-column-label";
+            labelSpan.textContent = colConfig.label;
+            wrapper.appendChild(labelSpan);
 
-            // Clique no título: apenas ordenação asc/desc.
-            sortButton.addEventListener("click", () => {
-                if (currentSort.field === fieldKey) {
-                    currentSort.direction = currentSort.direction === "asc" ? "desc" : "asc";
-                } else {
-                    currentSort.field = fieldKey;
-                    currentSort.direction = "asc";
-                }
-                loadAssets(currentFilters);
-            });
-
-            wrapper.appendChild(sortButton);
-
-            if (colConfig.quickFilter) {
+            // Não exibe ícones de quick filter quando a feature está desativada.
+            if (QUICK_FILTERS_HEADER_ENABLED && colConfig.quickFilter) {
                 const filterButton = document.createElement("button");
                 filterButton.type = "button";
                 filterButton.className = "quick-filter-icon-btn";
@@ -629,7 +629,7 @@
 
         assetTableBody.innerHTML = assets.map((asset) => {
             // Verifica se este ativo deve ser destacado com badge "NOVO".
-            const isNewAsset = highlightId && String(asset.id).trim() === String(highlightId).trim();
+            const isNewAsset = normalizeAssetId(asset.id) === normalizeAssetId(highlightId);
             // Removido: rowStyle com background-color e border-left — apenas badge discreta
             // Resolve URLs por linha sem encadear replace em Array (evita erro JS em runtime).
             const encodedId = encodeURIComponent(asset.id || "");
@@ -637,7 +637,7 @@
             const detailUrl = "{{ url_for('detalhar_ativo_html', id_ativo='__ID__') }}".replace("__ID__", encodedId);
 
             return `
-                <tr data-asset-id="${escapeHtml(asset.id)}">
+                <tr data-asset-id="${encodeURIComponent(String(asset.id || ""))}">
                     <td>
                         ${escapeHtml(asset.id)}
                         ${isNewAsset ? '<span style="margin-left: 0.5rem; display: inline-block; background: #fff3cd; color: #856404; padding: 0.25rem 0.6rem; border: 1px solid #ffeaa7; border-radius: 3px; font-size: 0.7rem; font-weight: bold; white-space: nowrap;">NOVO</span>' : ''}
@@ -668,7 +668,7 @@
         // Se há ativo para destacar, faz scroll até ele.
         if (highlightId) {
             const highlightedRow = Array.from(assetTableBody.querySelectorAll("tr[data-asset-id]"))
-                .find((row) => String(row.dataset.assetId || "").trim() === String(highlightId).trim());
+                .find((row) => normalizeAssetId(row.dataset.assetId || "") === normalizeAssetId(highlightId));
             if (highlightedRow) {
                 setTimeout(() => {
                     highlightedRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -687,12 +687,6 @@
         try {
             currentFilters = filters;
             const params = new URLSearchParams(buildQueryString(filters).replace(/^\?/, ""));
-
-            // Adiciona parâmetros de ordenação à query string
-            if (currentSort.field) {
-                params.set("ordenar_por", currentSort.field);
-                params.set("ordem", currentSort.direction);
-            }
 
             // Aplica os filtros rápidos estratégicos no contrato esperado pelo backend.
             applyQuickFiltersToParams(params);
@@ -738,6 +732,9 @@
      * Posiciona popover próximo ao header clicado e renderiza opções apropriadas
      */
     function openQuickFilter(fieldName) {
+        // Segurança de execução: mesmo com chamada acidental, não abre popover com feature OFF.
+        if (!QUICK_FILTERS_HEADER_ENABLED) return;
+
         const popover = document.getElementById("quick-filter-popover");
         const contentDiv = document.getElementById("quick-filter-content");
         const titleEl = document.getElementById("quick-filter-title");
@@ -768,8 +765,24 @@
         const headerCell = document.querySelector(`th[data-sort-field="${fieldName}"]`);
         if (headerCell) {
             const rect = headerCell.getBoundingClientRect();
-            popover.style.left = rect.left + "px";
-            popover.style.top = (rect.bottom + 8) + "px";
+            const viewportPadding = 12;
+            const popoverWidth = 280;
+            const popoverHeight = 320;
+
+            // Posiciona abaixo por padrão, com fallback para cima quando não há espaço.
+            let left = rect.left;
+            let top = rect.bottom + 8;
+
+            const maxLeft = window.innerWidth - popoverWidth - viewportPadding;
+            if (left > maxLeft) left = Math.max(viewportPadding, maxLeft);
+
+            const hasRoomBelow = top + popoverHeight <= window.innerHeight - viewportPadding;
+            if (!hasRoomBelow) {
+                top = Math.max(viewportPadding, rect.top - popoverHeight - 8);
+            }
+
+            popover.style.left = `${left}px`;
+            popover.style.top = `${top}px`;
         }
 
         // Armazena o campo do filtro rápido atual
@@ -787,12 +800,12 @@
         const statusOptions = {{ status_validos | tojson }};
         const currentValue = quickFilters.status || "";
 
-        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
+        let html = '<div class="quick-filter-options">';
         for (const status of statusOptions) {
             const isChecked = currentValue === status ? "checked" : "";
             html += `
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin: 0;">
-                    <input type="radio" name="quick-filter-status" value="${status}" ${isChecked} style="cursor: pointer;">
+                <label class="quick-filter-option-label">
+                    <input type="radio" name="quick-filter-status" value="${status}" ${isChecked} class="quick-filter-radio">
                     <span>${status}</span>
                 </label>
             `;
@@ -809,12 +822,12 @@
         const tipoOptions = {{ tipos_validos | tojson }};
         const currentValue = quickFilters.tipo || "";
 
-        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
+        let html = '<div class="quick-filter-options">';
         for (const tipo of tipoOptions) {
             const isChecked = currentValue === tipo ? "checked" : "";
             html += `
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin: 0;">
-                    <input type="radio" name="quick-filter-tipo" value="${tipo}" ${isChecked} style="cursor: pointer;">
+                <label class="quick-filter-option-label">
+                    <input type="radio" name="quick-filter-tipo" value="${tipo}" ${isChecked} class="quick-filter-radio">
                     <span>${tipo}</span>
                 </label>
             `;
@@ -831,12 +844,12 @@
         const setorOptions = {{ setores_validos | tojson }};
         const currentValue = quickFilters.departamento || "";
 
-        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
+        let html = '<div class="quick-filter-options">';
         for (const setor of setorOptions) {
             const isChecked = currentValue === setor ? "checked" : "";
             html += `
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin: 0;">
-                    <input type="radio" name="quick-filter-departamento" value="${setor}" ${isChecked} style="cursor: pointer;">
+                <label class="quick-filter-option-label">
+                    <input type="radio" name="quick-filter-departamento" value="${setor}" ${isChecked} class="quick-filter-radio">
                     <span>${setor}</span>
                 </label>
             `;
@@ -859,12 +872,12 @@
         ];
         const currentValue = quickFilters.data_entrada || "";
 
-        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
+        let html = '<div class="quick-filter-options">';
         for (const option of dateOptions) {
             const isChecked = currentValue === option.value ? "checked" : "";
             html += `
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin: 0;">
-                    <input type="radio" name="quick-filter-data_entrada" value="${option.value}" ${isChecked} style="cursor: pointer;">
+                <label class="quick-filter-option-label">
+                    <input type="radio" name="quick-filter-data_entrada" value="${option.value}" ${isChecked} class="quick-filter-radio">
                     <span>${option.label}</span>
                 </label>
             `;
@@ -902,68 +915,70 @@
     });
 
     /**
-     * Fase 3 Round 4: Handlers para popover de filtro rápido
+     * Handlers do popover de quick filter ficam condicionados por feature flag.
+     * Isso evita binds/eventos residuais no carregamento da tela.
      */
-    document.getElementById("close-quick-filter").addEventListener("click", closeQuickFilter);
+    if (QUICK_FILTERS_HEADER_ENABLED) {
+        const closeQuickFilterButton = document.getElementById("close-quick-filter");
+        const applyQuickFilterButton = document.getElementById("quick-filter-apply");
+        const clearQuickFilterButton = document.getElementById("quick-filter-clear");
 
-    document.getElementById("quick-filter-apply").addEventListener("click", () => {
-        const popover = document.getElementById("quick-filter-popover");
-        const fieldName = popover.getAttribute("data-filter-field");
+        if (closeQuickFilterButton) {
+            closeQuickFilterButton.addEventListener("click", closeQuickFilter);
+        }
 
-        if (!fieldName) return;
+        if (applyQuickFilterButton) {
+            applyQuickFilterButton.addEventListener("click", () => {
+                const popover = document.getElementById("quick-filter-popover");
+                const fieldName = popover?.getAttribute("data-filter-field");
 
-        // Coleta o valor selecionado no popover
-        const selectedInput = popover.querySelector(`input[name="quick-filter-${fieldName}"]:checked`);
-        if (selectedInput) {
-            quickFilters[fieldName] = selectedInput.value;
+                if (!fieldName || !popover) return;
 
-            // Atalhos de data "mais recentes/antigos" atuam como preset de ordenação por data.
-            if (fieldName === "data_entrada") {
-                if (selectedInput.value === "mais_recentes") {
-                    currentSort.field = "data_entrada";
-                    currentSort.direction = "desc";
-                } else if (selectedInput.value === "mais_antigos") {
-                    currentSort.field = "data_entrada";
-                    currentSort.direction = "asc";
+                // Coleta o valor selecionado no popover.
+                const selectedInput = popover.querySelector(`input[name="quick-filter-${fieldName}"]:checked`);
+                if (selectedInput) {
+                    quickFilters[fieldName] = selectedInput.value;
+                } else {
+                    quickFilters[fieldName] = null;
                 }
+
+                closeQuickFilter();
+                loadAssets(currentFilters);
+            });
+        }
+
+        if (clearQuickFilterButton) {
+            clearQuickFilterButton.addEventListener("click", () => {
+                const popover = document.getElementById("quick-filter-popover");
+                const fieldName = popover?.getAttribute("data-filter-field");
+
+                if (!fieldName || !popover) return;
+
+                quickFilters[fieldName] = null;
+
+                // Desmarca todos os radios do campo selecionado.
+                popover.querySelectorAll(`input[name="quick-filter-${fieldName}"]`).forEach((input) => {
+                    input.checked = false;
+                });
+
+                closeQuickFilter();
+                loadAssets(currentFilters);
+            });
+        }
+
+        // Fecha popover ao clicar fora dele.
+        document.addEventListener("click", (event) => {
+            const popover = document.getElementById("quick-filter-popover");
+            if (!popover || popover.hidden) return;
+
+            const isClickInside = popover.contains(event.target);
+            const isIconClick = Boolean(event.target.closest(".quick-filter-icon-btn"));
+
+            if (!isClickInside && !isIconClick) {
+                closeQuickFilter();
             }
-        } else {
-            quickFilters[fieldName] = null;
-        }
-
-        closeQuickFilter();
-        loadAssets(currentFilters);
-    });
-
-    document.getElementById("quick-filter-clear").addEventListener("click", () => {
-        const popover = document.getElementById("quick-filter-popover");
-        const fieldName = popover.getAttribute("data-filter-field");
-
-        if (!fieldName) return;
-
-        quickFilters[fieldName] = null;
-
-        // Desmarca todos os radios
-        popover.querySelectorAll(`input[name="quick-filter-${fieldName}"]`).forEach((input) => {
-            input.checked = false;
         });
-
-        closeQuickFilter();
-        loadAssets(currentFilters);
-    });
-
-    // Fecha popover ao clicar fora dele
-    document.addEventListener("click", (event) => {
-        const popover = document.getElementById("quick-filter-popover");
-        if (!popover || popover.hidden) return;
-
-        const isClickInside = popover.contains(event.target);
-        const isIconClick = Boolean(event.target.closest(".quick-filter-icon-btn"));
-
-        if (!isClickInside && !isIconClick) {
-            closeQuickFilter();
-        }
-    });
+    }
 
     document.getElementById("open-filter-modal").addEventListener("click", () => openModal("filter-modal"));
     document.getElementById("open-export-modal").addEventListener("click", () => openModal("export-modal"));
