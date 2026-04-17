@@ -79,6 +79,62 @@ def test_csrf_missing_token_blocks_csv_import():
     assert payload["ok"] is False
 
 
+def test_csrf_missing_token_blocks_csv_import_preview():
+    """
+    POST /ativos/importar/preview deve rejeitar requisição sem token CSRF.
+    """
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/importar/preview",
+        data={"file": (BytesIO(b"tipo_ativo,marca,modelo\nNotebook,Dell,XPS"), "assets.csv")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 403
+    payload = response.get_json()
+    assert payload["ok"] is False
+
+
+def test_csrf_missing_token_blocks_csv_import_confirm():
+    """
+    POST /ativos/importar/confirmar deve rejeitar requisição sem token CSRF.
+    """
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.post(
+        "/ativos/importar/confirmar",
+        data={"file": (BytesIO(b"tipo_ativo,marca,modelo\nNotebook,Dell,XPS"), "assets.csv")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 403
+    payload = response.get_json()
+    assert payload["ok"] is False
+
+
 def test_csrf_missing_token_blocks_movement_confirmation():
     """
     POST /ativos/<id>/movimentacao/confirmar deve rejeitar requisição sem token CSRF com status 403.

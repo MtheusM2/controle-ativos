@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
+
 from io import BytesIO
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -31,6 +34,142 @@ def test_assets_listing_page_authenticated(authenticated_client):
     assert "Listagem de Ativos" in html
     assert "table-assets-main" in html
     assert "table-aligned" in html
+
+
+def test_asset_import_page_authenticated(authenticated_client):
+    """
+    Tela de importação em massa deve estar acessível para uso local no fluxo web.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Importação em massa de ativos" in html
+    assert "/ativos/importar/preview" in html
+    assert "/ativos/importar/confirmar" in html
+
+
+def test_asset_import_preview_route_returns_schema_first_payload():
+    """
+    Rota de preview deve retornar classificação de colunas sem persistir dados.
+    """
+    class PreviewImportService:
+        def gerar_preview_importacao_csv(self, conteudo_csv, user_id):
+            del user_id
+            assert b"tipo_ativo" in conteudo_csv
+            return {
+                "colunas": {
+                    "exatas": [{"coluna_origem": "tipo_ativo", "campo_destino": "tipo_ativo"}],
+                    "sugeridas": [{"coluna_origem": "teamviewer id", "campo_sugerido": "teamviewer_id"}],
+                    "ignoradas": [{"coluna_origem": "IMEI", "motivo": "bloqueada"}],
+                },
+                "preview_linhas": [{"linha": 2, "dados_mapeados": {"tipo_ativo": "Notebook"}}],
+                "resumo_validacao": {"total_linhas": 1, "linhas_validas": 1, "linhas_invalidas": 0, "erros": [], "avisos": []},
+            }
+
+        def confirmar_importacao_csv(self, *_args, **_kwargs):
+            raise AssertionError("Preview não pode persistir importação.")
+
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": PreviewImportService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
+
+    response = client.post(
+        "/ativos/importar/preview",
+        data={"file": (BytesIO(b"tipo_ativo,marca,modelo\nNotebook,Dell,XPS"), "ativos.csv")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["preview"]["colunas"]["sugeridas"][0]["campo_sugerido"] == "teamviewer_id"
+    assert payload["preview"]["colunas"]["ignoradas"][0]["coluna_origem"] == "IMEI"
+
+
+def test_asset_import_confirm_route_sends_confirmed_suggestions():
+    """
+    Rota de confirmação deve encaminhar sugestões aprovadas para o service.
+    """
+    class ConfirmImportService:
+        def __init__(self):
+            self.recebido = None
+
+        def confirmar_importacao_csv(self, conteudo_csv, sugestoes_confirmadas, user_id, *, modo_tudo_ou_nada):
+            assert modo_tudo_ou_nada is True
+            self.recebido = {
+                "conteudo": conteudo_csv,
+                "sugestoes": sugestoes_confirmadas,
+                "user_id": user_id,
+            }
+            return {
+                "ok_importacao": True,
+                "importados": 1,
+                "falhas": 0,
+                "ids_criados": ["OPU-000001"],
+                "erros": [],
+                "avisos": [],
+                "colunas": {"exatas": [], "sugeridas": [], "ignoradas": []},
+            }
+
+        def gerar_preview_importacao_csv(self, *_args, **_kwargs):
+            raise AssertionError("Confirmação não deve chamar preview.")
+
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
+
+    service = ConfirmImportService()
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": service,
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
+
+    response = client.post(
+        "/ativos/importar/confirmar",
+        data={
+            "file": (BytesIO(b"tipo_ativo,marca,modelo\nNotebook,Dell,XPS"), "ativos.csv"),
+            "sugestoes_confirmadas": "{\"teamviewer id\":\"teamviewer_id\",\"anydesk id\":\"anydesk_id\"}",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert service.recebido is not None
+    assert service.recebido["sugestoes"]["teamviewer id"] == "teamviewer_id"
+    assert service.recebido["sugestoes"]["anydesk id"] == "anydesk_id"
 
 
 def test_asset_create_page_authenticated(authenticated_client):
@@ -69,45 +208,40 @@ def test_assets_listing_template_does_not_leave_raw_jinja_inside_javascript(auth
     assert "{{ setores_validos | tojson }}" not in html
 
 
-def test_assets_listing_quick_filters_are_limited_to_strategic_columns(authenticated_client):
+def test_assets_listing_template_disables_header_quick_filters_by_feature_flag(authenticated_client):
     """
-    Regressão: filtro rápido no cabeçalho deve existir apenas para tipo,
-    departamento, status e data de entrada.
-    """
-    response = authenticated_client.get("/ativos/lista")
-    assert response.status_code == 200
-    html = response.get_data(as_text=True)
-
-    # Estratégicos: habilitados explicitamente com quickFilter true.
-    assert 'tipo: { label: "Tipo", sortable: true, quickFilter: true }' in html
-    assert 'departamento: { label: "Departamento", sortable: true, quickFilter: true }' in html
-    assert 'status: { label: "Status", sortable: true, quickFilter: true }' in html
-    assert 'data_entrada: { label: "Data entrada", sortable: true, quickFilter: true }' in html
-
-    # Não estratégicos: devem permanecer sem filtro rápido.
-    assert 'id: { label: "ID", sortable: true, quickFilter: false }' in html
-    assert 'marca: { label: "Marca", sortable: true, quickFilter: false }' in html
-    assert 'modelo: { label: "Modelo", sortable: true, quickFilter: false }' in html
-    assert 'usuario_responsavel: { label: "Responsável", sortable: true, quickFilter: false }' in html
-    assert 'data_saida: { label: "Data saída", sortable: true, quickFilter: false }' in html
-
-
-def test_assets_listing_template_has_separate_controls_for_sort_and_quick_filter(authenticated_client):
-    """
-    Regressão de UX: título da coluna ordena e botão dedicado abre filtro rápido,
-    evitando clique ambíguo no cabeçalho.
+    Regressão: quick filters do cabeçalho devem permanecer desativados por feature flag
+    para não impactar o fluxo principal da listagem.
     """
     response = authenticated_client.get("/ativos/lista")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
 
-    assert "header-sort-button" in html
+    assert "const QUICK_FILTERS_HEADER_ENABLED = false" in html
+    assert "if (QUICK_FILTERS_HEADER_ENABLED && colConfig.quickFilter)" in html
+    assert "if (!QUICK_FILTERS_HEADER_ENABLED) return;" in html
+
+
+def test_assets_listing_template_removes_sort_click_from_header_name(authenticated_client):
+    """
+    Regressão de UX: nome da coluna não dispara ordenação por clique;
+    apenas o controle dedicado do quick filter permanece interativo.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "header-column-label" in html
+    assert "header-sort-button" not in html
+    assert "Ordenar por" not in html
     assert "quick-filter-icon-btn" in html
+    assert "filterButton.textContent = \"▾\"" in html
 
 
-def test_assets_listing_template_includes_date_quick_filter_presets(authenticated_client):
+def test_assets_listing_template_preserves_date_quick_filter_base_for_future_reuse(authenticated_client):
     """
-    Regressão: filtro rápido de data deve oferecer atalhos operacionais padronizados.
+    Regressão: mesmo desativada, a base técnica do quick filter de data deve
+    permanecer no template para facilitar reativação futura.
     """
     response = authenticated_client.get("/ativos/lista")
     assert response.status_code == 200
@@ -121,6 +255,81 @@ def test_assets_listing_template_includes_date_quick_filter_presets(authenticate
     assert "Este mês" in html
 
 
+def test_assets_listing_template_applies_date_quick_filter_only_by_selection(authenticated_client):
+    """
+    Regressão: com quick filters desativados, não deve haver bind residual de eventos
+    nem aplicação de parâmetros no fluxo principal.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "params.delete(\"data_entrada_inicial\")" in html
+    assert "params.delete(\"data_entrada_final\")" in html
+    assert "if (QUICK_FILTERS_HEADER_ENABLED) {" in html
+    assert "let currentSort" not in html
+    assert "currentSort.field" not in html
+    assert "params.set(\"ordenar_por\", currentSort.field)" not in html
+    assert "if (dateShortcut === \"mais_recentes\")" in html
+    assert "params.set(\"ordenar_por\", \"data_entrada\")" in html
+    assert "params.set(\"ordem\", \"desc\")" in html
+    assert "if (dateShortcut === \"mais_antigos\")" in html
+    assert "params.set(\"ordem\", \"asc\")" in html
+
+
+def test_assets_listing_template_keeps_conventional_filter_flow_visible_and_active(authenticated_client):
+    """
+    Regressão: o filtro convencional via botão "Filtrar" deve continuar
+    como única entrada visível de filtragem nesta etapa.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert 'id="open-filter-modal"' in html
+    assert 'id="filter-modal"' in html
+    assert 'id="apply-filters"' in html
+    assert 'id="reset-filters"' in html
+    assert "collectFiltersFromModal()" in html
+    assert "document.getElementById(\"open-filter-modal\").addEventListener(\"click\"" in html
+
+
+def test_assets_listing_template_uses_robust_highlight_normalization_for_novo_badge(authenticated_client):
+    """
+    Regressão do destaque pós-cadastro: comparação de highlight deve ser normalizada
+    para evitar falha por encoding/case e manter badge NOVO estável.
+    """
+    response = authenticated_client.get("/ativos/lista")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "function normalizeAssetId(value)" in html
+    assert "decodeURIComponent(raw)" in html
+    assert "normalizeAssetId(asset.id) === normalizeAssetId(highlightId)" in html
+    assert "data-asset-id=\"${encodeURIComponent(String(asset.id || \"\"))}\"" in html
+
+
+def test_assets_listing_template_contains_dark_themed_quick_filter_popover_container(app_fixture):
+    """
+    Regressão visual: popover do quick filter deve usar classes dedicadas para
+    renderização consistente no tema escuro.
+    """
+    del app_fixture
+    from pathlib import Path
+
+    template_path = Path(__file__).parent.parent / "web_app" / "templates" / "ativos.html"
+    css_path = Path(__file__).parent.parent / "web_app" / "static" / "css" / "style.css"
+
+    template_content = template_path.read_text(encoding="utf-8")
+    css_content = css_path.read_text(encoding="utf-8")
+
+    assert 'id="quick-filter-popover"' in template_content
+    assert "quick-filter-content" in template_content
+    assert "quick-filter-actions" in template_content
+    assert "#quick-filter-popover" in css_content
+    assert ".quick-filter-option-label" in css_content
+
+
 def test_asset_create_template_includes_escape_html_for_confirmation_modal(authenticated_client):
     """
     Regressão: a modal de confirmação do cadastro depende de escapeHtml().
@@ -130,6 +339,63 @@ def test_asset_create_template_includes_escape_html_for_confirmation_modal(authe
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "function escapeHtml(text)" in html
+
+
+def test_asset_create_template_has_final_confirmation_and_highlight_redirect(authenticated_client):
+    """
+    Regressão do fluxo de cadastro: manter confirmação final, trava de envio
+    e redirecionamento para listagem com highlight do ativo criado.
+    """
+    response = authenticated_client.get("/ativos/novo")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert 'id="confirm-asset-modal"' in html
+    assert 'id="confirm-asset-button"' in html
+    assert "let isCreateSubmitting = false" in html
+    assert "if (isCreateSubmitting) return;" in html
+    assert "confirmButton.textContent = \"Salvando...\"" in html
+    assert "?highlight=" in html
+
+
+def test_asset_create_template_keeps_core_specs_and_simplifies_monitor(authenticated_client):
+    """
+    Regressão de UX do cadastro: notebook/desktop/celular mantêm blocos técnicos
+    completos, enquanto monitor fica enxuto com campo principal.
+    """
+    response = authenticated_client.get("/ativos/novo")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    # Blocos completos para tipos estratégicos.
+    assert 'id="specs-notebook"' in html
+    assert 'id="specs-desktop"' in html
+    assert 'id="specs-celular"' in html
+    # Fase 3 Round 3: IMEI removido do fluxo de celular
+
+    # Monitor simplificado no formulário.
+    assert 'id="specs-monitor"' in html
+    assert 'id="polegadas"' in html
+    assert 'id="resolucao"' not in html
+    assert 'id="tipo_painel"' not in html
+    assert 'id="entrada_video"' not in html
+    assert 'id="fonte_ou_cabo"' not in html
+
+
+def test_asset_create_template_confirmation_reflects_type_specs(authenticated_client):
+    """
+    Regressão da confirmação: modal deve refletir especificações realmente usadas
+    por tipo e limpar campos descontinuados de monitor no payload.
+    """
+    response = authenticated_client.get("/ativos/novo")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "function collectTypeSpecificSpecificationRows(data)" in html
+    assert '"Especificações por tipo": typeSpecificationRows' in html
+    assert "function pruneDeprecatedSpecsByType(body)" in html
+    assert "if (normalizedType === \"monitor\")" in html
+    assert "delete body[fieldName];" in html
 
 
 def test_asset_edit_page_authenticated(authenticated_client):
@@ -147,6 +413,28 @@ def test_asset_edit_page_contains_movement_modal_flow_elements(authenticated_cli
     assert "Confirmar e salvar" in html
     assert "/movimentacao/preview" in html
     assert "/movimentacao/confirmar" in html
+
+
+def test_asset_edit_template_simplifies_monitor_specs_and_keeps_core_types(authenticated_client):
+    """
+    Regressão da edição: monitor deve manter apenas polegadas no bloco técnico,
+    sem campos extras; celular/notebook/desktop permanecem com blocos completos.
+    """
+    response = authenticated_client.get("/ativos/editar/A-001")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert 'id="specs-notebook"' in html
+    assert 'id="specs-desktop"' in html
+    assert 'id="specs-celular"' in html
+    # Fase 3 Round 3: IMEI removido do fluxo de celular
+
+    assert 'id="specs-monitor"' in html
+    assert 'id="polegadas"' in html
+    assert 'id="resolucao"' not in html
+    assert 'id="tipo_painel"' not in html
+    assert 'id="entrada_video"' not in html
+    assert 'id="fonte_ou_cabo"' not in html
 
 
 def test_asset_edit_template_does_not_reference_removed_descricao_categoria_fields(authenticated_client):
@@ -223,6 +511,89 @@ def test_asset_create_route_exposes_automatic_timestamps():
     ativo = payload["ativo"]
     assert ativo["created_at"] == "2026-04-14 09:00:00"
     assert ativo["updated_at"] == "2026-04-14 09:00:00"
+
+
+def test_asset_create_route_blocks_duplicate_while_processing():
+    """
+    Regressão de deduplicação: quando a chave está reservada sem ID (requisição
+    inicial ainda processando), nova tentativa deve retornar 409 e não criar ativo.
+    """
+    import web_app.routes.ativos_routes as ativos_routes_module
+
+    class CountingAtivosService:
+        def __init__(self):
+            self.criar_calls = 0
+
+        def criar_ativo(self, _ativo, _user_id):
+            self.criar_calls += 1
+            return "OPU-000321"
+
+        def buscar_ativo(self, id_ativo, _user_id):
+            return SimpleNamespace(
+                id_ativo=id_ativo,
+                tipo="Notebook",
+                tipo_ativo="Notebook",
+                marca="Dell",
+                modelo="XPS",
+                usuario_responsavel="Ana",
+                departamento="TI",
+                setor="TI",
+                status="Disponível",
+                data_entrada="2026-04-14",
+                data_saida=None,
+                created_at="2026-04-14 09:00:00",
+                updated_at="2026-04-14 09:00:00",
+                data_ultima_movimentacao=None,
+            )
+
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
+
+    service = CountingAtivosService()
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": service,
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
+
+    payload = {
+        "tipo_ativo": "Notebook",
+        "marca": "Dell",
+        "modelo": "XPS",
+        "status": "Disponível",
+        "data_entrada": "2026-04-15",
+        "setor": "TI",
+        "localizacao": "Opus Medical",
+    }
+
+    gerar_chave_dedup = getattr(ativos_routes_module, "_gerar_chave_dedup")
+    dedup_cache = getattr(ativos_routes_module, "_creation_dedup_cache")
+
+    chave = gerar_chave_dedup(payload, 1)
+    dedup_cache[chave] = (None, time.time())
+
+    response = client.post("/ativos", json=payload)
+    assert response.status_code == 409
+    body = response.get_json()
+    assert body["ok"] is False
+    assert "processamento" in body["erro"].lower()
+    assert service.criar_calls == 0
+
+    # Limpeza defensiva para evitar interferência em outros testes.
+    dedup_cache.pop(chave, None)
 
 
 def test_asset_update_route_returns_movement_summary():
@@ -1696,7 +2067,7 @@ def test_asset_create_route_returns_400_for_validation_value_error():
 
     class ValidationErrorAtivosService:
         def criar_ativo(self, _ativo, _user_id):
-            raise ValueError("IMEI 1 inválido.")
+            raise ValueError("numero_linha inválido.")
 
         def buscar_ativo(self, _id_ativo, _user_id):
             return None
@@ -1732,14 +2103,14 @@ def test_asset_create_route_returns_400_for_validation_value_error():
             "status": "Disponível",
             "setor": "T.I",
             "data_entrada": "2026-04-15",
-            "imei_1": "490154203237519",
+            "numero_linha": "12345",
         },
     )
 
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["ok"] is False
-    assert "IMEI" in payload.get("erro", "")
+    assert "numero_linha" in payload.get("erro", "").lower()
 
 
 def test_assets_list_template_avoids_non_standard_selector_for_highlight(app_fixture):
