@@ -14,6 +14,7 @@ from difflib import get_close_matches
 
 from models.ativos import Ativo
 from database.connection import cursor_mysql
+from services.importacao_service import ServicoImportacao
 from utils.validators import (
     STATUS_VALIDOS,
     validar_ativo,
@@ -542,11 +543,22 @@ def _aplicar_mapeamento_linha_importacao(row: dict, mapeamento_colunas: dict[str
 
 def _carregar_csv_em_memoria(conteudo_csv: bytes) -> tuple[list[str], list[tuple[int, dict]]]:
     """
-    Carrega CSV em memória e retorna cabeçalhos + linhas com número real do arquivo.
+    Carrega CSV em memória com tratamento robusto de malformações.
+
+    Retorna: (headers, linhas com numero real do arquivo)
+
+    Levanta AtivoErro (não AttributeError 500) quando:
+    - CSV vazio
+    - Codificação inválida
+    - Cabeçalho ausente
+    - Linha com mais colunas que cabeçalho
+    - Valor em tipo inesperado (list, bytes, etc)
+    - Sem linhas de dados
     """
     if not conteudo_csv:
         raise AtivoErro("Arquivo CSV vazio.")
 
+    # Decodifica com tratamento de codificação
     try:
         texto = conteudo_csv.decode("utf-8-sig")
     except UnicodeDecodeError as erro:
@@ -558,10 +570,57 @@ def _carregar_csv_em_memoria(conteudo_csv: bytes) -> tuple[list[str], list[tuple
     if not reader.fieldnames:
         raise AtivoErro("CSV inválido: cabeçalho ausente.")
 
+    # Total de colunas esperadas no cabeçalho
+    total_colunas_esperadas = len(reader.fieldnames)
+
     linhas: list[tuple[int, dict]] = []
     for numero_linha, row in enumerate(reader, start=2):
-        linha_limpa = {str(chave or "").strip(): (valor or "").strip() for chave, valor in row.items()}
-        # Ignora linhas totalmente vazias para evitar ruído operacional.
+        # VALIDACAO 1: Detectar colunas excedentes (DictReader coloca em None key)
+        # Isso acontece quando há mais valores em uma linha que colunas no cabeçalho
+        if None in row:
+            valores_excedentes = row[None]
+            # Se é list, houve malformação com múltiplos valores excedentes
+            if isinstance(valores_excedentes, list):
+                raise AtivoErro(
+                    f"Linha {numero_linha}: número de colunas maior que o cabeçalho do CSV. "
+                    f"Esperadas {total_colunas_esperadas} colunas, encontrados valores excedentes. "
+                    f"Verifique: separadores (vírgula), aspas malformadas, células contendo vírgula sem escape."
+                )
+            # Se é string, um valor único excedente
+            elif valores_excedentes:
+                raise AtivoErro(
+                    f"Linha {numero_linha}: número de colunas maior que o cabeçalho do CSV. "
+                    f"Valor excedente: '{valores_excedentes}'. "
+                    f"Verifique separadores e aspas no arquivo."
+                )
+
+        # VALIDACAO 2: Limpar e normalizar valores da linha com segurança
+        linha_limpa = {}
+        for chave, valor in row.items():
+            # Ignorar chave None (já tratada acima)
+            if chave is None:
+                continue
+
+            chave_str = str(chave or "").strip()
+
+            # Normalizar valor com tratamento de tipos não-string
+            if isinstance(valor, list):
+                # Nunca deveria chegar aqui após validação 1, mas por segurança:
+                raise AtivoErro(
+                    f"Linha {numero_linha}, coluna '{chave_str}': "
+                    f"valor em formato inesperado (lista). "
+                    f"Verifique aspas e separadores do CSV."
+                )
+            elif isinstance(valor, bytes):
+                # Decodificar bytes se houver
+                valor_str = valor.decode("utf-8", errors="replace").strip()
+            else:
+                # String ou None - normalizar seguramente
+                valor_str = str(valor or "").strip()
+
+            linha_limpa[chave_str] = valor_str
+
+        # VALIDACAO 3: Ignorar linhas totalmente vazias (sem ruído)
         if any(valor for valor in linha_limpa.values()):
             linhas.append((numero_linha, linha_limpa))
 
@@ -575,6 +634,12 @@ class AtivosService:
     """
     Serviço responsável pelas regras de negócio e persistência dos ativos.
     """
+
+    def __init__(self):
+        """
+        Inicializa o serviço com o motor flexível de importação.
+        """
+        self._servico_importacao = ServicoImportacao()
 
     def _construir_ativo_para_atualizacao(self, atual: Ativo, dados: dict) -> Ativo:
         """
@@ -773,6 +838,96 @@ class AtivosService:
 
         return mapeamento_final, avisos_confirmacao
 
+    def _fazer_classificacao_inteligente(self, headers: list[str], conteudo_csv: bytes) -> dict:
+        """
+        Faz classificação usando novo motor flexível com scores.
+
+        Estratégia: Tenta motor novo primeiro; se falhar, usa motor antigo (fallback).
+
+        Args:
+            headers: Lista de nomes de coluna do CSV
+            conteudo_csv: Bytes do arquivo CSV (para detecção de cabeçalho)
+
+        Returns:
+            Dict com exatas, sugeridas, ignoradas, scores, motivos e avisos
+            (compatível com JSON do motor antigo)
+
+        Raises:
+            Exception: Se ambos os motores falharem
+        """
+        try:
+            # Comentário: Usa novo motor para fazer mapeamento inteligente
+            resultado = self._servico_importacao.fazer_mapeamento(headers)
+
+            # Comentário: Converte para formato compatível com preview antigo
+            retorno = {
+                "exatas": [
+                    {
+                        "coluna_origem": m.coluna_origem,
+                        "campo_destino": m.campo_destino,
+                        "score": m.score,
+                        "estrategia": m.estrategia,
+                        "motivo": m.motivo,
+                    }
+                    for m in resultado.mapeamentos_altos
+                ],
+                "sugeridas": [
+                    {
+                        "coluna_origem": m.coluna_origem,
+                        "campo_sugerido": m.campo_destino,
+                        "confirmado": False,
+                        "score": m.score,
+                        "estrategia": m.estrategia,
+                        "motivo": m.motivo,
+                    }
+                    for m in resultado.mapeamentos_medios + resultado.mapeamentos_baixos
+                    if m.campo_destino
+                ],
+                "ignoradas": [
+                    {
+                        "coluna_origem": m.coluna_origem,
+                        "motivo": m.motivo,
+                    }
+                    for m in resultado.campos_ignorados
+                ],
+                # Comentário: Informações adicionais de validação
+                "campos_criticos_faltantes": list(resultado.campos_criticos_faltantes),
+                "bloqueada_por_criticos": len(resultado.campos_criticos_faltantes) > 0,
+                "usando_motor_novo": True,
+            }
+
+            return retorno
+
+        except Exception as e:
+            # Comentário: FALLBACK — se motor novo falha, usa antigo
+            print(f"⚠️ Motor inteligente falhou ({e}), usando motor antigo.")
+            # Rethrow para ser capturado em gerar_preview_importacao_csv()
+            raise
+
+    def _extrair_mapeamento_exato(self, classificacao_nova: dict) -> dict:
+        """
+        Converte resultado do motor novo para estrutura de mapeamento exato esperada
+        pelo resto do código (compatibilidade com motor antigo).
+
+        Args:
+            classificacao_nova: Dict com exatas, sugeridas, ignoradas do motor novo
+
+        Returns:
+            Dict com mapeamento_exato: {coluna_origem -> campo_destino}
+        """
+        mapeamento = {}
+
+        # Comentário: Adiciona exatas (100% de confiança)
+        for item in classificacao_nova.get("exatas", []):
+            mapeamento[item["coluna_origem"]] = item["campo_destino"]
+
+        # Comentário: Adiciona sugeridas com score alto (≥75%)
+        for item in classificacao_nova.get("sugeridas", []):
+            if item.get("score", 0) >= 0.75:
+                mapeamento[item["coluna_origem"]] = item["campo_sugerido"]
+
+        return mapeamento
+
     def gerar_preview_importacao_csv(self, conteudo_csv: bytes, user_id: int) -> dict:
         """
         Gera preview da importação em massa sem persistir alterações.
@@ -782,13 +937,31 @@ class AtivosService:
             raise PermissaoNegada("Apenas administradores podem importar ativos em massa.")
 
         headers, linhas_csv = _carregar_csv_em_memoria(conteudo_csv)
-        classificacao = _classificar_colunas_importacao(headers)
-        mapeamento_exato = classificacao["mapeamento_exato"]
+
+        # Comentário: Tenta motor inteligente primeiro; fallback para antigo se falhar
+        try:
+            classificacao = self._fazer_classificacao_inteligente(headers, conteudo_csv)
+            usando_motor_novo = True
+        except Exception as e:
+            # Comentário: Fallback para motor antigo se novo falhar
+            print(f"Fallback para motor antigo: {e}")
+            classificacao = _classificar_colunas_importacao(headers)
+            usando_motor_novo = False
+
+        mapeamento_exato = classificacao["mapeamento_exato"] if not usando_motor_novo else self._extrair_mapeamento_exato(classificacao)
 
         avisos = []
         if classificacao["sugeridas"]:
             avisos.append(
                 "Colunas sugeridas exigem confirmação antes da importação final."
+            )
+
+        # Comentário: Aviso sobre campos críticos faltantes (motor novo)
+        if classificacao.get("bloqueada_por_criticos"):
+            avisos.append(
+                f"⚠️ BLOQUEIO: Campos críticos não encontrados: "
+                f"{', '.join(classificacao['campos_criticos_faltantes'])}. "
+                f"Importação será bloqueada."
             )
 
         linhas_validas = 0
@@ -845,7 +1018,16 @@ class AtivosService:
             raise PermissaoNegada("Apenas administradores podem importar ativos em massa.")
 
         headers, linhas_csv = _carregar_csv_em_memoria(conteudo_csv)
-        classificacao = _classificar_colunas_importacao(headers)
+
+        # Comentário: Tenta motor inteligente primeiro; fallback para antigo se falhar
+        try:
+            classificacao = self._fazer_classificacao_inteligente(headers, conteudo_csv)
+            usando_motor_novo = True
+        except Exception as e:
+            # Comentário: Fallback para motor antigo se novo falhar
+            print(f"Fallback para motor antigo em confirmar_importacao_csv: {e}")
+            classificacao = _classificar_colunas_importacao(headers)
+            usando_motor_novo = False
         mapeamento_final, avisos_confirmacao = self._resolver_mapeamento_confirmado(
             classificacao,
             sugestoes_confirmadas,
