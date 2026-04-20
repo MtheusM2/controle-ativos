@@ -21,8 +21,12 @@ from dataclasses import dataclass
 from utils.import_schema import (
     obter_campos_criticos,
     obter_campos_com_inferencia,
+    obter_criticidade_campo,
     CRITICIDADE_CAMPOS,
     CriticalidadeCampo,
+    LIMIAR_CONFIANCA_ALTA,
+    LIMIAR_CONFIANCA_MEDIA,
+    LIMIAR_CONFIANCA_BAIXA,
 )
 from utils.import_header_detector import DetectorCabecalho
 from utils.import_mapper import MotorMatching, ResultadoMatch
@@ -249,6 +253,81 @@ class ServicoImportacao:
             duplicatas=duplicatas,
         )
 
+    def _enriquecer_match_com_regra_bloqueio(self, match: ResultadoMatch) -> Dict:
+        """
+        Enriquece dados de match com informação sobre bloqueio/confirmação necessária.
+
+        Returns:
+            Dict com para_dict() + informações adicionais
+        """
+        dados = match.para_dict()
+
+        if not match.campo_destino:
+            # Comentário: campo ignorado
+            dados["acao_esperada"] = "ignorar"
+            dados["requer_confirmacao"] = False
+            return dados
+
+        # Comentário: obtém criticidade do campo
+        criticidade = obter_criticidade_campo(match.campo_destino)
+
+        # ===== LÓGICA DE BLOQUEIO E CONFIRMAÇÃO =====
+        limiar_alta = LIMIAR_CONFIANCA_ALTA / 100.0
+        limiar_media = LIMIAR_CONFIANCA_MEDIA / 100.0
+        limiar_baixa = LIMIAR_CONFIANCA_BAIXA / 100.0
+
+        if criticidade == CriticalidadeCampo.CRITICO:
+            # Comentário: Campos críticos têm regras rígidas
+            if match.score >= limiar_alta:
+                dados["acao_esperada"] = "auto_aplicar"
+                dados["requer_confirmacao"] = False
+                dados["classe_checkbox"] = "high_confidence"
+            elif match.score >= limiar_media:
+                dados["acao_esperada"] = "sugerir_com_pre_selecao"
+                dados["requer_confirmacao"] = True
+                dados["classe_checkbox"] = "medium_confidence"
+            else:
+                # Comentário: score < 75% em campo crítico = BLOQUEIA
+                dados["acao_esperada"] = "bloqueia_importacao"
+                dados["requer_confirmacao"] = True
+                dados["classe_checkbox"] = "blocklist"
+
+        elif criticidade == CriticalidadeCampo.OBRIGATORIO_COM_INFERENCIA:
+            # Comentário: Campos com fallback/inferência têm regras moderadas
+            if match.score >= limiar_alta:
+                dados["acao_esperada"] = "auto_aplicar"
+                dados["requer_confirmacao"] = False
+                dados["classe_checkbox"] = "high_confidence"
+            elif match.score >= limiar_media:
+                dados["acao_esperada"] = "sugerir_com_pre_selecao"
+                dados["requer_confirmacao"] = True
+                dados["classe_checkbox"] = "medium_confidence"
+            elif match.score >= limiar_baixa:
+                dados["acao_esperada"] = "sugerir_sem_pre_selecao"
+                dados["requer_confirmacao"] = False
+                dados["classe_checkbox"] = "low_confidence"
+            else:
+                dados["acao_esperada"] = "ignorar"
+                dados["requer_confirmacao"] = False
+                dados["classe_checkbox"] = "ignored"
+
+        else:  # CriticalidadeCampo.OPCIONAL
+            # Comentário: Campos opcionais têm regras flexíveis
+            if match.score >= limiar_media:
+                dados["acao_esperada"] = "auto_aplicar"
+                dados["requer_confirmacao"] = False
+                dados["classe_checkbox"] = "high_confidence"
+            elif match.score >= limiar_baixa:
+                dados["acao_esperada"] = "sugerir_sem_pre_selecao"
+                dados["requer_confirmacao"] = False
+                dados["classe_checkbox"] = "low_confidence"
+            else:
+                dados["acao_esperada"] = "ignorar"
+                dados["requer_confirmacao"] = False
+                dados["classe_checkbox"] = "ignored"
+
+        return dados
+
     def gerar_preview_estruturado(
         self,
         resultado_mapeamento: ResultadoMapeamento,
@@ -256,7 +335,7 @@ class ServicoImportacao:
         max_linhas_preview: int = 5,
     ) -> Dict:
         """
-        Gera structure de preview para envio à UI.
+        Gera estrutura de preview para envio à UI com regras de bloqueio/confirmação.
 
         Args:
             resultado_mapeamento: Resultado do mapeamento
@@ -265,22 +344,28 @@ class ServicoImportacao:
 
         Returns:
             Dicionário estruturado com:
-            - colunas (exatas, sugeridas, ignoradas com scores)
-            - preview de dados mapeados
-            - resumo de validação
-            - avisos e bloqueios
+            - colunas (exatas, sugeridas, ignoradas com scores + ações esperadas)
+            - preview de dados
+            - resumo de validação com informações de bloqueio
+            - avisos detalhados
         """
-        # Comentário: prepara dados de colunas
+        # Comentário: prepara dados de colunas com ações esperadas
         colunas_preview = {
-            "exatas": [m.para_dict() for m in resultado_mapeamento.mapeamentos_altos],
+            "exatas": [
+                self._enriquecer_match_com_regra_bloqueio(m)
+                for m in resultado_mapeamento.mapeamentos_altos
+            ],
             "sugeridas": [
-                m.para_dict()
+                self._enriquecer_match_com_regra_bloqueio(m)
                 for m in (
                     resultado_mapeamento.mapeamentos_medios
                     + resultado_mapeamento.mapeamentos_baixos
                 )
             ],
-            "ignoradas": [m.para_dict() for m in resultado_mapeamento.campos_ignorados],
+            "ignoradas": [
+                self._enriquecer_match_com_regra_bloqueio(m)
+                for m in resultado_mapeamento.campos_ignorados
+            ],
         }
 
         # Comentário: prepara preview de linhas (apenas primeiras)
@@ -301,20 +386,33 @@ class ServicoImportacao:
             "colunas_ignoradas": len(resultado_mapeamento.campos_ignorados),
             "campos_criticos_faltantes": list(resultado_mapeamento.campos_criticos_faltantes),
             "bloqueada": len(resultado_mapeamento.campos_criticos_faltantes) > 0,
+            "requer_confirmacao": any(
+                self._enriquecer_match_com_regra_bloqueio(m)["requer_confirmacao"]
+                for m in resultado_mapeamento.matches
+            ),
         }
 
-        # Comentário: prepara avisos
+        # Comentário: prepara avisos detalhados
         avisos = []
         if resultado_mapeamento.duplicatas:
             avisos.append(
-                f"Atenção: {len(resultado_mapeamento.duplicatas)} campo(s) "
-                f"mapeado(s) por múltiplas colunas. Será usada a de maior confiança."
+                f"⚠️ Atenção: {len(resultado_mapeamento.duplicatas)} campo(s) "
+                f"mapeado(s) por múltiplas colunas. "
+                f"Será usada a coluna com maior confiança. "
+                f"Campos: {', '.join(resultado_mapeamento.duplicatas.keys())}"
             )
         if resultado_mapeamento.campos_criticos_faltantes:
             avisos.append(
-                f"⚠️ BLOQUEIO: Campos críticos não encontrados: "
+                f"🚫 BLOQUEIO: Campos críticos não encontrados: "
                 f"{', '.join(resultado_mapeamento.campos_criticos_faltantes)}. "
-                f"Importação será bloqueada."
+                f"Importação será BLOQUEADA até que esses campos sejam mapeados com confiança ≥75%."
+            )
+        if resultado_mapeamento.mapeamentos_medios or resultado_mapeamento.mapeamentos_baixos:
+            avisos.append(
+                f"ℹ️ Confirmação necessária: "
+                f"{len(resultado_mapeamento.mapeamentos_medios) + len(resultado_mapeamento.mapeamentos_baixos)} "
+                f"mapeamento(s) com confiança média/baixa. "
+                f"Revise antes de confirmar importação."
             )
 
         return {
