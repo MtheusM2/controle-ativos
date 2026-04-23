@@ -48,6 +48,62 @@ def test_asset_import_page_authenticated(authenticated_client):
     assert "/ativos/importar/confirmar" in html
 
 
+def test_asset_import_template_starts_with_confirm_button_disabled(authenticated_client):
+    """
+    Contrato de UI: botão de confirmação deve iniciar desabilitado
+    para evitar importação sem pré-visualização e validação.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert 'id="confirm-import-btn" disabled' in html
+
+
+def test_asset_import_template_requires_suggestion_decisions_before_enabling(authenticated_client):
+    """
+    Contrato de UI: sugestões pendentes devem bloquear habilitação do botão.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "function coletarDecisoesSugestoes()" in html
+    assert 'valorSelecionado === "__pendente__"' in html
+    assert "pendentes += 1" in html
+    assert "if (decisoes.pendentes > 0)" in html
+    assert "sugestão(ões) sem decisão" in html
+
+
+def test_asset_import_template_blocks_conflicting_destination_mappings(authenticated_client):
+    """
+    Contrato de UI: conflitos entre destinos exatos/sugeridos devem manter botão desabilitado.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "const destinosExatos = new Set" in html
+    assert "const destinosComConflito = []" in html
+    assert "destinosExatos.has(destino) || destinoJaEscolhido.has(destino)" in html
+    assert "if (destinosComConflito.length > 0)" in html
+    assert "Existem conflitos de campo destino" in html
+
+
+def test_asset_import_template_only_enables_confirm_when_no_pending_restrictions(authenticated_client):
+    """
+    Contrato de UI: habilitação depende da ausência total de motivos.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "const podeContinuar = motivos.length === 0" in html
+    assert "confirmButton.disabled = !podeContinuar" in html
+    assert "if (!podeContinuarBase)" in html
+    assert "motivos.push(...bloqueiosBase)" in html
+
+
 def test_asset_import_preview_route_returns_schema_first_payload():
     """
     Rota de preview deve retornar classificação de colunas sem persistir dados.

@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-04-17T16:22:52.463808",
+  "testes": {
+    "teste_1_preview": "OK",
+    "teste_2_confirmacao": "OK",
+    "total_importados": 5,
+    "teste_3_banco": "OK",
+    "teste_4_erros": "OK (3 erros detectados)"
+  }
+}

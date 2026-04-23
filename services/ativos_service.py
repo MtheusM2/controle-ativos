@@ -185,6 +185,8 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         or _normalizar_documento(" ".join(part for part in [ativo.tipo, ativo.marca, ativo.modelo] if (part or "").strip()))
     )
 
+    setor_normalizado = padronizar_texto(ativo.setor or ativo.departamento, "title")
+
     ativo_norm = Ativo(
         id_ativo=(ativo.id_ativo or "").strip(),
         tipo=tipo_ativo_normalizado,
@@ -199,7 +201,7 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         tipo_ativo=tipo_ativo_normalizado,
         condicao=padronizar_texto(ativo.condicao, "title"),
         localizacao=padronizar_texto(ativo.localizacao, "title"),
-        setor=padronizar_texto(ativo.setor or ativo.departamento, "title"),
+        setor=setor_normalizado,
         usuario_responsavel=_normalizar_responsavel(ativo.usuario_responsavel),
         email_responsavel=_normalizar_email(ativo.email_responsavel),
         departamento=padronizar_texto(ativo.setor or ativo.departamento, "title"),
@@ -355,6 +357,16 @@ CAMPOS_IMPORTACAO_SCHEMA = {
     "fonte_ou_cabo",
     "nota_fiscal",
     "garantia",
+}
+
+# Campos mínimos exigidos para uma importação válida no fluxo web.
+CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW = {
+    "tipo_ativo",
+    "marca",
+    "modelo",
+    "setor",
+    "status",
+    "data_entrada",
 }
 
 # Colunas proibidas na importação por regra de segurança/escopo.
@@ -630,6 +642,21 @@ def _carregar_csv_em_memoria(conteudo_csv: bytes) -> tuple[list[str], list[tuple
     return [str(header or "").strip() for header in reader.fieldnames], linhas
 
 
+def _extrair_erro_estruturado_linha_importacao(mensagem: str) -> dict:
+    """
+    Estrutura erros com referência de linha para consumo direto na UI.
+    """
+    texto = (mensagem or "").strip()
+    match = re.match(r"^Linha\s+(\d+):\s*(.+)$", texto)
+    if not match:
+        return {"linha": None, "mensagem": texto}
+
+    return {
+        "linha": int(match.group(1)),
+        "mensagem": match.group(2).strip(),
+    }
+
+
 class AtivosService:
     """
     Serviço responsável pelas regras de negócio e persistência dos ativos.
@@ -821,24 +848,29 @@ class AtivosService:
                 )
                 continue
 
+            if campo_solicitado_norm not in CAMPOS_IMPORTACAO_SCHEMA:
+                avisos_confirmacao.append(
+                    f"Confirmação inválida para '{coluna_origem}': campo '{campo_solicitado}' fora do schema permitido."
+                )
+                continue
+
+            if campo_solicitado_norm in campos_destino_ja_usados:
+                avisos_confirmacao.append(
+                    f"Confirmação ignorada para '{coluna_origem}': campo '{campo_solicitado_norm}' já mapeado."
+                )
+                continue
+
             if campo_solicitado_norm != campo_sugerido:
                 avisos_confirmacao.append(
-                    f"Confirmação inválida para '{coluna_origem}': destino divergente de '{campo_sugerido}'."
+                    f"Ajuste manual aplicado para '{coluna_origem}': '{campo_sugerido}' -> '{campo_solicitado_norm}'."
                 )
-                continue
 
-            if campo_sugerido in campos_destino_ja_usados:
-                avisos_confirmacao.append(
-                    f"Confirmação ignorada para '{coluna_origem}': campo '{campo_sugerido}' já mapeado."
-                )
-                continue
-
-            mapeamento_final[coluna_origem] = campo_sugerido
-            campos_destino_ja_usados.add(campo_sugerido)
+            mapeamento_final[coluna_origem] = campo_solicitado_norm
+            campos_destino_ja_usados.add(campo_solicitado_norm)
 
         return mapeamento_final, avisos_confirmacao
 
-    def _fazer_classificacao_inteligente(self, headers: list[str], conteudo_csv: bytes) -> dict:
+    def _fazer_classificacao_inteligente(self, headers: list[str]) -> dict:
         """
         Faz classificação usando novo motor flexível com scores.
 
@@ -858,38 +890,86 @@ class AtivosService:
         try:
             # Comentário: Usa novo motor para fazer mapeamento inteligente
             resultado = self._servico_importacao.fazer_mapeamento(headers)
+            original_por_normalizado = {
+                _normalizar_nome_coluna_importacao(header): (header or "").strip()
+                for header in headers
+            }
+            for header in headers:
+                cabecalho_original = (header or "").strip()
+                cabecalho_norm = _normalizar_nome_coluna_importacao(cabecalho_original)
+                if not cabecalho_norm:
+                    continue
+                original_por_normalizado.setdefault(cabecalho_norm.replace("_", " "), cabecalho_original)
+
+            mapeamentos_altos_exatos = []
+            mapeamentos_altos_sugeridos = []
+            for match in resultado.mapeamentos_altos:
+                coluna_norm = _normalizar_nome_coluna_importacao(match.coluna_origem)
+                coluna_sem_espaco = coluna_norm.replace(" ", "")
+                origem_original = original_por_normalizado.get(coluna_norm, match.coluna_origem)
+                origem_original_norm = _normalizar_nome_coluna_importacao(origem_original)
+                origem_eh_alias = (
+                    coluna_norm in ALIASES_IMPORTACAO_SUGERIDOS
+                    or coluna_sem_espaco in ALIASES_IMPORTACAO_SUGERIDOS
+                )
+                origem_eh_schema_canonica = origem_original_norm in CAMPOS_IMPORTACAO_SCHEMA
+                # Apenas cabeçalho exatamente igual ao campo do schema vira auto-mapeamento.
+                if (
+                    (origem_eh_schema_canonica or not origem_eh_alias)
+                    and match.campo_destino in CAMPOS_IMPORTACAO_SCHEMA
+                    and coluna_norm.replace(" ", "_") == match.campo_destino
+                ):
+                    mapeamentos_altos_exatos.append(match)
+                else:
+                    mapeamentos_altos_sugeridos.append(match)
 
             # Comentário: Converte para formato compatível com preview antigo
             retorno = {
                 "exatas": [
                     {
-                        "coluna_origem": m.coluna_origem,
+                        "coluna_origem": original_por_normalizado.get(
+                            _normalizar_nome_coluna_importacao(m.coluna_origem),
+                            m.coluna_origem,
+                        ),
                         "campo_destino": m.campo_destino,
                         "score": m.score,
                         "estrategia": m.estrategia,
                         "motivo": m.motivo,
                     }
-                    for m in resultado.mapeamentos_altos
+                    for m in mapeamentos_altos_exatos
                 ],
                 "sugeridas": [
                     {
-                        "coluna_origem": m.coluna_origem,
+                        "coluna_origem": original_por_normalizado.get(
+                            _normalizar_nome_coluna_importacao(m.coluna_origem),
+                            m.coluna_origem,
+                        ),
                         "campo_sugerido": m.campo_destino,
                         "confirmado": False,
                         "score": m.score,
                         "estrategia": m.estrategia,
                         "motivo": m.motivo,
                     }
-                    for m in resultado.mapeamentos_medios + resultado.mapeamentos_baixos
+                    for m in (mapeamentos_altos_sugeridos + resultado.mapeamentos_medios + resultado.mapeamentos_baixos)
                     if m.campo_destino
                 ],
                 "ignoradas": [
                     {
-                        "coluna_origem": m.coluna_origem,
+                        "coluna_origem": original_por_normalizado.get(
+                            _normalizar_nome_coluna_importacao(m.coluna_origem),
+                            m.coluna_origem,
+                        ),
                         "motivo": m.motivo,
                     }
                     for m in resultado.campos_ignorados
                 ],
+                "mapeamento_exato": {
+                    original_por_normalizado.get(
+                        _normalizar_nome_coluna_importacao(m.coluna_origem),
+                        m.coluna_origem,
+                    ): m.campo_destino
+                    for m in mapeamentos_altos_exatos
+                },
                 # Comentário: Informações adicionais de validação
                 "campos_criticos_faltantes": list(resultado.campos_criticos_faltantes),
                 "bloqueada_por_criticos": len(resultado.campos_criticos_faltantes) > 0,
@@ -921,11 +1001,6 @@ class AtivosService:
         for item in classificacao_nova.get("exatas", []):
             mapeamento[item["coluna_origem"]] = item["campo_destino"]
 
-        # Comentário: Adiciona sugeridas com score alto (≥75%)
-        for item in classificacao_nova.get("sugeridas", []):
-            if item.get("score", 0) >= 0.75:
-                mapeamento[item["coluna_origem"]] = item["campo_sugerido"]
-
         return mapeamento
 
     def gerar_preview_importacao_csv(self, conteudo_csv: bytes, user_id: int) -> dict:
@@ -940,15 +1015,18 @@ class AtivosService:
 
         # Comentário: Tenta motor inteligente primeiro; fallback para antigo se falhar
         try:
-            classificacao = self._fazer_classificacao_inteligente(headers, conteudo_csv)
+            classificacao = self._fazer_classificacao_inteligente(headers)
             usando_motor_novo = True
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
             # Comentário: Fallback para motor antigo se novo falhar
             print(f"Fallback para motor antigo: {e}")
             classificacao = _classificar_colunas_importacao(headers)
             usando_motor_novo = False
 
-        mapeamento_exato = classificacao["mapeamento_exato"] if not usando_motor_novo else self._extrair_mapeamento_exato(classificacao)
+        mapeamento_exato = classificacao.get("mapeamento_exato", {})
+        if usando_motor_novo:
+            mapeamento_exato = self._extrair_mapeamento_exato(classificacao)
+        classificacao["mapeamento_exato"] = mapeamento_exato
 
         avisos = []
         if classificacao["sugeridas"]:
@@ -956,20 +1034,30 @@ class AtivosService:
                 "Colunas sugeridas exigem confirmação antes da importação final."
             )
 
-        # Comentário: Aviso sobre campos críticos faltantes (motor novo)
-        if classificacao.get("bloqueada_por_criticos"):
-            avisos.append(
-                f"⚠️ BLOQUEIO: Campos críticos não encontrados: "
-                f"{', '.join(classificacao['campos_criticos_faltantes'])}. "
-                f"Importação será bloqueada."
-            )
-
         linhas_validas = 0
         erros: list[str] = []
+        erros_por_linha: list[dict] = []
+        avisos_por_linha: list[dict] = []
         linhas_preview: list[dict] = []
+        colunas_ignoradas = [item.get("coluna_origem", "") for item in classificacao.get("ignoradas", [])]
 
         for indice, (numero_linha, row) in enumerate(linhas_csv):
             dados_mapeados = _aplicar_mapeamento_linha_importacao(row, mapeamento_exato)
+
+            colunas_descartadas_com_valor = [
+                coluna for coluna in colunas_ignoradas if (row.get(coluna) or "").strip()
+            ]
+            if colunas_descartadas_com_valor:
+                avisos_por_linha.append(
+                    {
+                        "linha": numero_linha,
+                        "mensagens": [
+                            "Valores em colunas ignoradas serão descartados: "
+                            + ", ".join(colunas_descartadas_com_valor)
+                            + "."
+                        ],
+                    }
+                )
 
             if indice < 5:
                 # Expõe apenas amostra para UX rápida, sem carregar arquivo inteiro na tela.
@@ -984,7 +1072,46 @@ class AtivosService:
                 self._validar_linha_importacao(dados_mapeados, numero_linha)
                 linhas_validas += 1
             except AtivoErro as erro:
-                erros.append(str(erro))
+                erro_texto = str(erro)
+                erros.append(erro_texto)
+                erros_por_linha.append(_extrair_erro_estruturado_linha_importacao(erro_texto))
+
+        campos_reconhecidos = {
+            item.get("campo_destino")
+            for item in classificacao.get("exatas", [])
+            if item.get("campo_destino")
+        }
+        campos_reconhecidos.update(
+            item.get("campo_sugerido")
+            for item in classificacao.get("sugeridas", [])
+            if item.get("campo_sugerido")
+        )
+
+        campos_obrigatorios_nao_reconhecidos = sorted(
+            campo
+            for campo in CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW
+            if campo not in campos_reconhecidos
+        )
+        bloqueios_importacao: list[str] = []
+        if campos_obrigatorios_nao_reconhecidos:
+            bloqueios_importacao.append(
+                "Campos obrigatórios não reconhecidos: " + ", ".join(campos_obrigatorios_nao_reconhecidos) + "."
+            )
+        if not mapeamento_exato:
+            bloqueios_importacao.append("Nenhum campo foi reconhecido automaticamente com confiança suficiente.")
+        if linhas_validas == 0:
+            bloqueios_importacao.append("Nenhuma linha válida encontrada para importação.")
+        if erros_por_linha:
+            bloqueios_importacao.append(
+                "Existem linhas inválidas na prévia. Corrija o arquivo antes de continuar."
+            )
+
+        for aviso in avisos_por_linha:
+            if aviso.get("linha") is None:
+                continue
+            mensagens = aviso.get("mensagens", [])
+            for mensagem in mensagens:
+                avisos.append(f"Linha {aviso['linha']}: {mensagem}")
 
         return {
             "colunas": {
@@ -992,7 +1119,26 @@ class AtivosService:
                 "sugeridas": classificacao["sugeridas"],
                 "ignoradas": classificacao["ignoradas"],
             },
+            "campos_destino_disponiveis": sorted(CAMPOS_IMPORTACAO_SCHEMA),
+            "campos_obrigatorios_nao_reconhecidos": campos_obrigatorios_nao_reconhecidos,
             "preview_linhas": linhas_preview,
+            "erros_por_linha": erros_por_linha,
+            "avisos_por_linha": avisos_por_linha,
+            "bloqueios_importacao": bloqueios_importacao,
+            "resumo_analise": {
+                "total_linhas": len(linhas_csv),
+                "linhas_validas": linhas_validas,
+                "linhas_invalidas": len(linhas_csv) - linhas_validas,
+                "colunas_reconhecidas_automaticamente": len(classificacao["exatas"]),
+                "colunas_sugeridas": len(classificacao["sugeridas"]),
+                "colunas_ignoradas": len(classificacao["ignoradas"]),
+                "campos_obrigatorios_nao_reconhecidos": len(campos_obrigatorios_nao_reconhecidos),
+            },
+            "controles_importacao": {
+                "pode_continuar_base": len(bloqueios_importacao) == 0,
+                "motivos_bloqueio": bloqueios_importacao,
+                "sugestoes_pendentes": len(classificacao["sugeridas"]),
+            },
             "resumo_validacao": {
                 "total_linhas": len(linhas_csv),
                 "linhas_validas": linhas_validas,
@@ -1021,17 +1167,56 @@ class AtivosService:
 
         # Comentário: Tenta motor inteligente primeiro; fallback para antigo se falhar
         try:
-            classificacao = self._fazer_classificacao_inteligente(headers, conteudo_csv)
+            classificacao = self._fazer_classificacao_inteligente(headers)
             usando_motor_novo = True
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
             # Comentário: Fallback para motor antigo se novo falhar
             print(f"Fallback para motor antigo em confirmar_importacao_csv: {e}")
             classificacao = _classificar_colunas_importacao(headers)
             usando_motor_novo = False
+
+        mapeamento_exato = classificacao.get("mapeamento_exato", {})
+        if usando_motor_novo:
+            mapeamento_exato = self._extrair_mapeamento_exato(classificacao)
+        classificacao["mapeamento_exato"] = mapeamento_exato
+
         mapeamento_final, avisos_confirmacao = self._resolver_mapeamento_confirmado(
             classificacao,
             sugestoes_confirmadas,
         )
+
+        sugestoes_obrigatorias_pendentes = []
+        for sugestao in classificacao.get("sugeridas", []):
+            campo_sugerido = sugestao.get("campo_sugerido")
+            coluna_origem = sugestao.get("coluna_origem")
+            if campo_sugerido not in CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW:
+                continue
+            if coluna_origem in mapeamento_final:
+                continue
+            sugestoes_obrigatorias_pendentes.append((coluna_origem, campo_sugerido))
+
+        if sugestoes_obrigatorias_pendentes:
+            erros_confirmacao = [
+                f"Campo obrigatório '{campo}' não foi confirmado para a coluna '{coluna}'."
+                for coluna, campo in sugestoes_obrigatorias_pendentes
+            ]
+            return {
+                "ok_importacao": False,
+                "modo_tudo_ou_nada": modo_tudo_ou_nada,
+                "importados": 0,
+                "falhas": len(erros_confirmacao),
+                "ids_criados": [],
+                "erros": erros_confirmacao,
+                "avisos": avisos_confirmacao,
+                "bloqueios_importacao": [
+                    "Existem mapeamentos obrigatórios sugeridos sem confirmação explícita."
+                ],
+                "colunas": {
+                    "exatas": classificacao["exatas"],
+                    "sugeridas": classificacao["sugeridas"],
+                    "ignoradas": classificacao["ignoradas"],
+                },
+            }
 
         ativos_validos: list[Ativo] = []
         erros: list[str] = []
@@ -1052,6 +1237,9 @@ class AtivosService:
                 "ids_criados": [],
                 "erros": erros,
                 "avisos": avisos_confirmacao,
+                "bloqueios_importacao": [
+                    "Existem linhas inválidas na importação. Corrija o arquivo e execute nova pré-visualização."
+                ],
                 "colunas": {
                     "exatas": classificacao["exatas"],
                     "sugeridas": classificacao["sugeridas"],
@@ -1082,6 +1270,7 @@ class AtivosService:
             "ids_criados": ids_criados,
             "erros": erros_finais,
             "avisos": avisos_confirmacao,
+            "bloqueios_importacao": [],
             "colunas": {
                 "exatas": classificacao["exatas"],
                 "sugeridas": classificacao["sugeridas"],

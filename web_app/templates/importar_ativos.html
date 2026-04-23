@@ -41,15 +41,15 @@
         <h3 class="title-section">Pré-visualização</h3>
     </div>
     <div class="panel-body">
-        <div id="import-summary" class="field-group"></div>
+        <div id="import-summary" class="field-group import-preview-summary"></div>
 
         <div class="field-group">
-            <h4>Colunas com correspondência exata</h4>
+            <h4>Campos reconhecidos automaticamente</h4>
             <div id="exact-columns-container"></div>
         </div>
 
         <div class="field-group">
-            <h4>Colunas sugeridas (confirmar antes de importar)</h4>
+            <h4>Mapeamentos sugeridos (confirme ou ajuste)</h4>
             <div id="suggested-columns-container"></div>
         </div>
 
@@ -59,7 +59,12 @@
         </div>
 
         <div class="field-group">
-            <h4>Preview das linhas</h4>
+            <h4>Campos obrigatórios não reconhecidos</h4>
+            <div id="missing-required-container"></div>
+        </div>
+
+        <div class="field-group">
+            <h4>Amostra de gravação (como cada linha será salva)</h4>
             <div class="table-wrapper">
                 <table class="table-premium table-aligned">
                     <thead id="preview-table-head"></thead>
@@ -69,12 +74,50 @@
         </div>
 
         <div class="field-group">
-            <h4>Erros e avisos</h4>
+            <h4>Erros por linha</h4>
+            <div id="line-errors-container"></div>
+        </div>
+
+        <div class="field-group">
+            <h4>Avisos por linha</h4>
+            <div id="line-warnings-container"></div>
+        </div>
+
+        <div class="field-group">
+            <h4>Bloqueios de importação</h4>
+            <div id="import-blockers-container"></div>
+        </div>
+
+        <div class="field-group">
+            <h4>Mensagens gerais</h4>
             <div id="validation-messages-container"></div>
         </div>
 
         <div class="field-group">
-            <button type="button" class="btn btn-primary" id="confirm-import-btn">Confirmar importação</button>
+            <h4>Confirmações obrigatórias</h4>
+            <div class="checkboxes-confirmacao">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="revisor_dados" id="revisor-dados" class="checkbox-obrigatorio">
+                    Revisei os dados e confirmo que estão corretos
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="confirma_duplicatas" id="confirma-duplicatas" class="checkbox-obrigatorio">
+                    Estou ciente de possíveis duplicatas e confirmo o modo de tratamento
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="aceita_avisos" id="aceita-avisos" class="checkbox-obrigatorio">
+                    Aceito os avisos e possíveis limitações listados acima
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="autoriza_importacao" id="autoriza-importacao" class="checkbox-obrigatorio">
+                    Autorizo a importação dos ativos selecionados
+                </label>
+            </div>
+        </div>
+
+        <div class="field-group">
+            <button type="button" class="btn btn-primary" id="confirm-import-btn" disabled>Confirmar importação</button>
+            <small id="confirm-requirements-hint" class="field-help"></small>
         </div>
     </div>
 </section>
@@ -91,8 +134,13 @@
     const exactColumnsContainer = document.getElementById("exact-columns-container");
     const suggestedColumnsContainer = document.getElementById("suggested-columns-container");
     const ignoredColumnsContainer = document.getElementById("ignored-columns-container");
+    const missingRequiredContainer = document.getElementById("missing-required-container");
     const importSummaryContainer = document.getElementById("import-summary");
     const validationMessagesContainer = document.getElementById("validation-messages-container");
+    const lineErrorsContainer = document.getElementById("line-errors-container");
+    const lineWarningsContainer = document.getElementById("line-warnings-container");
+    const importBlockersContainer = document.getElementById("import-blockers-container");
+    const confirmRequirementsHint = document.getElementById("confirm-requirements-hint");
     const previewTableHead = document.getElementById("preview-table-head");
     const previewTableBody = document.getElementById("preview-table-body");
 
@@ -141,16 +189,22 @@
     }
 
     function renderSummary(preview) {
-        const resumo = preview.resumo_validacao || {};
+        const resumo = preview.resumo_analise || preview.resumo_validacao || {};
         importSummaryContainer.innerHTML = `
-            <p><strong>Total de linhas:</strong> ${resumo.total_linhas ?? 0}</p>
-            <p><strong>Linhas válidas:</strong> ${resumo.linhas_validas ?? 0}</p>
-            <p><strong>Linhas inválidas:</strong> ${resumo.linhas_invalidas ?? 0}</p>
+            <div class="import-summary-grid">
+                <div><strong>Total de linhas</strong><span>${resumo.total_linhas ?? 0}</span></div>
+                <div><strong>Linhas válidas</strong><span>${resumo.linhas_validas ?? 0}</span></div>
+                <div><strong>Linhas inválidas</strong><span>${resumo.linhas_invalidas ?? 0}</span></div>
+                <div><strong>Reconhecidas automaticamente</strong><span>${resumo.colunas_reconhecidas_automaticamente ?? (preview.colunas?.exatas || []).length}</span></div>
+                <div><strong>Sugestões com score</strong><span>${resumo.colunas_sugeridas ?? (preview.colunas?.sugeridas || []).length}</span></div>
+                <div><strong>Colunas ignoradas</strong><span>${resumo.colunas_ignoradas ?? (preview.colunas?.ignoradas || []).length}</span></div>
+            </div>
         `;
     }
 
     function renderColumns(preview) {
         const colunas = preview.colunas || {};
+        const camposDestinoDisponiveis = preview.campos_destino_disponiveis || [];
 
         exactColumnsContainer.innerHTML = renderSimpleList(
             colunas.exatas || [],
@@ -158,7 +212,7 @@
             (item) => `${escapeHtml(item.coluna_origem)} → <strong>${escapeHtml(item.campo_destino)}</strong>`
         );
 
-        // Sugestões vêm com checkbox para confirmação explícita do usuário.
+        // Cada sugestão exige decisão explícita para evitar importação cega.
         if (!colunas.sugeridas?.length) {
             suggestedColumnsContainer.innerHTML = "<p>Nenhuma sugestão pendente.</p>";
         } else {
@@ -166,18 +220,28 @@
                 <ul>
                     ${colunas.sugeridas.map((item, index) => `
                         <li>
-                            <label for="suggestion-check-${index}">
-                                <input
-                                    type="checkbox"
-                                    id="suggestion-check-${index}"
-                                    class="suggestion-check"
+                            <div class="suggestion-item">
+                                <div>
+                                    <strong>${escapeHtml(item.coluna_origem)}</strong>
+                                    <span> → ${escapeHtml(item.campo_sugerido)}</span>
+                                    <span class="suggestion-meta">score ${Number(item.score || 0).toFixed(2)} | ${escapeHtml(item.motivo || "sugestão")}</span>
+                                </div>
+                                <label for="suggestion-select-${index}">Decisão</label>
+                                <select
+                                    id="suggestion-select-${index}"
+                                    class="input-control suggestion-select"
                                     data-coluna-origem="${escapeHtml(item.coluna_origem)}"
                                     data-campo-sugerido="${escapeHtml(item.campo_sugerido)}"
-                                    checked
                                 >
-                                ${escapeHtml(item.coluna_origem)} → <strong>${escapeHtml(item.campo_sugerido)}</strong>
-                                <span>(${escapeHtml(item.motivo || "sugestão")})</span>
-                            </label>
+                                    <option value="__pendente__" selected>Selecione uma decisão</option>
+                                    <option value="${escapeHtml(item.campo_sugerido)}">Aplicar sugestão</option>
+                                    ${camposDestinoDisponiveis.map((campo) => {
+                                        if (campo === item.campo_sugerido) return "";
+                                        return `<option value="${escapeHtml(campo)}">Ajustar para ${escapeHtml(campo)}</option>`;
+                                    }).join("")}
+                                    <option value="__ignorar__">Ignorar coluna</option>
+                                </select>
+                            </div>
                         </li>
                     `).join("")}
                 </ul>
@@ -189,6 +253,17 @@
             "Nenhuma coluna ignorada.",
             (item) => `${escapeHtml(item.coluna_origem)} — ${escapeHtml(item.motivo || "ignorada")}`
         );
+
+        const camposObrigatoriosFaltando = preview.campos_obrigatorios_nao_reconhecidos || [];
+        missingRequiredContainer.innerHTML = renderSimpleList(
+            camposObrigatoriosFaltando,
+            "Nenhum campo obrigatório faltando no reconhecimento.",
+            (item) => `<strong>${escapeHtml(item)}</strong>`
+        );
+
+        document.querySelectorAll(".suggestion-select").forEach((select) => {
+            select.addEventListener("change", atualizarEstadoConfirmacao);
+        });
     }
 
     function renderPreviewRows(preview) {
@@ -247,16 +322,107 @@
         validationMessagesContainer.innerHTML = blocos.join("");
     }
 
-    function coletarConfirmacoesSugestoes() {
+    function renderLineMessages(preview) {
+        const errosPorLinha = preview.erros_por_linha || [];
+        const avisosPorLinha = preview.avisos_por_linha || [];
+
+        lineErrorsContainer.innerHTML = renderSimpleList(
+            errosPorLinha,
+            "Nenhum erro por linha detectado.",
+            (item) => `<strong>Linha ${escapeHtml(item.linha ?? "-")}</strong>: ${escapeHtml(item.mensagem || "Erro não especificado.")}`
+        );
+
+        lineWarningsContainer.innerHTML = renderSimpleList(
+            avisosPorLinha,
+            "Nenhum aviso por linha detectado.",
+            (item) => {
+                const mensagens = item.mensagens || [];
+                return `<strong>Linha ${escapeHtml(item.linha ?? "-")}</strong>: ${escapeHtml(mensagens.join(" "))}`;
+            }
+        );
+    }
+
+    function renderBlockers(preview) {
+        const bloqueios = preview.bloqueios_importacao || [];
+        importBlockersContainer.innerHTML = renderSimpleList(
+            bloqueios,
+            "Sem bloqueios técnicos no preview.",
+            (item) => escapeHtml(item)
+        );
+    }
+
+    function coletarDecisoesSugestoes() {
         const confirmacoes = {};
-        document.querySelectorAll(".suggestion-check").forEach((checkbox) => {
-            if (!checkbox.checked) return;
-            const colunaOrigem = checkbox.dataset.colunaOrigem || "";
-            const campoSugerido = checkbox.dataset.campoSugerido || "";
-            if (!colunaOrigem || !campoSugerido) return;
-            confirmacoes[colunaOrigem] = campoSugerido;
+        const destinosSelecionados = [];
+        let pendentes = 0;
+
+        document.querySelectorAll(".suggestion-select").forEach((select) => {
+            const colunaOrigem = select.dataset.colunaOrigem || "";
+            const valorSelecionado = String(select.value || "").trim();
+
+            if (!colunaOrigem) return;
+            if (!valorSelecionado || valorSelecionado === "__pendente__") {
+                pendentes += 1;
+                return;
+            }
+            if (valorSelecionado === "__ignorar__") {
+                return;
+            }
+
+            confirmacoes[colunaOrigem] = valorSelecionado;
+            destinosSelecionados.push(valorSelecionado);
         });
-        return confirmacoes;
+
+        return { confirmacoes, pendentes, destinosSelecionados };
+    }
+
+    function atualizarEstadoConfirmacao() {
+        const controles = currentPreview?.controles_importacao || {};
+        const bloqueiosBase = Array.isArray(controles.motivos_bloqueio) ? controles.motivos_bloqueio.slice() : [];
+        const podeContinuarBase = Boolean(controles.pode_continuar_base);
+        const decisoes = coletarDecisoesSugestoes();
+
+        const destinosExatos = new Set((currentPreview?.colunas?.exatas || []).map((item) => item.campo_destino));
+        const destinosComConflito = [];
+        const destinoJaEscolhido = new Set();
+
+        for (const destino of decisoes.destinosSelecionados) {
+            if (destinosExatos.has(destino) || destinoJaEscolhido.has(destino)) {
+                destinosComConflito.push(destino);
+            }
+            destinoJaEscolhido.add(destino);
+        }
+
+        // Validar checkboxes obrigatórios de confirmação (NOVO)
+        const checkboxesObrigatorios = [
+            'revisor-dados',
+            'confirma-duplicatas',
+            'aceita-avisos',
+            'autoriza-importacao'
+        ];
+        const checkboxesDesmarcados = checkboxesObrigatorios.filter(id => !document.getElementById(id).checked);
+
+        const motivos = [];
+        if (!podeContinuarBase) {
+            motivos.push(...bloqueiosBase);
+        }
+        if (decisoes.pendentes > 0) {
+            motivos.push(`Existem ${decisoes.pendentes} sugestão(ões) sem decisão.`);
+        }
+        if (destinosComConflito.length > 0) {
+            motivos.push(`Existem conflitos de campo destino: ${destinosComConflito.join(", ")}.`);
+        }
+        if (checkboxesDesmarcados.length > 0) {
+            motivos.push(`Você deve marcar todas as 4 confirmações obrigatórias para prosseguir.`);
+        }
+
+        const podeContinuar = motivos.length === 0;
+        confirmButton.disabled = !podeContinuar;
+        confirmRequirementsHint.textContent = podeContinuar
+            ? "Pré-requisitos atendidos. Você pode prosseguir com a importação."
+            : `Pendências para continuar: ${motivos.join(" ")}`;
+
+        return { podeContinuar, motivos, confirmacoes: decisoes.confirmacoes };
     }
 
     async function executarPreview() {
@@ -285,7 +451,10 @@
             renderSummary(currentPreview);
             renderColumns(currentPreview);
             renderPreviewRows(currentPreview);
+            renderLineMessages(currentPreview);
+            renderBlockers(currentPreview);
             renderValidationMessages(currentPreview);
+            atualizarEstadoConfirmacao();
             showMessage("success", payload.mensagem || "Pré-visualização concluída.");
         } catch (error) {
             showMessage("danger", error.message || "Erro ao analisar CSV.");
@@ -305,9 +474,28 @@
                 throw new Error("Gere a pré-visualização antes de confirmar.");
             }
 
+            const estadoConfirmacao = atualizarEstadoConfirmacao();
+            if (!estadoConfirmacao.podeContinuar) {
+                throw new Error(estadoConfirmacao.motivos.join(" "));
+            }
+
             const formData = montarFormDataBasico();
-            // Envia somente sugestões explicitamente confirmadas pelo usuário.
-            formData.append("sugestoes_confirmadas", JSON.stringify(coletarConfirmacoesSugestoes()));
+            // Envia mapeamentos aprovados/ajustados explicitamente pelo usuário.
+            formData.append("sugestoes_confirmadas", JSON.stringify(estadoConfirmacao.confirmacoes));
+
+            // Adicionar id_lote do preview para rastreabilidade (NOVO)
+            if (currentPreview?.metadados_auditoria?.id_lote) {
+                formData.append("id_lote", currentPreview.metadados_auditoria.id_lote);
+            }
+
+            // Adicionar checkboxes de confirmação (NOVO)
+            const checkboxNames = ['revisor_dados', 'confirma_duplicatas', 'aceita_avisos', 'autoriza_importacao'];
+            checkboxNames.forEach(name => {
+                const checkbox = document.querySelector(`input[name="${name}"]`);
+                if (checkbox?.checked) {
+                    formData.append(name, "on");
+                }
+            });
 
             const response = await fetch("{{ url_for('importar_ativos_confirmar') }}", {
                 method: "POST",
@@ -340,6 +528,17 @@
             confirmButton.textContent = "Confirmar importação";
         }
     }
+
+    fileInput.addEventListener("change", () => {
+        currentPreview = null;
+        confirmButton.disabled = true;
+        confirmRequirementsHint.textContent = "Analise o CSV para habilitar a continuidade da importação.";
+    });
+
+    // Adicionar listeners aos checkboxes obrigatórios (NOVO)
+    document.querySelectorAll(".checkbox-obrigatorio").forEach((checkbox) => {
+        checkbox.addEventListener("change", atualizarEstadoConfirmacao);
+    });
 
     previewButton.addEventListener("click", executarPreview);
     confirmButton.addEventListener("click", executarConfirmacao);

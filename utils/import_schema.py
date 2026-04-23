@@ -423,19 +423,20 @@ SINONIMOS_VALORES = {
     },
 
     # Mapeamento de setores
+    # AUDITORIA 2026-04-22: Normalizado para Title Case ("Rh", "Adm") para compatibilidade com .title()
     "setores": {
         "ti": "T.I",
         "t.i": "T.I",
         "informatica": "T.I",
         "tecnologia informacao": "T.I",
 
-        "rh": "RH",
-        "recursos humanos": "RH",
-        "gestao pessoas": "RH",
+        "rh": "Rh",                # Mudado de "RH" para "Rh"
+        "recursos humanos": "Rh",  # Mudado de "RH" para "Rh"
+        "gestao pessoas": "Rh",    # Mudado de "RH" para "Rh"
 
-        "adm": "ADM",
-        "administracao": "ADM",
-        "administrativo": "ADM",
+        "adm": "Adm",              # Mudado de "ADM" para "Adm"
+        "administracao": "Adm",    # Mudado de "ADM" para "Adm"
+        "administrativo": "Adm",   # Mudado de "ADM" para "Adm"
 
         "financeiro": "Financeiro",
         "financeira": "Financeiro",
@@ -459,7 +460,6 @@ SINONIMOS_VALORES = {
         "diretoria": "Diretoria",
         "direcao": "Diretoria",
 
-        "manutencao": "Manutenção",
         "manutencao": "Manutenção",
 
         "tecnica": "Técnica",

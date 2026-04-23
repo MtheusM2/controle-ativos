@@ -24,6 +24,8 @@ from services.ativos_arquivo_service import (
     TipoDocumentoInvalido,
 )
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
+from services.importacao_service_seguranca import ServicoImportacaoComSeguranca
+from services.auditoria_importacao_service import AuditoriaImportacaoService
 from utils.auth import require_auth_api
 from utils.csrf import validar_csrf_da_requisicao, require_csrf
 from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS, UNIDADES_VALIDAS, TIPOS_ATIVO_VALIDOS
@@ -1767,22 +1769,93 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             confirmacoes[coluna_origem.strip()] = campo_destino.strip()
         return confirmacoes
 
+    def _ler_checkboxes_confirmacao() -> dict[str, bool]:
+        """
+        Lê os 4 checkboxes obrigatórios de confirmação do FormData.
+
+        Checkboxes esperados:
+        - revisor_dados: usuário revisou os dados
+        - confirma_duplicatas: confirmou ciência de duplicatas
+        - aceita_avisos: aceitou os avisos
+        - autoriza_importacao: autorizou a importação
+        """
+        checkboxes_obrigatorios = {
+            'revisor_dados': 'on',  # Checkbox envia 'on' quando marcado
+            'confirma_duplicatas': 'on',
+            'aceita_avisos': 'on',
+            'autoriza_importacao': 'on'
+        }
+
+        resultado = {}
+        for checkbox_name in checkboxes_obrigatorios.keys():
+            valor = request.form.get(checkbox_name, '').strip().lower()
+            resultado[checkbox_name] = valor == 'on'
+
+        return resultado
+
     @app.post("/ativos/importar/preview")
     # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
     @require_auth_api()
     @require_csrf()
     def importar_ativos_preview(*, user_id: int):
         """
-        Analisa CSV sem persistir e retorna classificação de colunas + preview de linhas.
+        Analisa CSV com validação de segurança e retorna preview com bloqueios/avisos.
+
+        Novo fluxo (2026-04-22):
+        - Validação completa de dados (tipo, comprimento, enum, datas, emails)
+        - Detecção de duplicatas (ID + serial)
+        - Cálculo de taxa de erro
+        - Bloqueios críticos (campo faltando, taxa > 50%, confirmação incompleta)
+        - Auditoria completa (hash, timestamp, IP, user-agent)
+
+        Retorno enriquecido:
+        - indicador_risco: {status, cor, bloqueios, alertas}
+        - validacao_detalhes: {total, válidas, erro, aviso, taxa}
+        - duplicatas_detectadas: {ids_existentes, seriais_duplicados}
+        - metadados_auditoria: {id_lote, hash, timestamp}
+
+        Backward compatible: mantém preview_base (colunas, preview_linhas, etc)
         """
         try:
             conteudo_csv = _ler_upload_csv_importacao()
-            preview = service.gerar_preview_importacao_csv(conteudo_csv, user_id)
-            return _json_success("Pré-visualização gerada com sucesso.", preview=preview)
+
+            # Obter empresa_id da sessão
+            empresa_id = session.get("user_empresa_id")
+
+            # NOVO: Usar serviço com segurança
+            servico_seguro = ServicoImportacaoComSeguranca()
+            id_lote, preview = servico_seguro.gerar_preview_seguro(
+                conteudo_csv=conteudo_csv,
+                usuario_id=user_id,
+                empresa_id=empresa_id,
+                endereco_ip=request.remote_addr,
+                user_agent=request.headers.get('User-Agent', 'unknown')
+            )
+
+            # Se há bloqueios críticos, retornar 400 (importação não permitida)
+            bloqueios = preview.get('indicador_risco', {}).get('bloqueios', [])
+            if bloqueios:
+                return _json_error(
+                    "Importação bloqueada por requisitos críticos.",
+                    status=400,
+                    preview=preview,
+                    id_lote=id_lote
+                )
+
+            # Sucesso: retornar preview com id_lote para rastreabilidade
+            return _json_success(
+                "Pré-visualização gerada com sucesso.",
+                preview=preview,
+                id_lote=id_lote
+            )
+
         except (AtivoErro, PermissaoNegada) as erro:
             return _json_error(str(erro), status=400)
-        except (OSError, UnicodeError, ValueError, TypeError, KeyError):
-            return _json_error("Erro inesperado ao gerar pré-visualização do CSV.", status=500)
+        except (OSError, UnicodeError, ValueError, TypeError, KeyError) as erro:
+            return _json_error(
+                f"Erro ao processar arquivo: {str(erro)}",
+                status=400
+            )
 
     @app.post("/ativos/importar/confirmar")
     # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
@@ -1790,9 +1863,59 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
     @require_csrf()
     def importar_ativos_confirmar(*, user_id: int):
         """
-        Confirma importação em massa usando somente schema aprovado e sugestões confirmadas.
+        Confirma importação em massa com auditoria completa.
+
+        Novo (2026-04-22):
+        - Recebe id_lote do preview anterior
+        - Registra confirmação (4 checkboxes obrigatórios)
+        - Registra resultado da importação
+        - Permite reversão por 7 dias (admin)
         """
         try:
+            # Obter dados da requisição (FormData, não JSON)
+            id_lote = request.form.get('id_lote', '').strip()
+            modo_duplicata = request.form.get('modo_duplicata', 'atualizar').strip()
+
+            # Validar checkboxes de confirmação (novo)
+            checkboxes = _ler_checkboxes_confirmacao()
+            checkboxes_obrigatorios = [
+                'revisor_dados',
+                'confirma_duplicatas',
+                'aceita_avisos',
+                'autoriza_importacao'
+            ]
+
+            confirmacoes_ok = all(
+                checkboxes.get(cb, False)
+                for cb in checkboxes_obrigatorios
+            )
+
+            if not confirmacoes_ok:
+                # NOVO: Registrar bloqueio em auditoria
+                if id_lote:
+                    AuditoriaImportacaoService.registrar_resultado_importacao(
+                        id_lote=id_lote,
+                        linhas_importadas=0,
+                        linhas_rejeitadas=0,
+                        linhas_com_aviso=0,
+                        linhas_atualizadas=0,
+                        ids_ativos_afetados=[],
+                        mensagem_erro="Confirmação incompleta (4 checkboxes obrigatórios)"
+                    )
+
+                return _json_error(
+                    "Confirmação incompleta. Todos 4 checkboxes são obrigatórios.",
+                    status=400
+                )
+
+            # NOVO: Registrar confirmação em auditoria
+            if id_lote:
+                AuditoriaImportacaoService.registrar_confirmacao(
+                    id_lote=id_lote,
+                    modo_duplicata=modo_duplicata
+                )
+
+            # Fluxo existente: processar importação
             conteudo_csv = _ler_upload_csv_importacao()
             sugestoes_confirmadas = _ler_sugestoes_confirmadas()
             resultado = service.confirmar_importacao_csv(
@@ -1803,21 +1926,53 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
 
             if not resultado.get("ok_importacao", False):
+                # NOVO: Registrar erro em auditoria
+                if id_lote:
+                    AuditoriaImportacaoService.registrar_resultado_importacao(
+                        id_lote=id_lote,
+                        linhas_importadas=0,
+                        linhas_rejeitadas=resultado.get('total_erros', 0),
+                        linhas_com_aviso=0,
+                        linhas_atualizadas=0,
+                        ids_ativos_afetados=[],
+                        mensagem_erro=resultado.get('mensagem_erro', 'Erro desconhecido')
+                    )
+
                 return _json_error(
                     "Importação interrompida por erros de validação.",
                     status=400,
                     resultado=resultado,
                 )
 
+            # NOVO: Registrar sucesso em auditoria
+            if id_lote:
+                ids_importados = resultado.get('ids_importados', [])
+                ids_atualizados = resultado.get('ids_atualizados', [])
+
+                AuditoriaImportacaoService.registrar_resultado_importacao(
+                    id_lote=id_lote,
+                    linhas_importadas=len(ids_importados),
+                    linhas_rejeitadas=resultado.get('total_erros', 0),
+                    linhas_com_aviso=resultado.get('total_avisos', 0),
+                    linhas_atualizadas=len(ids_atualizados),
+                    ids_ativos_afetados=ids_importados + ids_atualizados,
+                    mensagem_erro=None
+                )
+
             return _json_success(
                 "Importação confirmada e concluída com sucesso.",
                 status=201,
                 resultado=resultado,
+                id_lote=id_lote
             )
+
         except (AtivoErro, PermissaoNegada) as erro:
             return _json_error(str(erro), status=400)
-        except (OSError, UnicodeError, ValueError, TypeError, KeyError):
-            return _json_error("Erro inesperado ao confirmar importação do CSV.", status=500)
+        except (OSError, UnicodeError, ValueError, TypeError, KeyError) as erro:
+            return _json_error(
+                f"Erro ao processar importação: {str(erro)}",
+                status=500
+            )
 
     @app.post("/ativos/import/csv")
     # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).

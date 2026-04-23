@@ -1,0 +1,305 @@
+================================================================================
+GUIA RAPIDO - COMMIT E PUSH DA HOMOLOGACAO DE IMPORTACAO
+================================================================================
+
+STATUS ATUAL: Homologacao concluida com sucesso - 5 ativos importados, 0 erros
+
+================================================================================
+CHECKLIST PRE-COMMIT
+================================================================================
+
+[ ] Li o arquivo "RESUMO_EXECUTIVO_HOMOLOGACAO.md"
+[ ] Li o arquivo "RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md"
+[ ] Verifiquei que os 5 ativos foram importados corretamente
+[ ] Confirmei que IMEI nao foi gravado (seguranca OK)
+[ ] Revisei que erros foram bloqueados corretamente
+
+================================================================================
+PASSO 1 - ABRIR TERMINAL OU GIT BASH
+================================================================================
+
+Windows:
+  1. Abra Git Bash (clique direito -> Git Bash Here na pasta do projeto)
+  OU
+  2. Use cmd/PowerShell e digite: git status
+
+================================================================================
+PASSO 2 - NAVEGAR PARA O DIRETORIO DO PROJETO
+================================================================================
+
+cd "C:\Users\ti2\OneDrive\Documentos\controle_ativos"
+
+Verificar:
+  git status
+
+Voce deve ver arquivos com status "Untracked files":
+  - RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md
+  - INSTRUCOES_COMMIT_HOMOLOGACAO.md
+  - RESUMO_EXECUTIVO_HOMOLOGACAO.md
+  - GUIA_RAPIDO_COMMIT.txt
+  - scripts/homologacao_valida.py
+  - scripts/diagnostico_validacao_importacao.py
+  - planilha_homologacao_valida.csv
+  - planilha_homologacao_100percent_valida.csv
+
+================================================================================
+PASSO 3 - ADICIONAR ARQUIVOS AO STAGING (Escolha uma opcao)
+================================================================================
+
+OPCAO A - Adicionar um por um (mais seguro):
+
+git add RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md
+git add INSTRUCOES_COMMIT_HOMOLOGACAO.md
+git add RESUMO_EXECUTIVO_HOMOLOGACAO.md
+git add GUIA_RAPIDO_COMMIT.txt
+git add scripts/homologacao_valida.py
+git add scripts/diagnostico_validacao_importacao.py
+git add planilha_homologacao_valida.csv
+git add planilha_homologacao_100percent_valida.csv
+
+---
+
+OPCAO B - Adicionar tudo de uma vez (mais rapido):
+
+git add RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md \
+        INSTRUCOES_COMMIT_HOMOLOGACAO.md \
+        RESUMO_EXECUTIVO_HOMOLOGACAO.md \
+        GUIA_RAPIDO_COMMIT.txt \
+        scripts/homologacao_valida.py \
+        scripts/diagnostico_validacao_importacao.py \
+        planilha_homologacao_valida.csv \
+        planilha_homologacao_100percent_valida.csv
+
+---
+
+OPCAO C - Adicionar todos os arquivos nao-rastreados:
+
+git add .
+
+(Mas CUIDADO: isso pode incluir arquivos que voce nao quer)
+
+================================================================================
+PASSO 4 - VERIFICAR STAGING
+================================================================================
+
+git status
+
+Voce deve ver (exemplo):
+
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git rm --cached <file>..." to unstage)
+        new file:   GUIA_RAPIDO_COMMIT.txt
+        new file:   INSTRUCOES_COMMIT_HOMOLOGACAO.md
+        new file:   RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md
+        new file:   RESUMO_EXECUTIVO_HOMOLOGACAO.md
+        new file:   planilha_homologacao_100percent_valida.csv
+        new file:   planilha_homologacao_valida.csv
+        new file:   scripts/diagnostico_validacao_importacao.py
+        new file:   scripts/homologacao_valida.py
+
+Se todos os arquivos estao listados -> Continuar para PASSO 5
+Se faltar algum arquivo -> Executar "git add ARQUIVO" novamente
+
+================================================================================
+PASSO 5 - CRIAR COMMIT COM MENSAGEM
+================================================================================
+
+OPCAO A - Mensagem minima (rapida):
+
+git commit -m "test: homologacao pratica de importacao em massa"
+
+---
+
+OPCAO B - Mensagem completa (recomendado):
+
+git commit -m "test: homologacao pratica de importacao em massa com relatorio tecnico final
+
+- Validado fluxo completo de importacao (preview -> confirmacao -> banco)
+- 5 ativos importados com sucesso
+- 100% dos dados persistidos corretamente
+- IMEI bloqueado (nao foi gravado)
+- TeamViewer e AnyDesk mapeados corretamente
+- 3 cenarios de erro bloqueados
+- Modo tudo-ou-nada prevenindo importacao parcial
+- Relatorio tecnico detalhado gerado
+- Status: PRONTO PARA USO CONTROLADO"
+
+================================================================================
+PASSO 6 - VERIFICAR O COMMIT
+================================================================================
+
+git log --oneline -3
+
+Voce deve ver seu novo commit no topo, exemplo:
+
+ABCD123 test: homologacao pratica de importacao em massa com relatorio tecnico final
+XYZ9876 feat: adiciona fluxo web de importacao em massa com preview e confirmacao schema-first
+ABC1234 fix: consolidar validacao de TeamViewer e AnyDesk no dominio
+
+Se sim -> Continuar para PASSO 7
+Se nao apareceu -> Voltar para PASSO 5 e refazer commit
+
+================================================================================
+PASSO 7 - FAZER PUSH PARA O GITHUB
+================================================================================
+
+git push origin main
+
+Voce deve ver mensagem tipo:
+
+Enumerating objects: 9, done.
+Counting objects: 100% (9/9), done.
+Delta compression using up to 8 threads.
+Compressing objects: 100% (8/8), done.
+Writing objects: 100% (9/9), 12.34 KiB | 4.12 MiB/s, done.
+Total 9 (delta 5), reused 0 (delta 0), reused pack 0
+To github.com:MtheusM2/controle-ativos.git
+   1234567..abcdefg  main -> main
+
+Se sim -> SUCESSO! Continue para PASSO 8
+Se erro -> Ler secao "TROUBLESHOOTING" abaixo
+
+================================================================================
+PASSO 8 - VERIFICAR NO GITHUB (OPCIONAL)
+================================================================================
+
+1. Abra navegador
+2. Vá para: https://github.com/MtheusM2/controle-ativos
+3. Veja se o novo commit aparece no histórico
+4. Clique no commit para ver os arquivos
+5. Verifique se todos os 8 arquivos aparecem
+
+Arquivos que devem aparecer:
+  ✓ RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md
+  ✓ INSTRUCOES_COMMIT_HOMOLOGACAO.md
+  ✓ RESUMO_EXECUTIVO_HOMOLOGACAO.md
+  ✓ GUIA_RAPIDO_COMMIT.txt
+  ✓ scripts/homologacao_valida.py
+  ✓ scripts/diagnostico_validacao_importacao.py
+  ✓ planilha_homologacao_valida.csv
+  ✓ planilha_homologacao_100percent_valida.csv
+
+================================================================================
+TROUBLESHOOTING - ERROS COMUNS
+================================================================================
+
+ERRO 1: "Permission denied (publickey)"
+---
+Solucao: Seu Git nao esta autenticado com GitHub. Use HTTPS em vez de SSH:
+
+git remote set-url origin https://github.com/MtheusM2/controle-ativos.git
+git push origin main
+
+Voce sera pedido para fazer login do GitHub no navegador.
+
+---
+
+ERRO 2: "fatal: not a git repository"
+---
+Solucao: Voce nao esta no diretorio correto. Execute:
+
+cd "C:\Users\ti2\OneDrive\Documentos\controle_ativos"
+git status
+
+---
+
+ERRO 3: "Your branch is ahead of 'origin/main' by X commits"
+---
+Solucao: Isso é esperado se voce fez commits locais. Apenas faça push:
+
+git push origin main
+
+---
+
+ERRO 4: "nothing to commit, working tree clean"
+---
+Solucao: Todos os arquivos ja foram commitados. Verifique com:
+
+git log --oneline -5
+
+Para ver se seu commit está lá.
+
+---
+
+ERRO 5: "fatal: The current branch main has no upstream branch"
+---
+Solucao: Defina o upstream:
+
+git push -u origin main
+
+---
+
+ERRO 6: "Please commit your changes or stash them before you pull"
+---
+Solucao: Voce tem mudancas nao-commitadas. Execute:
+
+git status
+# Ver quais arquivos mudaram
+git add ARQUIVO
+git commit -m "mensagem"
+git push origin main
+
+================================================================================
+FLUXO COMPLETO (COPIA E COLA - PARA QUEM TEM PRESSA)
+================================================================================
+
+cd "C:\Users\ti2\OneDrive\Documentos\controle_ativos" && \
+git add RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md \
+        INSTRUCOES_COMMIT_HOMOLOGACAO.md \
+        RESUMO_EXECUTIVO_HOMOLOGACAO.md \
+        GUIA_RAPIDO_COMMIT.txt \
+        scripts/homologacao_valida.py \
+        scripts/diagnostico_validacao_importacao.py \
+        planilha_homologacao_valida.csv \
+        planilha_homologacao_100percent_valida.csv && \
+git commit -m "test: homologacao pratica de importacao em massa com relatorio tecnico final" && \
+git push origin main && \
+echo "SUCESSO! Commit feito e enviado para GitHub."
+
+================================================================================
+APOS O COMMIT - PROXIMOS PASSOS
+================================================================================
+
+1. Aguarde Jenkins/CI rodar (verificar status no GitHub)
+   -> Todos os testes devem passar
+
+2. Rebase com main (se necessario)
+   -> Garantir que nao ha conflitos
+
+3. Merge para producao (quando apropriado)
+   -> Coordenar com o time
+
+4. Deploy em servidor Windows
+   -> Quando aprovado
+
+================================================================================
+DUVIDAS? RELEIA ISTO:
+================================================================================
+
+- RESUMO_EXECUTIVO_HOMOLOGACAO.md -> Entender o que foi feito
+- RELATORIO_HOMOLOGACAO_IMPORTACAO_MASSA.md -> Detalhes tecnicos
+- INSTRUCOES_COMMIT_HOMOLOGACAO.md -> Guia detalhado
+
+================================================================================
+CONFIRMACAO FINAL
+================================================================================
+
+Antes de fazer push, responda estas perguntas:
+
+[ ] Voce leu o RESUMO_EXECUTIVO_HOMOLOGACAO.md? (SIM/NAO)
+[ ] Voce compreende que 5 ativos foram importados com sucesso? (SIM/NAO)
+[ ] Voce sabe que IMEI nao foi gravado? (SIM/NAO)
+[ ] Voce confirmou que o git status mostra os arquivos corretos? (SIM/NAO)
+[ ] Voce esta pronto para fazer git push? (SIM/NAO)
+
+Se todas as respostas forem SIM -> Proceda com git push
+
+================================================================================
+
+Fim do guia.
+
+Data: 2026-04-17
+Status: PRONTO PARA COMMIT E PUSH

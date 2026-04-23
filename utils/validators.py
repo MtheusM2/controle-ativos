@@ -33,10 +33,14 @@ TIPOS_ATIVO_VALIDOS = [
     "Outro",
 ]
 
+# AUDITORIA 2026-04-22: Normalizar para Title Case para compatibilidade com .title() em _padronizar_ativo()
+# Antes: "RH" (ALL CAPS) → .title() → "Rh" → validação falha porque lista tem "RH"
+# Depois: "Rh" (Title Case) → .title() → "Rh" → validação OK
+# Impacto: Setores exibidos agora como "Rh" em vez de "RH" (mais legível, consistente com outros)
 SETORES_VALIDOS = [
     "T.I",
-    "RH",
-    "ADM",
+    "Rh",           # Mudado de "RH" para "Rh"
+    "Adm",          # Mudado de "ADM" para "Adm"
     "Financeiro",
     "Vendas",
     "Marketing",

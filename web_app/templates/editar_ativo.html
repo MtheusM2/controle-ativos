@@ -232,8 +232,7 @@
                 </div>
 
                 <div id="specs-celular" class="asset-section-grid" hidden>
-                    <div class="field-group"><label for="imei_1">IMEI 1</label><input type="text" id="imei_1" name="imei_1" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="imei_2">IMEI 2</label><input type="text" id="imei_2" name="imei_2" class="input-control" {% if read_only %}disabled{% endif %}></div>
+                    <!-- Celular: campos simplificados sem IMEI (removido em Fase 3 Round 3). -->
                     <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control" {% if read_only %}disabled{% endif %}></div>
@@ -241,11 +240,8 @@
                 </div>
 
                 <div id="specs-monitor" class="asset-section-grid" hidden>
+                    <!-- Monitor simplificado nesta etapa: manter apenas medida principal. -->
                     <div class="field-group"><label for="polegadas">Polegadas</label><input type="text" id="polegadas" name="polegadas" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="resolucao">Resolução</label><input type="text" id="resolucao" name="resolucao" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="tipo_painel">Tipo de painel</label><input type="text" id="tipo_painel" name="tipo_painel" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="entrada_video">Entrada de vídeo</label><input type="text" id="entrada_video" name="entrada_video" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="fonte_ou_cabo">Fonte ou cabo</label><input type="text" id="fonte_ou_cabo" name="fonte_ou_cabo" class="input-control" {% if read_only %}disabled{% endif %}></div>
                 </div>
 
                 <div id="specs-simples" class="asset-section-grid" hidden>
@@ -743,16 +739,11 @@
         document.getElementById("anydesk_id").value = asset.anydesk_id || "";
         document.getElementById("nome_equipamento").value = asset.nome_equipamento || "";
         document.getElementById("hostname").value = asset.hostname || "";
-        document.getElementById("imei_1").value = asset.imei_1 || "";
-        document.getElementById("imei_2").value = asset.imei_2 || "";
+        // IMEI removido em Fase 3 Round 3 — não mais preenchido em edição
         document.getElementById("numero_linha").value = asset.numero_linha || "";
         document.getElementById("operadora").value = asset.operadora || "";
         document.getElementById("conta_vinculada").value = asset.conta_vinculada || "";
         document.getElementById("polegadas").value = asset.polegadas || "";
-        document.getElementById("resolucao").value = asset.resolucao || "";
-        document.getElementById("tipo_painel").value = asset.tipo_painel || "";
-        document.getElementById("entrada_video").value = asset.entrada_video || "";
-        document.getElementById("fonte_ou_cabo").value = asset.fonte_ou_cabo || "";
 
         // Preenche aliases visuais para desktop/celular sem duplicar persistência.
         document.getElementById("desktop_processador").value = asset.processador || "";

@@ -112,9 +112,11 @@ controle_ativos/
 
 ### Banco de Dados
 - Queries com parâmetros `%s` — nunca interpolação de strings
-- `cursor_mysql()` usa `dictionary=True` por padrão
+- `cursor_mysql()` retorna tupla `(conn, cur)` — sempre desempacotar como `with cursor_mysql() as (conn, cur):`
+- `cursor_mysql()` usa `dictionary=True` por padrão (retorna dicts ao invés de tuples)
 - Novas colunas → nova migração SQL numerada em `database/migrations/`
 - Schema em `database/schema.sql` é a source of truth para novos ambientes
+- **Importante:** `cursor_mysql()` controla auto-commit; conexão é commitada ao sair do bloco `with` ou faz rollback em caso de exceção
 
 ### Frontend (Jinja2 + CSS + JS)
 - `base.html` é o layout principal com `{% block content %}`
@@ -122,6 +124,7 @@ controle_ativos/
 - CSS em `web_app/static/css/style.css` — sem frameworks externos (Bootstrap não está no projeto)
 - Formulários usam `fetch()` com JSON para rotas de ação; navegação tradicional para GET
 - Flash messages: categorias `success`, `danger`, `info`, `warning`
+- **Templates em uso:** `index.html` (login), `register.html` (cadastro), `recovery.html` (recuperação), `dashboard.html`, `ativos.html`, `novo_ativo.html`, `editar_ativo.html`, `detalhe_ativo.html`, `importar_ativos.html`, `configuracoes.html`
 
 ### Testes
 - Framework: pytest com configuração em `pytest.ini`
