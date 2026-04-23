@@ -206,3 +206,83 @@ scripts/setup_server.ps1
 - Não criar helpers genéricos para uso único — só abstrair quando há 3+ usos reais
 - Não adicionar dependências externas sem avaliar impacto de segurança e licença
 - Não quebrar a interface `create_app()` — manter suporte a `service_overrides`
+
+## Regra obrigatória de contrato entre camadas
+
+Sempre que um campo do domínio mudar de nome ou um novo objeto de mapeamento for introduzido, revisar obrigatoriamente:
+- parser
+- mapper
+- validators
+- services
+- rotas web
+- templates/JSON
+- auditoria/log
+- testes unitários
+- testes de integração
+
+Nunca assumir que nomes antigos e novos coexistem sem uma camada explícita de compatibilidade.
+
+Todo bug de integração deve gerar:
+1. correção da causa raiz
+2. teste de regressão
+3. verificação dos consumidores e produtores do mesmo contrato
+
+
+# Regras obrigatórias do projeto
+
+## Objetivo
+Evitar regressões, inconsistências de contrato entre camadas e erros fantasmas no sistema de gestão de ativos.
+
+## Antes de qualquer alteração
+1. Ler traceback completo quando houver erro.
+2. Identificar causa raiz antes de refatorar.
+3. Mapear fluxo ponta a ponta:
+   - rota
+   - service
+   - utils
+   - validators
+   - model
+   - banco
+   - template/json
+4. Verificar contratos entre produtor e consumidor de dados.
+
+## Regra de contratos
+Sempre que uma função consumir objetos produzidos por outra camada, validar:
+- nome real dos atributos
+- tipo real em runtime
+- type hints
+- dataclass/DTO real
+- formato usado em testes
+- compatibilidade entre preview e confirmação
+
+Nunca assumir estrutura sem verificar a definição real do objeto.
+
+## Regra de correção
+Toda correção deve:
+- atacar causa raiz
+- incluir comentários no código alterado
+- verificar impactos correlatos
+- adicionar ou ajustar testes de regressão
+
+## Testes obrigatórios quando houver bug
+Criar ou revisar:
+- teste unitário da função quebrada
+- teste unitário do contrato do objeto envolvido
+- teste de integração do fluxo principal
+- teste de regressão reproduzindo o erro real
+
+## Checklist anti-erro fantasma
+Verificar sempre:
+- nomes de campos iguais entre frontend/backend
+- dict vs objeto
+- atributo vs chave
+- listas homogêneas
+- normalização consistente
+- mensagens de erro compatíveis com a causa real
+- mocks alinhados com produção
+
+## Proibição
+Não declarar “corrigido” sem:
+- rodar testes relevantes
+- validar o fluxo manualmente
+- verificar se o erro pode reaparecer em outra etapa do pipeline

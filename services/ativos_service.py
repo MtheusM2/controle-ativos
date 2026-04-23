@@ -8,6 +8,7 @@
 
 import csv
 import io
+import logging
 import re
 import unicodedata
 from difflib import get_close_matches
@@ -25,6 +26,9 @@ from utils.validators import (
     # normalizar_imei removido em Fase 3 Round 3 — não mais necessário
     normalizar_valor_monetario,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class AtivoErro(Exception):
@@ -1164,6 +1168,14 @@ class AtivosService:
             raise PermissaoNegada("Apenas administradores podem importar ativos em massa.")
 
         headers, linhas_csv = _carregar_csv_em_memoria(conteudo_csv)
+        logger.info(
+            "importacao.confirmacao.inicio user_id=%s headers=%s linhas=%s sugestoes_confirmadas=%s modo_tudo_ou_nada=%s",
+            user_id,
+            len(headers),
+            len(linhas_csv),
+            len(sugestoes_confirmadas or {}),
+            modo_tudo_ou_nada,
+        )
 
         # Comentário: Tenta motor inteligente primeiro; fallback para antigo se falhar
         try:
@@ -1200,6 +1212,12 @@ class AtivosService:
                 f"Campo obrigatório '{campo}' não foi confirmado para a coluna '{coluna}'."
                 for coluna, campo in sugestoes_obrigatorias_pendentes
             ]
+            logger.warning(
+                "importacao.confirmacao.bloqueio_sugestoes user_id=%s faltantes=%s primeiro=%s",
+                user_id,
+                len(erros_confirmacao),
+                erros_confirmacao[0] if erros_confirmacao else None,
+            )
             return {
                 "ok_importacao": False,
                 "modo_tudo_ou_nada": modo_tudo_ou_nada,
@@ -1227,8 +1245,23 @@ class AtivosService:
             except AtivoErro as erro:
                 erros.append(str(erro))
 
+        logger.info(
+            "importacao.confirmacao.validacao user_id=%s mapeados=%s validos=%s erros=%s primeiro_erro=%s",
+            user_id,
+            len(mapeamento_final),
+            len(ativos_validos),
+            len(erros),
+            erros[0] if erros else None,
+        )
+
         # Evita importação parcial silenciosa: padrão é bloquear persistência se houver erro.
         if erros and modo_tudo_ou_nada:
+            logger.warning(
+                "importacao.confirmacao.bloqueio_linhas user_id=%s falhas=%s primeiro_erro=%s",
+                user_id,
+                len(erros),
+                erros[0] if erros else None,
+            )
             return {
                 "ok_importacao": False,
                 "modo_tudo_ou_nada": True,
@@ -1262,6 +1295,13 @@ class AtivosService:
                     break
 
         erros_finais = erros + erros_persistencia
+        logger.info(
+            "importacao.confirmacao.resultado user_id=%s importados=%s falhas=%s persistencia_falhas=%s",
+            user_id,
+            len(ids_criados),
+            len(erros_finais),
+            len(erros_persistencia),
+        )
         return {
             "ok_importacao": len(erros_finais) == 0,
             "modo_tudo_ou_nada": modo_tudo_ou_nada,

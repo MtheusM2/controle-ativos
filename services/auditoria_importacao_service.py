@@ -41,26 +41,32 @@ class AuditoriaImportacaoService:
         nome_arquivo: str,
         tamanho_bytes: int,
         endereco_ip: str,
-        user_agent: str
+        user_agent: str,
+        total_linhas: int = 0
     ) -> str:
         """
         Cria registro inicial de auditoria (status: pendente).
+
+        Args:
+            total_linhas: Total de linhas do arquivo (padrão: 0, atualizado em registrar_preview_gerado)
 
         Returns:
             id_lote para rastreabilidade
         """
         id_lote = AuditoriaImportacaoService.gerar_id_lote()
 
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 INSERT INTO auditoria_importacoes (
                     id_lote, usuario_id, empresa_id,
                     hash_arquivo, nome_arquivo_original, tamanho_arquivo_bytes,
+                    total_linhas_arquivo,
                     status, endereco_ip, user_agent, timestamp_inicio
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             """, [
                 id_lote, usuario_id, empresa_id,
                 hash_arquivo, nome_arquivo, tamanho_bytes,
+                total_linhas,
                 'pendente', endereco_ip, user_agent
             ])
 
@@ -79,10 +85,10 @@ class AuditoriaImportacaoService:
         """
         Atualiza registro após preview gerado.
         """
-        with cursor_mysql() as cursor:
+        with cursor_mysql() as (conn, cur):
             status = 'bloqueado' if dados_bloqueios else 'preview_ok'
 
-            cursor.execute("""
+            cur.execute("""
                 UPDATE auditoria_importacoes
                 SET
                     delimitador_csv = %s,
@@ -113,8 +119,8 @@ class AuditoriaImportacaoService:
         """
         Registra confirmação do usuário (4 checkboxes).
         """
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 UPDATE auditoria_importacoes
                 SET
                     modo_duplicata = %s,
@@ -143,8 +149,8 @@ class AuditoriaImportacaoService:
         else:
             status = 'sucesso'
 
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 UPDATE auditoria_importacoes
                 SET
                     linhas_importadas = %s,
@@ -180,8 +186,8 @@ class AuditoriaImportacaoService:
         """
         Registra linha individual que foi rejeitada.
         """
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 INSERT INTO auditoria_importacoes_linhas (
                     id_lote, numero_linha, status,
                     id_ativo_csv, motivo_rejeicao,
@@ -206,8 +212,8 @@ class AuditoriaImportacaoService:
         """
         Registra linha que foi importada com sucesso.
         """
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 INSERT INTO auditoria_importacoes_linhas (
                     id_lote, numero_linha, status,
                     id_ativo_csv, id_ativo_criado, avisos
@@ -235,15 +241,15 @@ class AuditoriaImportacaoService:
 
         duplicatas = {}
 
-        with cursor_mysql() as cursor:
+        with cursor_mysql() as (conn, cur):
             # Match exato por ID
             placeholders = ','.join(['%s'] * len(ids_csv))
-            cursor.execute(f"""
+            cur.execute(f"""
                 SELECT id FROM ativos
                 WHERE empresa_id = %s AND id IN ({placeholders})
             """, [empresa_id] + ids_csv)
 
-            existentes = {row['id'] for row in cursor.fetchall()}
+            existentes = {row['id'] for row in cur.fetchall()}
 
             for id_csv in ids_csv:
                 if id_csv in existentes:
@@ -271,14 +277,14 @@ class AuditoriaImportacaoService:
 
         duplicatas = {}
 
-        with cursor_mysql() as cursor:
+        with cursor_mysql() as (conn, cur):
             placeholders = ','.join(['%s'] * len(seriais_unicos))
-            cursor.execute(f"""
+            cur.execute(f"""
                 SELECT id, serial FROM ativos
                 WHERE empresa_id = %s AND serial IN ({placeholders})
             """, [empresa_id] + seriais_unicos)
 
-            for row in cursor.fetchall():
+            for row in cur.fetchall():
                 serial = row['serial']
                 if serial in seriais_unicos:
                     duplicatas[serial] = row['id']
@@ -291,12 +297,12 @@ class AuditoriaImportacaoService:
         Retorna set de nomes de usuários válidos para esta empresa.
         Usado para validar usuario_responsavel.
         """
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 SELECT nome FROM usuarios WHERE empresa_id = %s
             """, [empresa_id])
 
-            return {row['nome'] for row in cursor.fetchall()}
+            return {row['nome'] for row in cur.fetchall()}
 
     @staticmethod
     def reverter_lote(
@@ -319,13 +325,13 @@ class AuditoriaImportacaoService:
             ValueError se pré-requisitos não atendidos
             PermissionError se usuário não é admin
         """
-        with cursor_mysql() as cursor:
+        with cursor_mysql() as (conn, cur):
             # 1. Buscar lote
-            cursor.execute("""
+            cur.execute("""
                 SELECT * FROM auditoria_importacoes WHERE id_lote = %s
             """, [id_lote])
 
-            lote = cursor.fetchone()
+            lote = cur.fetchone()
             if not lote:
                 raise ValueError(f"Lote {id_lote} não encontrado")
 
@@ -347,16 +353,16 @@ class AuditoriaImportacaoService:
             try:
                 for ativo_id in ids_afetados:
                     # Usar variável de sessão para registrar quem deletou
-                    cursor.execute("SET @usuario_id = %s", [usuario_admin_id])
-                    cursor.execute("SET @id_lote = %s", [id_lote])
+                    cur.execute("SET @usuario_id = %s", [usuario_admin_id])
+                    cur.execute("SET @id_lote = %s", [id_lote])
 
-                    cursor.execute("""
+                    cur.execute("""
                         DELETE FROM ativos
                         WHERE id = %s AND empresa_id = %s
                     """, [ativo_id, lote['empresa_id']])
 
                 # 6. Registrar reversão
-                cursor.execute("""
+                cur.execute("""
                     UPDATE auditoria_importacoes
                     SET
                         status = 'revertido',
@@ -381,23 +387,23 @@ class AuditoriaImportacaoService:
         """
         Retorna relatório completo de importação.
         """
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 SELECT * FROM auditoria_importacoes WHERE id_lote = %s
             """, [id_lote])
 
-            lote = cursor.fetchone()
+            lote = cur.fetchone()
             if not lote:
                 return {"ok": False, "erro": f"Lote {id_lote} não encontrado"}
 
             # Buscar linhas rejeitadas
-            cursor.execute("""
+            cur.execute("""
                 SELECT * FROM auditoria_importacoes_linhas
                 WHERE id_lote = %s AND status = 'rejeitada'
                 LIMIT 50
             """, [id_lote])
 
-            linhas_rejeitadas = cursor.fetchall()
+            linhas_rejeitadas = cur.fetchall()
 
             return {
                 "ok": True,
@@ -438,8 +444,8 @@ class AuditoriaImportacaoService:
         """
         Retorna últimas importações de um usuário.
         """
-        with cursor_mysql() as cursor:
-            cursor.execute("""
+        with cursor_mysql() as (conn, cur):
+            cur.execute("""
                 SELECT
                     id_lote, status, total_linhas_arquivo,
                     linhas_importadas, linhas_rejeitadas,
@@ -450,4 +456,4 @@ class AuditoriaImportacaoService:
                 LIMIT %s
             """, [usuario_id, empresa_id, limite])
 
-            return cursor.fetchall()
+            return cur.fetchall()

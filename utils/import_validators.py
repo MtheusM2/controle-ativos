@@ -66,15 +66,16 @@ class ResultadoValidacaoLote:
 class ValidadorCampos:
     """Valida campos individuais contra regras de tipo e integridade"""
 
-    # Campos críticos obrigatórios
+    # Campos críticos obrigatórios — DEVEM usar nomes canônicos (não aliases/sinônimos)
+    # Sincronizado com CRITICIDADE_CAMPOS em utils/import_schema.py (tipo_ativo, setor)
     CAMPOS_CRITICOS = {
-        'id', 'tipo', 'marca', 'modelo', 'departamento', 'status', 'data_entrada'
+        'tipo_ativo', 'marca', 'modelo', 'setor', 'status', 'data_entrada'
     }
 
-    # Comprimentos máximos (devem coincidir com schema.sql)
+    # Comprimentos máximos — usar APENAS nomes canônicos (devem coincidir com schema.sql)
+    # Removidas entradas antigas: 'tipo' (substituído por 'tipo_ativo'), 'departamento' (substituído por 'setor')
     COMPRIMENTOS_MAXIMOS = {
         'id': 20,
-        'tipo': 100,
         'marca': 100,
         'modelo': 100,
         'serial': 120,
@@ -85,7 +86,6 @@ class ValidadorCampos:
         'setor': 100,
         'usuario_responsavel': 100,
         'email_responsavel': 255,
-        'departamento': 100,
         'nota_fiscal': 100,
         'garantia': 100,
         'status': 50,
@@ -263,18 +263,20 @@ class ValidadorLinha:
         dados_limpos = {}
         id_ativo = None
 
-        # ===== VALIDAR CAMPO ID =====
-        erro = self.validador_campos.validar_id(linha.get('id', ''))
-        if erro:
-            erros.append(erro)
-        else:
-            id_ativo = str(linha.get('id')).strip()
-            dados_limpos['id'] = id_ativo
+        # ===== VALIDAR CAMPO ID (opcional no preview/import) =====
+        # Se ID vier preenchido no CSV, validamos formato.
+        # Se não vier, não bloqueia: o ID pode ser gerado automaticamente no INSERT.
+        id_valor = linha.get('id', '').strip() if linha.get('id') else ''
+        if id_valor:
+            erro = self.validador_campos.validar_id(id_valor)
+            if erro:
+                erros.append(erro)
+            else:
+                id_ativo = id_valor
+                dados_limpos['id'] = id_ativo
 
         # ===== VALIDAR CAMPOS CRÍTICOS =====
         for campo in ValidadorCampos.CAMPOS_CRITICOS:
-            if campo == 'id':
-                continue  # Já validado
 
             valor = linha.get(campo, '').strip() if linha.get(campo) else ''
 
@@ -434,15 +436,17 @@ class ValidadorLote:
             )
 
         # 4. Verificar campos críticos mapeados
-        campos_criticos_mapeados = {
-            coluna for coluna, (score) in (
-                (coluna, score) for coluna, (campo, score) in mapeamento_campos.items()
-                if campo in ValidadorCampos.CAMPOS_CRITICOS
-            )
+        # IMPORTANTE: Contrato de mapeamento_campos = {coluna_origem: (campo_destino, score)}
+        # Devemos acumular os CAMPOS DESTINO (canônicos) que estão em CAMPOS_CRITICOS
+        # Não colunas de origem, que seria um tipo de dados diferente
+        campos_destino_mapeados = {
+            campo for coluna, (campo, score) in mapeamento_campos.items()
+            if campo in ValidadorCampos.CAMPOS_CRITICOS
         }
 
+        # Campos críticos que NÃO foram mapeados a nenhuma coluna
         campos_criticos_faltantes = (
-            ValidadorCampos.CAMPOS_CRITICOS - campos_criticos_mapeados
+            ValidadorCampos.CAMPOS_CRITICOS - campos_destino_mapeados
         )
 
         if campos_criticos_faltantes:

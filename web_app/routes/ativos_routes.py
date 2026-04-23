@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import time
 from datetime import datetime
 
@@ -34,6 +35,8 @@ from utils.validators import STATUS_VALIDOS, SETORES_VALIDOS, CONDICOES_VALIDAS,
 # Mensagens padronizadas para manter respostas da camada web consistentes.
 MSG_SESSAO_EXPIRADA = "Sessão expirada. Faça login novamente."
 MSG_ERRO_LISTAR_ATIVOS = "Erro inesperado ao listar ativos."
+
+logger = logging.getLogger(__name__)
 
 # ========== PROTEÇÃO CONTRA DUPLICAÇÃO DE CADASTRO ==========
 # Cache em memória para rastrear requisições de criação recentes.
@@ -876,8 +879,6 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             # FALLBACK: Compatibilidade para doubles de testes antigos sem o método em lote.
             # Em produção, isso NÃO deve ocorrer. Se ocorrer, é sinal de que o serviço
             # de arquivos está incompleto ou desconfigurável.
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(
                 "Filtro documental caindo em fallback legado: arquivo_service não possui "
                 "método mapear_presenca_documentos(). Isso pode degradar performance da "
@@ -1832,6 +1833,19 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 user_agent=request.headers.get('User-Agent', 'unknown')
             )
 
+            detalhes = preview.get('validacao_detalhes', {})
+            resumo = preview.get('resumo_validacao', {})
+            logger.info(
+                "importacao.preview id_lote=%s total_linhas=%s validas=%s invalidas=%s exatas=%s sugeridas=%s bloqueios=%s",
+                id_lote,
+                detalhes.get('total_linhas', resumo.get('total_linhas')),
+                detalhes.get('linhas_validas', resumo.get('linhas_validas')),
+                detalhes.get('linhas_com_erro', resumo.get('linhas_invalidas')),
+                len(preview.get('colunas', {}).get('exatas', [])),
+                len(preview.get('colunas', {}).get('sugeridas', [])),
+                len(preview.get('indicador_risco', {}).get('bloqueios', [])),
+            )
+
             # Se há bloqueios críticos, retornar 400 (importação não permitida)
             bloqueios = preview.get('indicador_risco', {}).get('bloqueios', [])
             if bloqueios:
@@ -1875,6 +1889,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             # Obter dados da requisição (FormData, não JSON)
             id_lote = request.form.get('id_lote', '').strip()
             modo_duplicata = request.form.get('modo_duplicata', 'atualizar').strip()
+            sugestoes_confirmadas = _ler_sugestoes_confirmadas()
 
             # Validar checkboxes de confirmação (novo)
             checkboxes = _ler_checkboxes_confirmacao()
@@ -1885,12 +1900,26 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 'autoriza_importacao'
             ]
 
+            logger.info(
+                "importacao.confirmar.recebido id_lote=%s modo_duplicata=%s sugestoes_confirmadas=%s checkboxes=%s form_keys=%s",
+                id_lote or '<vazio>',
+                modo_duplicata or '<vazio>',
+                len(sugestoes_confirmadas),
+                {k: v for k, v in checkboxes.items()},
+                sorted(request.form.keys()),
+            )
+
             confirmacoes_ok = all(
                 checkboxes.get(cb, False)
                 for cb in checkboxes_obrigatorios
             )
 
             if not confirmacoes_ok:
+                logger.warning(
+                    "importacao.confirmar.bloqueio_checkboxes id_lote=%s checkboxes=%s",
+                    id_lote or '<vazio>',
+                    {k: v for k, v in checkboxes.items()},
+                )
                 # NOVO: Registrar bloqueio em auditoria
                 if id_lote:
                     AuditoriaImportacaoService.registrar_resultado_importacao(
@@ -1917,7 +1946,6 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
             # Fluxo existente: processar importação
             conteudo_csv = _ler_upload_csv_importacao()
-            sugestoes_confirmadas = _ler_sugestoes_confirmadas()
             resultado = service.confirmar_importacao_csv(
                 conteudo_csv,
                 sugestoes_confirmadas,
@@ -1926,6 +1954,15 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
 
             if not resultado.get("ok_importacao", False):
+                erros = resultado.get('erros', []) or []
+                primeiro_erro = erros[0] if erros else resultado.get('mensagem_erro', 'Erro desconhecido')
+                logger.warning(
+                    "importacao.confirmar.falha_validacao id_lote=%s falhas=%s importados=%s primeiro_erro=%s",
+                    id_lote or '<vazio>',
+                    resultado.get('falhas', 0),
+                    resultado.get('importados', 0),
+                    primeiro_erro,
+                )
                 # NOVO: Registrar erro em auditoria
                 if id_lote:
                     AuditoriaImportacaoService.registrar_resultado_importacao(
@@ -1939,7 +1976,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                     )
 
                 return _json_error(
-                    "Importação interrompida por erros de validação.",
+                    f"Importação interrompida por erros de validação. Primeiro erro: {primeiro_erro}",
                     status=400,
                     resultado=resultado,
                 )

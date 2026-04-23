@@ -17,6 +17,7 @@ import io
 import csv
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
+from utils.import_types import PreviewImportacao
 
 from utils.import_schema import (
     obter_campos_criticos,
@@ -333,7 +334,7 @@ class ServicoImportacao:
         resultado_mapeamento: ResultadoMapeamento,
         primeiras_linhas: Optional[List[Tuple[int, dict]]] = None,
         max_linhas_preview: int = 5,
-    ) -> Dict:
+    ) -> PreviewImportacao:
         """
         Gera estrutura de preview para envio à UI com regras de bloqueio/confirmação.
 

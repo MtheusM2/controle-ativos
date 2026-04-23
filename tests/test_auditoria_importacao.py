@@ -9,6 +9,7 @@ Cobre:
 
 import pytest
 from services.auditoria_importacao_service import AuditoriaImportacaoService
+from database.connection import cursor_mysql
 
 
 class TestAuditoriaImportacao:
@@ -36,6 +37,58 @@ class TestAuditoriaImportacao:
 
         assert id_lote.startswith("IMP-")
         assert len(id_lote) > 10
+
+    def test_iniciar_auditoria_com_total_linhas(self):
+        """Verifica que total_linhas_arquivo é salvo corretamente no banco"""
+        id_lote = AuditoriaImportacaoService.iniciar_auditoria(
+            usuario_id=1,
+            empresa_id=1,
+            hash_arquivo="abc123",
+            nome_arquivo="test.csv",
+            tamanho_bytes=1024,
+            endereco_ip="127.0.0.1",
+            user_agent="TestBrowser",
+            total_linhas=150
+        )
+
+        # Verificar que o registro foi criado no banco com total_linhas_arquivo=150
+        with cursor_mysql() as (conn, cur):
+            cur.execute(
+                "SELECT total_linhas_arquivo FROM auditoria_importacoes WHERE id_lote = %s",
+                [id_lote]
+            )
+            resultado = cur.fetchone()
+
+        assert resultado is not None, f"Lote {id_lote} não encontrado no banco"
+        assert resultado['total_linhas_arquivo'] == 150, \
+            f"Esperado total_linhas_arquivo=150, obtive {resultado['total_linhas_arquivo']}"
+
+    def test_iniciar_auditoria_sem_total_linhas_usa_default(self):
+        """Verifica que total_linhas_arquivo padrão para 0 quando não informado"""
+        id_lote = AuditoriaImportacaoService.iniciar_auditoria(
+            usuario_id=1,
+            empresa_id=1,
+            hash_arquivo="abc124",
+            nome_arquivo="test2.csv",
+            tamanho_bytes=2048,
+            endereco_ip="127.0.0.1",
+            user_agent="TestBrowser"
+            # total_linhas não informado, deve usar padrão 0
+        )
+
+        # Verificar que o registro foi criado no banco com total_linhas_arquivo=0
+        with cursor_mysql() as (conn, cur):
+            cur.execute(
+                "SELECT total_linhas_arquivo FROM auditoria_importacoes WHERE id_lote = %s",
+                [id_lote]
+            )
+            resultado = cur.fetchone()
+
+        assert resultado is not None, f"Lote {id_lote} não encontrado no banco"
+        assert resultado['total_linhas_arquivo'] is not None, \
+            "total_linhas_arquivo não deveria ser NULL"
+        assert resultado['total_linhas_arquivo'] == 0, \
+            f"Esperado total_linhas_arquivo=0 (padrão), obtive {resultado['total_linhas_arquivo']}"
 
     def test_registrar_preview_gerado(self):
         """Preview é registrado com bloqueios/alertas"""

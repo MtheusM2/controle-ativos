@@ -189,12 +189,12 @@
     }
 
     function renderSummary(preview) {
-        const resumo = preview.resumo_analise || preview.resumo_validacao || {};
+        const resumo = preview.validacao_detalhes || preview.resumo_validacao || preview.resumo_analise || {};
         importSummaryContainer.innerHTML = `
             <div class="import-summary-grid">
                 <div><strong>Total de linhas</strong><span>${resumo.total_linhas ?? 0}</span></div>
                 <div><strong>Linhas válidas</strong><span>${resumo.linhas_validas ?? 0}</span></div>
-                <div><strong>Linhas inválidas</strong><span>${resumo.linhas_invalidas ?? 0}</span></div>
+                <div><strong>Linhas inválidas</strong><span>${resumo.linhas_invalidas ?? resumo.linhas_com_erro ?? 0}</span></div>
                 <div><strong>Reconhecidas automaticamente</strong><span>${resumo.colunas_reconhecidas_automaticamente ?? (preview.colunas?.exatas || []).length}</span></div>
                 <div><strong>Sugestões com score</strong><span>${resumo.colunas_sugeridas ?? (preview.colunas?.sugeridas || []).length}</span></div>
                 <div><strong>Colunas ignoradas</strong><span>${resumo.colunas_ignoradas ?? (preview.colunas?.ignoradas || []).length}</span></div>
