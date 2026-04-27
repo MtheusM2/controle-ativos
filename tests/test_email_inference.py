@@ -41,7 +41,8 @@ def test_aplicar_inferencia_preenche_quando_ausente():
     dados_saida, metadados = aplicar_inferencia_email_em_dados(dados_iniciais)
 
     assert dados_saida["setor"] == "T.I"
-    assert dados_saida["departamento"] == "T.I"
+    # Contrato canonico da Fase 1: retorno interno usa apenas "setor", sem alias legado "departamento".
+    assert "departamento" not in dados_saida
     assert dados_saida["localizacao"] == "Opus Medical"
     assert "setor" in metadados["aplicadas"]
     assert "localizacao" in metadados["aplicadas"]
