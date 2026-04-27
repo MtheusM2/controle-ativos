@@ -496,15 +496,20 @@ def _validar_intervalo_datas(data_inicial: str | None, data_final: str | None, *
 def _linhas_exportacao(ativos: list[Ativo]) -> list[dict]:
     """
     Padroniza o dataset de exportacao para todos os formatos.
+    ===== CORRIGIDO (2026-04-27): Usar campos canonicos para compatibilidade round-trip =====
+    Antes: Exportava "tipo" e "departamento" (aliases) → reimportação falhava
+    Depois: Exporta "tipo_ativo" e "setor" (canônicos) → reimportação funciona
     """
     return [
         {
             "id": ativo.id_ativo,
-            "tipo": ativo.tipo or "",
+            # Priorizar canônico tipo_ativo, fallback para tipo (compatibilidade com mocks em testes)
+            "tipo_ativo": getattr(ativo, "tipo_ativo", None) or getattr(ativo, "tipo", ""),
             "marca": ativo.marca or "",
             "modelo": ativo.modelo or "",
             "usuario_responsavel": ativo.usuario_responsavel or "",
-            "departamento": ativo.departamento or "",
+            # Priorizar canônico setor, fallback para departamento (compatibilidade com mocks em testes)
+            "setor": getattr(ativo, "setor", None) or getattr(ativo, "departamento", ""),
             "status": ativo.status or "",
             "data_entrada": ativo.data_entrada or "",
             "data_saida": ativo.data_saida or "",
@@ -555,13 +560,14 @@ def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
     worksheet = workbook.active
     worksheet.title = "Ativos"
 
+    # ===== CORRIGIDO (2026-04-27): Usar campos canonicos =====
     colunas = [
         ("id", "ID"),
-        ("tipo", "Tipo"),
+        ("tipo_ativo", "Tipo"),
         ("marca", "Marca"),
         ("modelo", "Modelo"),
         ("usuario_responsavel", "Responsavel"),
-        ("departamento", "Departamento"),
+        ("setor", "Setor"),
         ("status", "Status"),
         ("data_entrada", "Data Entrada"),
         ("data_saida", "Data Saida"),
@@ -579,11 +585,11 @@ def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
         worksheet.append(
             [
                 linha["id"],
-                linha["tipo"],
+                linha["tipo_ativo"],  # Corrigido: usar canônico
                 linha["marca"],
                 linha["modelo"],
                 linha["usuario_responsavel"],
-                linha["departamento"],
+                linha["setor"],  # Corrigido: usar canônico
                 linha["status"],
                 linha["data_entrada"],
                 linha["data_saida"],
@@ -658,13 +664,14 @@ def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
         Spacer(1, 12),
     ]
 
+    # ===== CORRIGIDO (2026-04-27): Usar campos canonicos =====
     cabecalho = [
         "ID",
         "Tipo",
         "Marca",
         "Modelo",
         "Responsavel",
-        "Departamento",
+        "Setor",
         "Status",
         "Entrada",
         "Saida",
@@ -677,11 +684,11 @@ def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
         dados_tabela.append(
             [
                 _texto_curto_pdf(str(linha["id"]), limite=16),
-                _texto_curto_pdf(str(linha["tipo"]), limite=14),
+                _texto_curto_pdf(str(linha["tipo_ativo"]), limite=14),  # Corrigido: usar canônico
                 _texto_curto_pdf(str(linha["marca"]), limite=14),
                 _texto_curto_pdf(str(linha["modelo"]), limite=16),
                 _texto_curto_pdf(str(linha["usuario_responsavel"]), limite=20),
-                _texto_curto_pdf(str(linha["departamento"]), limite=16),
+                _texto_curto_pdf(str(linha["setor"]), limite=16),  # Corrigido: usar canônico
                 _texto_curto_pdf(str(linha["status"]), limite=12),
                 str(linha["data_entrada"]),
                 str(linha["data_saida"]),
@@ -1618,12 +1625,13 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             linhas = _linhas_exportacao_enriquecidas(ativos, user_id)
 
             # Monta CSV em memória
+            # ===== CORRIGIDO (2026-04-27): Usar campos canonicos =====
             output = io.StringIO()
             writer = csv.DictWriter(
                 output,
                 fieldnames=[
-                    "id", "tipo", "marca", "modelo", "usuario_responsavel",
-                    "departamento", "status", "data_entrada", "data_saida",
+                    "id", "tipo_ativo", "marca", "modelo", "usuario_responsavel",
+                    "setor", "status", "data_entrada", "data_saida",
                     "nota_fiscal", "garantia"
                 ]
             )
