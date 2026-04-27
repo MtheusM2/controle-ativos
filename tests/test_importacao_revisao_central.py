@@ -487,6 +487,7 @@ def test_confirmar_importacao_com_edicoes_por_linha_aplica_valores(monkeypatch):
     )
 
     # Editar linha 2 para corrigir setor de RH para TI
+    # Nota (2026-04-27): "TI" será normalizado para "T.I" conforme MAPEAMENTO_SETORES
     resultado = servico.confirmar_importacao_csv(
         conteudo_csv=csv_com_setor_errado,
         sugestoes_confirmadas={},
@@ -498,8 +499,9 @@ def test_confirmar_importacao_com_edicoes_por_linha_aplica_valores(monkeypatch):
     assert resultado["ok_importacao"] is True
     assert resultado["importados"] == 1
     # Verificar que os dados passados para validação têm o setor editado
+    # Após normalização (2026-04-27), "TI" → "T.I"
     assert len(dados_validados) == 1
-    assert dados_validados[0]["setor"] == "TI"
+    assert dados_validados[0]["setor"] == "T.I"
 
 
 def test_edicao_multiple_campos_na_mesma_linha(monkeypatch):
@@ -845,7 +847,8 @@ def test_fluxo_completo_e2e_revisao_central(monkeypatch):
     assert dados_processados[0][1]["tipo_ativo"] == "Notebook"
     assert dados_processados[1][0] == 3  # Linha 3
     assert dados_processados[1][1]["tipo_ativo"] == "Desktop"
-    assert dados_processados[1][1]["setor"] == "TI"  # Edição foi aplicada
+    # Corrigido em 2026-04-27: "TI" é normalizado para "T.I" conforme MAPEAMENTO_SETORES
+    assert dados_processados[1][1]["setor"] == "T.I"  # Edição foi aplicada + normalizada
 
 
 # ============================================================================
