@@ -367,16 +367,40 @@ CAMPOS_IMPORTACAO_SCHEMA = {
     "garantia",
 }
 
-# Aliases legados aceitos apenas no payload de entrada.
-# Depois da normalização, o backend persiste e valida em nomes canônicos.
-ALIASES_IMPORTACAO_ENTRADA = {
-    "departamento": "setor",
-    "unidade": "localizacao",
-    "base": "localizacao",
-    "tipo": "tipo_ativo",
-}
+# ===== UNIFICAÇÃO DE ALIASES (PARTE 3) =====
+# Removido: ALIASES_IMPORTACAO_ENTRADA foi consolidado em import_validators.ALIASES_CAMPOS_IMPORTACAO
+# Há uma única fonte de verdade: utils/import_validators.ALIASES_CAMPOS_IMPORTACAO
+# Este arquivo agora importa de lá se precisar referenciar aliases.
+# Mantém referência para backward-compat da variável local (evita break em import relativo).
+from utils.import_validators import ALIASES_CAMPOS_IMPORTACAO
+ALIASES_IMPORTACAO_ENTRADA = ALIASES_CAMPOS_IMPORTACAO  # Backward compat
 
-# Modos suportados oficialmente no backend.
+# ===== MODOS DE IMPORTAÇÃO (PARTE 4) =====
+# Define o comportamento da importação em relação a linhas com avisos.
+# O frontend envia modo_importacao como string; o backend o resolve e aplica.
+#
+# Modo "validas_apenas":
+#   - Importa SOMENTE linhas sem avisos
+#   - Linhas com avisos são ignoradas (não afetam o sucesso geral)
+#   - Taxa de erro: conta APENAS erros, não avisos
+#   - Uso: lotes com muitos avisos esperados (inferência, defaults)
+#
+# Modo "validas_e_avisos" (DEFAULT):
+#   - Importa linhas validas (sem erros) com ou sem avisos
+#   - Avisos são registrados mas não bloqueiam
+#   - Taxa de erro: conte APENAS erros
+#   - Uso: importação normal, prudente
+#
+# Modo "tudo_ou_nada":
+#   - TODAS as linhas são validadas
+#   - Se UMA linha tem erro, TODA a importação falha
+#   - Avisos não causam falha (mas são reportados)
+#   - Taxa de erro: se > 0, falha completa
+#   - Uso: importações críticas que exigem 100% de sucesso
+#
+# Transição de cliente legado:
+# - Frontend antigas podem enviar APENAS modo_tudo_ou_nada booleano
+# - Função _resolver_modo_importacao_backend() converte booleano → string
 MODOS_IMPORTACAO_SUPORTADOS = {
     "validas_apenas",
     "validas_e_avisos",
@@ -458,12 +482,29 @@ def _resolver_modo_importacao_backend(
     modo_importacao: str | None,
     modo_tudo_ou_nada: bool,
 ) -> str:
-    """Resolve o modo final no backend sem depender de booleano solto do cliente."""
+    """
+    ===== MODO DE IMPORTAÇÃO NO BACKEND (PARTE 4) =====
+    Resolve o modo final sem depender de booleano solto do cliente.
+
+    Prioridade:
+    1. Se modo_importacao é string válida → usa direto
+    2. Se modo_importacao é None/inválida → usa modo_tudo_ou_nada booleano
+    3. Default fallback: "validas_e_avisos" (equilibrado)
+
+    Args:
+        modo_importacao: String "validas_apenas" | "validas_e_avisos" | "tudo_ou_nada"
+        modo_tudo_ou_nada: Booleano (compatibilidade legada)
+
+    Returns:
+        String validada do modo a usar na importação
+    """
     modo = (modo_importacao or "").strip().lower()
     if modo in MODOS_IMPORTACAO_SUPORTADOS:
         return modo
 
-    # Compatibilidade com chamadas legadas que só enviam booleano.
+    # ===== COMPATIBILIDADE COM FRONTEND LEGADO =====
+    # Clientes antigos podem enviar APENAS modo_tudo_ou_nada booleano.
+    # Mapeamos: True → "tudo_ou_nada", False → "validas_e_avisos"
     return "tudo_ou_nada" if modo_tudo_ou_nada else "validas_e_avisos"
 
 
@@ -565,7 +606,18 @@ def _classificar_colunas_importacao(headers: list[str]) -> dict:
 
 def _aplicar_mapeamento_linha_importacao(row: dict, mapeamento_colunas: dict[str, str]) -> dict:
     """
-    Aplica mapeamento aprovado na linha do CSV e devolve payload alinhado ao domínio.
+    ===== CONTRATO ÚNICO DE VALIDAÇÃO (PARTE 2) =====
+    Aplica mapeamento aprovado na linha do CSV e devolve payload ALINHADO AO DOMÍNIO.
+
+    Fluxo:
+    1. Itera mapeamento_colunas: coluna_origem (do CSV) → campo_destino (canônico ou alias)
+    2. Para cada campo_destino, normaliza para canônico usando normalizar_campo_importacao()
+    3. Acumula valores em dict com APENAS campos canônicos
+    4. NÃO faz espelhamento legado (criar 'tipo' a partir de 'tipo_ativo', etc)
+       → Espelhamento fica apenas em ativos_routes.py para serialização backward-compat
+
+    IMPORTANTE: Após esta função, dados_mapeados contém APENAS campos canônicos.
+    Se houver aliases misturados na entrada, normalizar_dados_importacao() consolidará.
     """
     dados_mapeados: dict[str, str] = {}
 
@@ -573,26 +625,26 @@ def _aplicar_mapeamento_linha_importacao(row: dict, mapeamento_colunas: dict[str
         valor = (row.get(coluna_origem) or "").strip()
         if not valor:
             continue
-        # Normaliza alvo para campo canônico e mantém aliases apenas como entrada.
+        # ===== NORMALIZAR CAMPO: alias → canônico (PARTE 3) =====
+        # Isto garante que mapeamento_colunas pode trazer aliases ou canônicos;
+        # ambos são normalizados para o nome canônico único.
         campo_canonico = normalizar_campo_importacao(campo_destino)
         if not campo_canonico:
+            # Campo desconhecido — ignora
             continue
         dados_mapeados[campo_canonico] = valor
 
-    # Consolida aliases remanescentes do payload bruto em chaves canônicas.
+    # ===== CONSOLIDAÇÃO FINAL: normalizar_dados_importacao como fallback =====
+    # Se houver aliases misturados no payload (ex: setor + departamento),
+    # normalizar_dados_importacao() consolida para um único canônico.
+    # Se já está tudo canônico, é idempotente (sem mudanças).
     dados_mapeados = normalizar_dados_importacao(dados_mapeados)
 
-    # Mantém compatibilidade entre campo oficial e legado.
-    if "tipo_ativo" not in dados_mapeados and "tipo" in dados_mapeados:
-        dados_mapeados["tipo_ativo"] = dados_mapeados["tipo"]
-    if "tipo" not in dados_mapeados and "tipo_ativo" in dados_mapeados:
-        dados_mapeados["tipo"] = dados_mapeados["tipo_ativo"]
-
-    # Mantém sincronia entre setor (oficial) e departamento (legado).
-    if "setor" not in dados_mapeados and "departamento" in dados_mapeados:
-        dados_mapeados["setor"] = dados_mapeados["departamento"]
-    if "departamento" not in dados_mapeados and "setor" in dados_mapeados:
-        dados_mapeados["departamento"] = dados_mapeados["setor"]
+    # ===== REMOVIDO: espelhamento legado (tipo/tipo_ativo, setor/departamento) =====
+    # Comentário: O espelhamento legado fazia dados_mapeados ter TANTO o canônico
+    # QUANTO o alias, o que violava o contrato "apenas canônicos após mapeamento".
+    # Agora, apenas canônicos saem daqui. Backward-compat fica em _serializar_ativo()
+    # da rota, que espelha ao serializar para JSON/template (não nos dados internos).
 
     # IMEI não pode ser reintroduzido por importação.
     dados_mapeados.pop("imei_1", None)
@@ -860,12 +912,36 @@ class AtivosService:
 
     def _validar_linha_importacao(self, dados: dict, numero_linha: int) -> Ativo:
         """
-        Valida linha de importação e devolve objeto pronto para persistência.
+        ===== LOTE REVISADO COMO FONTE DE VERDADE (PARTE 5) =====
+        Validação FINAL de linha: apenas regras de domínio corporativo.
+
+        IMPORTANTE: Esta função NÃO re-valida schema/formato/tipo de dados.
+        ValidadorLote já garantiu que campos obrigatórios estão presentes e bem formados.
+        Aqui verificamos APENAS regras de negócio:
+        - Se status = 'Em Uso', usuario_responsavel deve estar preenchido
+        - Se usuario_responsavel preenchido, email deve ser válido
+        - Etc.
+
+        Fluxo completo em confirmar_importacao_csv:
+        1. ValidadorLote valida formato/schema (linhas 1484-1508)
+        2. _validar_linha_importacao valida regras de domínio (ESTA função)
+        3. Persistência em banco (sem re-validação)
+
+        Args:
+            dados: Dict com campos já normalizados e validados por ValidadorLote
+            numero_linha: Para logging/mensagens de erro
+
+        Returns:
+            Objeto Ativo pronto para persistência
+
+        Raises:
+            AtivoErro: Se violada regra de domínio corporativo
         """
         ativo = self._construir_ativo_para_importacao(dados)
         ativo_norm = _padronizar_ativo(ativo)
         try:
             # validar_id=False porque ID é gerado no momento do INSERT.
+            # Esta validação verifica APENAS regras corporativas, não formato.
             validar_ativo(ativo_norm, validar_id=False)
         except ValueError as erro:
             raise AtivoErro(f"Linha {numero_linha}: {str(erro)}") from erro
@@ -1380,13 +1456,19 @@ class AtivosService:
             if linhas_descartadas and numero_linha in linhas_descartadas:
                 continue
 
+            # ===== CONTRATO ÚNICO (PARTE 2): Mapeamento produz dados canônicos =====
+            # _aplicar_mapeamento_linha_importacao() já normaliza aliases → canônicos.
+            # Após isto, dados_mapeados contém APENAS campos canônicos.
             dados_mapeados = _aplicar_mapeamento_linha_importacao(row, mapeamento_final)
 
-            # Edição manual tem prioridade e é aplicada no payload canônico.
+            # ===== EDIÇÕES MANUAIS: aplicadas no payload canônico (PARTE 4) =====
+            # User pode editar valores no revisor; campos editados têm prioridade e
+            # nunca são sobrescritos pela inferência de email.
             campos_editados_manualmente: set[str] = set()
             if edicoes_por_linha and numero_linha in edicoes_por_linha:
                 edicoes = edicoes_por_linha[numero_linha] or {}
                 for campo, valor in edicoes.items():
+                    # Normaliza o NOME do campo editado (pode vir como alias)
                     campo_norm = normalizar_campo_importacao(
                         _normalizar_nome_coluna_importacao(str(campo)).replace(" ", "_")
                     )
@@ -1395,9 +1477,13 @@ class AtivosService:
                     campos_editados_manualmente.add(campo_norm)
                     dados_mapeados[campo_norm] = "" if valor is None else str(valor).strip()
 
-            # Consolida aliases de entrada para evitar competição entre campos equivalentes.
+            # ===== CONSOLIDAÇÃO IDEMPOTENTE: segurança redundante (PARTE 2) =====
+            # Normalizar novamente é idempotente — se dados_mapeados já tem canônicos,
+            # não muda nada. Mas se edições manuais trouxeram aliases, consolida.
+            # (Redundante, mas safe para edições que podem trazer alias)
             dados_mapeados = normalizar_dados_importacao(dados_mapeados)
 
+            # ===== INFERÊNCIA DE EMAIL (PARTE 6): user_responsavel a partir de email =====
             # Inferência por e-mail só preenche campo ausente/inválido e nunca sobrepõe edição manual.
             dados_mapeados, metadados_inferencia = aplicar_inferencia_email_em_dados(
                 dados_mapeados,
@@ -1413,7 +1499,16 @@ class AtivosService:
 
             linhas_ativas_revisadas.append((numero_linha, dados_mapeados))
 
-        # A confirmação usa o mesmo validador de lote da prévia para eliminar divergência de regra.
+        # ===== LOTE REVISADO COMO FONTE DE VERDADE (PARTE 5) =====
+        # Validação única do lote: usa ValidadorLote para verificar:
+        # 1. Campos obrigatórios mapeados
+        # 2. Tipos de dados válidos (datas, emails, enums, comprimentos)
+        # 3. Taxa de erro do lote
+        # 4. Detecção de IDs duplicados
+        #
+        # Após esta validação, NÃO há re-validação de formato/schema.
+        # Validação de domínio corporativo (regras de negócio) acontece em _validar_linha_importacao.
+        # Persistência é direta, sem validação adicional.
         mapeamento_para_validacao = {
             coluna: (normalizar_campo_importacao(campo_destino), 1.0)
             for coluna, campo_destino in mapeamento_final.items()
@@ -1424,7 +1519,9 @@ class AtivosService:
             mapeamento_campos=mapeamento_para_validacao,
         )
 
-        # Bloqueios de contrato do lote sempre interrompem a confirmação.
+        # ===== BLOQUEIOS CRÍTICOS: Interrompem imediatamente =====
+        # Se há bloqueios (campos obrigatórios faltantes, taxa erro > 50%, etc),
+        # a importação falha SEM processar nenhuma linha.
         if validacao_lote.bloqueios:
             return {
                 "ok_importacao": False,

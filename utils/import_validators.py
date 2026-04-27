@@ -10,6 +10,20 @@
 # - Gerar avisos vs erros
 # - Emitir bloqueios
 #
+# ===== CONTRATO ÚNICO DE VALIDAÇÃO (PARTE 2) =====
+# Este módulo GARANTE que há um único ponto de entrada para normalização e validação
+# de dados de importação. A normalização de aliases SEMPRE acontece ANTES da validação.
+#
+# Fluxo obrigatório:
+# 1. Dados brutos chegam do CSV (com aliases possíveis)
+# 2. normalizar_dados_importacao() consolidada aos canônicos
+# 3. ValidadorLinha.validar() valida dados JÁ NORMALIZADOS (sem aliases)
+# 4. ValidadorLote.validar_lote() reusa ValidadorLinha em modo batch
+#
+# INVARIANTE: Após normalizar_dados_importacao(), a linha contém APENAS campos
+# canônicos (tipo_ativo, marca, modelo, setor, localizacao, status, etc).
+# Validadores nunca veem aliases; validam apenas canônicos.
+#
 
 import re
 from datetime import datetime, date
@@ -20,26 +34,72 @@ from enum import Enum
 from utils.validators import STATUS_VALIDOS as STATUS_VALIDOS_DOMINIO
 
 
-# Contrato canônico da importação em massa.
-# Estes nomes representam o domínio único no backend.
+# ===== CAMPOS CANÔNICOS ÚNICOS (Contrato único — PARTE 3) =====
+# Estes nomes são a FONTE DE VERDADE para o domínio no backend.
+# Qualquer outro nome de campo é tratado como alias e normalizado para estes.
+# IMPORTANTE: Mantém sincronização com schema.sql e models.ativos.Ativo
 CAMPOS_CANONICOS_IMPORTACAO = {
-    'tipo_ativo',
-    'marca',
-    'modelo',
-    'setor',
-    'localizacao',
-    'status',
-    'data_entrada',
-    'email_responsavel',
+    'id',                      # ID do ativo (opcional, gerado se não fornecido)
+    'tipo_ativo',              # CANÔNICO para "tipo"
+    'marca',                   # Obrigatório
+    'modelo',                  # Obrigatório
+    'serial',                  # Opcional
+    'codigo_interno',          # Opcional
+    'categoria',               # Opcional
+    'condicao',                # Opcional
+    'localizacao',             # CANÔNICO para "unidade" ou "base"
+    'setor',                   # CANÔNICO para "departamento"
+    'usuario_responsavel',     # Inferido de email_responsavel se ausente
+    'email_responsavel',       # Email, usado para inferência de usuario_responsavel
+    'nota_fiscal',             # Opcional
+    'garantia',                # Opcional
+    'status',                  # Recomendável (aviso se ausente)
+    'data_entrada',            # Recomendável (aviso se ausente)
+    'data_saida',              # Opcional
+    'data_compra',             # Opcional
+    'valor',                   # Opcional
+    'descricao',               # Opcional
+    'observacoes',             # Opcional
+    'detalhes_tecnicos',       # Opcional
+    'processador',             # Opcional (específico de notebook/desktop)
+    'ram',                     # Opcional (específico de notebook/desktop)
+    'armazenamento',           # Opcional (específico de notebook/desktop)
+    'sistema_operacional',     # Opcional (específico de notebook/desktop)
+    'carregador',              # Opcional
+    'teamviewer_id',           # Opcional
+    'anydesk_id',              # Opcional
+    'nome_equipamento',        # Opcional (para computadores)
+    'hostname',                # Opcional (para computadores)
 }
 
 
-# Aliases aceitos somente na entrada por compatibilidade.
-# Depois da normalização, o backend trabalha apenas com campos canônicos.
+# ===== ALIASES ACEITOS NA ENTRADA (Compatibilidade — PARTE 3) =====
+# FONTE ÚNICA DE VERDADE para mapeamento de aliases → canônicos.
+# Importado por:
+# - import_validators.normalizar_campo_importacao()
+# - import_validators.normalizar_dados_importacao()
+# - ativos_service.ALIASES_IMPORTACAO_ENTRADA (backward compat)
+# - Qualquer novo código que precisar normalizar campos
+#
+# Nomes de colunas alternativos que o CSV pode trazer.
+# TODOS são normalizados para nomes canônicos ANTES de validação.
+#
+# Adição de novos aliases:
+# 1. Adicione entrada aqui: 'novo_alias': 'campo_canonico'
+# 2. Atualize CAMPOS_CANONICOS_IMPORTACAO se adicionou novo canônico
+# 3. Atualize ValidadorCampos.COMPRIMENTOS_MAXIMOS se necessário
+# 4. Rodar testes: pytest tests/test_import_validators.py -v
 ALIASES_CAMPOS_IMPORTACAO = {
+    # Aliases para "setor" (com prioridade ao canônico se ambos presentes)
     'departamento': 'setor',
+    'depto': 'setor',
+
+    # Aliases para "localizacao" (com prioridade ao canônico se ambos presentes)
     'unidade': 'localizacao',
     'base': 'localizacao',
+    'local': 'localizacao',
+
+    # Aliases para "tipo_ativo" (com prioridade ao canônico se ambos presentes)
     'tipo': 'tipo_ativo',
 }
 
@@ -53,30 +113,66 @@ def normalizar_campo_importacao(nome_campo: str | None) -> str:
 
 
 def normalizar_dados_importacao(linha: Dict[str, str] | None) -> Dict[str, str]:
-    """Consolida aliases de entrada em um payload canônico único."""
+    """
+    ===== CONTRATO ÚNICO DE VALIDAÇÃO (PARTE 2) =====
+    Consolida ALL aliases de entrada em um payload CANÔNICO único.
+
+    Esta é a ÚNICA função que deve ser chamada para converter dados brutos de CSV
+    para o contrato interno canônico. Após esta chamada, validadores recebem APENAS
+    campos canônicos (sem aliases).
+
+    Comportamento:
+    - Aplica normalizar_campo_importacao() a cada chave
+    - Resolve conflitos entre aliases e canônicos: PRIORIZA o valor canônico
+      (ex: se ambos 'tipo' e 'tipo_ativo' presentes, mantém 'tipo_ativo')
+    - Remove NULL, chaves vazias, valores vazios
+    - Retorna Dict com APENAS campos canônicos (sem espelhamento legado)
+
+    Importante: O chamador (ValidadorLinha) trabalha com dados já normalizados.
+    Nunca há conflito tipo vs tipo_ativo no validador; ambos foram consolidados.
+
+    Args:
+        linha: Dict com possíveis aliases ou campos canônicos
+
+    Returns:
+        Dict com APENAS campos canônicos, sem aliases
+    """
     linha = linha or {}
     normalizada: Dict[str, str] = {}
 
+    # ===== FASE 1: Consolidar todos os campos em canônicos =====
+    # Iteramos sobre a entrada e mapeamos cada chave ao seu canônico.
     for chave, valor in linha.items():
         campo_canonico = normalizar_campo_importacao(chave)
         if not campo_canonico:
+            # Campo desconhecido (nem alias, nem canônico) — ignora
             continue
 
-        # Mantém o primeiro valor não vazio para evitar sobrescrita silenciosa entre aliases.
+        # Limpa valor: NULL → '', preserva brancos
         valor_limpo = '' if valor is None else str(valor).strip()
+
+        # ===== FASE 2: Resolver conflitos entre alias e canônico =====
+        # Se já temos um valor para este canônico, aplica regra de conflito:
+        # 1. Valor existente vazio + novo valor vazio → descarta novo
+        # 2. Valor existente cheio + novo valor vazio → mantém existente
+        # 3. Valor existente vazio + novo valor cheio → pega novo (update)
+        # 4. Valor existente cheio + novo valor cheio → DESCARTA novo (prioriza primeiro)
         valor_existente = normalizada.get(campo_canonico, '')
         if valor_existente and not valor_limpo:
+            # Regra 2: mantém existente, ignora novo vazio
             continue
         if valor_existente and valor_limpo:
+            # Regra 4: ambos cheios → PRIORIZA PRIMEIRO (mantém existente)
+            # Isto garante que se 'tipo' chegou primeiro, 'tipo_ativo' não o sobrepõe
             continue
 
+        # Regras 1 e 3: salva/atualiza
         normalizada[campo_canonico] = valor_limpo
 
-    # Espelha canônicos principais para compatibilidade com consumidores legados.
-    if normalizada.get('setor') and not normalizada.get('departamento'):
-        normalizada['departamento'] = normalizada['setor']
-    if normalizada.get('tipo_ativo') and not normalizada.get('tipo'):
-        normalizada['tipo'] = normalizada['tipo_ativo']
+    # ===== FASE 3: NENHUM espelhamento legado =====
+    # Removida a lógica que criava 'departamento' = 'setor' e 'tipo' = 'tipo_ativo'.
+    # Validadores trabalham com canônicos; templates/rotinas antigas usam a serialização em ativos_routes.py
+    # (que faz o espelhamento necessário para backward-compat com UI).
 
     return normalizada
 
@@ -307,7 +403,24 @@ class ValidadorCampos:
 
 
 class ValidadorLinha:
-    """Valida linha completa de CSV"""
+    """
+    ===== CONTRATO ÚNICO DE VALIDAÇÃO (PARTE 2) =====
+    Valida linha completa de CSV com dados já normalizados.
+
+    INVARIANTE: Esta classe recebe dados com APENAS campos canônicos.
+    normalizar_dados_importacao() é responsabilidade do chamador ou desta classe.
+
+    Validação acontece em fases:
+    1. Normalizar aliases para canônicos (linha 425)
+    2. Validar campo ID (opcional)
+    3. Validar campos bloqueantes (tipo_ativo, marca, modelo — erram se vazios)
+    4. Validar campos recomendáveis (setor, status, data_entrada — avisos se vazios)
+    5. Validar enums, datas, emails, comprimentos
+    6. Validar usuario_responsavel e serial (avisos)
+
+    IMPORTANTE: Nenhuma outra normalização deve ocorrer após isso.
+    O resultado é uma linha validada com APENAS campos canônicos.
+    """
 
     def __init__(self):
         self.validador_campos = ValidadorCampos()
@@ -323,21 +436,23 @@ class ValidadorLinha:
         Valida linha completa.
 
         Args:
-            linha: Dicionário com dados da linha
+            linha: Dicionário com dados da linha (pode ter aliases ou canônicos)
             numero_linha: Número da linha no arquivo (para logging)
             usuarios_existentes_cache: Set de usuarios_responsavel válidos (para aviso)
             ativos_existentes_cache: Set de IDs de ativos já existentes (para aviso)
 
         Returns:
-            ResultadoValidacao com erros, avisos e dados limpos
+            ResultadoValidacao com erros, avisos e dados limpos (APENAS canônicos)
         """
         erros = []
         avisos = []
         dados_limpos = {}
         id_ativo = None
 
-        # Consolida aliases em campos canônicos antes de aplicar regras.
-        # Isso evita conflito entre setor/departamento e tipo/tipo_ativo na mesma linha.
+        # ===== CONTRATO ÚNICO (PARTE 2): Normalizar aliases em campos canônicos =====
+        # Isto garante que TODO o restante do validador trabalha com nomes canônicos.
+        # Se o chamador já normalizou, esta chamada é idempotente e retorna os mesmos dados.
+        # Se não, normaliza aqui como fallback de segurança.
         linha = normalizar_dados_importacao(linha)
 
         # ===== VALIDAR CAMPO ID (opcional no preview/import) =====

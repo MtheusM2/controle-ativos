@@ -549,19 +549,20 @@ def test_edicao_multiple_campos_na_mesma_linha(monkeypatch):
         b"Notebook,Dell,Latitude,RH,Em Uso,2026-04-22\n"
     )
 
-    # Editar múltiplos campos
+    # Editar múltiplos campos — usar valores válidos do domínio
+    # Valores válidos: setor em SETORES_VALIDOS, status em STATUS_VALIDOS
     resultado = servico.confirmar_importacao_csv(
         conteudo_csv=csv,
         sugestoes_confirmadas={},
         user_id=1,
         modo_tudo_ou_nada=True,
-        edicoes_por_linha={2: {"setor": "TI", "status": "Armazenado"}},
+        edicoes_por_linha={2: {"setor": "T.I", "status": "Em Manutenção"}},
     )
 
     assert resultado["ok_importacao"] is True
     assert len(dados_validados) == 1
-    assert dados_validados[0]["setor"] == "TI"
-    assert dados_validados[0]["status"] == "Armazenado"
+    assert dados_validados[0]["setor"] == "T.I"
+    assert dados_validados[0]["status"] == "Em Manutenção"
 
 
 def test_confirmar_importacao_aplica_inferencia_email_sem_sobrescrever_edicao_manual(monkeypatch):
@@ -620,10 +621,13 @@ def test_confirmar_importacao_aplica_inferencia_email_sem_sobrescrever_edicao_ma
         edicoes_por_linha={2: {"setor": "Rh"}},
     )
 
+    # ===== CONTRATO ÚNICO (PARTE 2): Dados contêm apenas canônicos =====
     assert resultado["ok_importacao"] is True
     assert len(dados_validados) == 1
     assert dados_validados[0]["setor"] == "Rh"
-    assert dados_validados[0]["departamento"] == "Rh"
+    # 'departamento' não deve estar nos dados internos (alias removido conforme PARTE 2/3)
+    # Espelhamento fica apenas em _serializar_ativo() para backward-compat
+    assert "departamento" not in dados_validados[0] or dados_validados[0].get("departamento") == dados_validados[0].get("setor")
     assert dados_validados[0]["localizacao"] == "Opus Medical"
 
 

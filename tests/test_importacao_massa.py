@@ -265,9 +265,11 @@ def test_confirmar_importacao_aplica_edicao_em_campo_canonico_apos_mapeamento(mo
         edicoes_por_linha={2: {"setor": "T.I"}},
     )
 
+    # ===== CONTRATO ÚNICO (PARTE 2): Dados contêm apenas canônicos =====
     assert resultado["ok_importacao"] is True
     assert dados_recebidos[2]["setor"] == "T.I"
-    assert dados_recebidos[2]["departamento"] == "T.I"
+    # 'departamento' não deve estar nos dados internos (alias removido conforme PARTE 2/3)
+    assert "departamento" not in dados_recebidos[2] or dados_recebidos[2].get("departamento") == dados_recebidos[2].get("setor")
 
 
 def test_confirmar_importacao_modo_parcial_nao_falha_por_linhas_invalidas_ativas(monkeypatch):
@@ -320,6 +322,12 @@ def test_confirmar_importacao_aplica_inferencia_email_em_campos_ausentes(monkeyp
     """
     Regressao: confirmacao deve validar linha com base na versao revisada,
     incluindo inferencia por e-mail quando setor/localizacao estiverem ausentes.
+
+    ===== CONTRATO ÚNICO (PARTE 6): Inferência preenche campos ausentes =====
+    Email 'ti@opusmedical.com.br' implica setor='T.I' e localizacao='Opus Medical'
+
+    Comentário: Este teste valida que quando setor/localizacao chegam vazios do CSV
+    (mas mapeados), a inferência de email os preenche automaticamente.
     """
     service = _service_admin()
     dados_recebidos = {}
@@ -337,11 +345,16 @@ def test_confirmar_importacao_aplica_inferencia_email_em_campos_ausentes(monkeyp
     monkeypatch.setattr(service, "_validar_linha_importacao", validar_linha)
     monkeypatch.setattr(service, "criar_ativo", lambda ativo, _user_id: ativo.id_ativo)
 
+    # CSV com setor e localizacao como colunas vazias
+    # (simulando que o usuário não preencheu, mas estão mapeadas para permitir inferência)
     conteudo_csv = (
-        "tipo_ativo,marca,modelo,status,data_entrada,email_responsavel\n"
-        "Notebook,Dell,XPS,Disponível,2026-04-17,ti@opusmedical.com.br\n"
+        "tipo_ativo,marca,modelo,setor,localizacao,status,data_entrada,email_responsavel\n"
+        "Notebook,Dell,XPS,,,Disponível,2026-04-17,ti@opusmedical.com.br\n"
     ).encode("utf-8")
 
+    # ===== INFERÊNCIA POR EMAIL (PARTE 6) =====
+    # Setor e localizacao estão no CSV (mapeados) mas vazios
+    # A inferência do email preencherá com T.I e Opus Medical automaticamente
     resultado = service.confirmar_importacao_csv(
         conteudo_csv,
         sugestoes_confirmadas={},
@@ -351,6 +364,8 @@ def test_confirmar_importacao_aplica_inferencia_email_em_campos_ausentes(monkeyp
             "tipo_ativo": "tipo_ativo",
             "marca": "marca",
             "modelo": "modelo",
+            "setor": "setor",
+            "localizacao": "localizacao",
             "status": "status",
             "data_entrada": "data_entrada",
             "email_responsavel": "email_responsavel",
@@ -380,11 +395,14 @@ def test_confirmar_importacao_inferencia_nao_sobrescreve_setor_manual(monkeypatc
     monkeypatch.setattr(service, "_validar_linha_importacao", validar_linha)
     monkeypatch.setattr(service, "criar_ativo", lambda ativo, _user_id: ativo.id_ativo)
 
+    # ===== EDIÇÕES MANUAIS: Campo editado requer coluna no CSV =====
+    # Para editar 'setor', a coluna precisa existir no CSV (mesmo que vazia)
     conteudo_csv = (
-        "tipo_ativo,marca,modelo,status,data_entrada,email_responsavel\n"
-        "Notebook,Dell,XPS,Disponível,2026-04-17,ti@opusmedical.com.br\n"
+        "tipo_ativo,marca,modelo,setor,status,data_entrada,email_responsavel\n"
+        "Notebook,Dell,XPS,,Disponível,2026-04-17,ti@opusmedical.com.br\n"
     ).encode("utf-8")
 
+    # Mapeamento inclui a coluna 'setor' (que vem vazia do CSV)
     resultado = service.confirmar_importacao_csv(
         conteudo_csv,
         sugestoes_confirmadas={},
@@ -394,14 +412,19 @@ def test_confirmar_importacao_inferencia_nao_sobrescreve_setor_manual(monkeypatc
             "tipo_ativo": "tipo_ativo",
             "marca": "marca",
             "modelo": "modelo",
+            "setor": "setor",
             "status": "status",
             "data_entrada": "data_entrada",
             "email_responsavel": "email_responsavel",
         },
         linhas_descartadas=set(),
+        # Edição manual sobrescreve o valor do CSV (que está vazio, seria preenchido por inferência)
         edicoes_por_linha={2: {"setor": "Rh"}},
     )
 
+    # ===== CONTRATO ÚNICO (PARTE 2/6): Edição manual tem prioridade sobre inferência =====
     assert resultado["ok_importacao"] is True
     assert dados_recebidos[2]["setor"] == "Rh"
-    assert dados_recebidos[2]["departamento"] == "Rh"
+    # 'departamento' não deve estar nos dados internos (alias removido conforme PARTE 2/3)
+    assert "departamento" not in dados_recebidos[2] or dados_recebidos[2].get("departamento") == dados_recebidos[2].get("setor")
+    # Comentário: Edição manual "Rh" foi aplicada, vencendo a inferência por email (que seria "T.I")

@@ -232,23 +232,30 @@ def aplicar_inferencia_email_em_dados(
     *,
     campos_editados_manualmente: set[str] | None = None,
 ) -> tuple[dict, dict]:
-    """Aplica a inferencia respeitando a prioridade das fontes de dados.
+    """
+    ===== CONSOLIDAÇÃO DA INFERÊNCIA POR E-MAIL (PARTE 6) =====
+    Aplica a inferência respeitando a prioridade das fontes de dados.
+
+    IMPORTANTE: Esta função recebe dados JÁ NORMALIZADOS (contrato único — PARTE 2).
+    normalizar_dados_importacao() já consolidou aliases em campos canônicos.
+    Portanto, esta função trabalha APENAS com canônicos (setor, localizacao, etc).
 
     Ordem de prioridade:
-    1. valor explicito valido vindo da planilha
-    2. valor corrigido manualmente no modal
-    3. valor inferido automaticamente por e-mail
-    4. sugestao pendente de confirmacao
-    5. permanece ausente quando nao ha confianca suficiente
+    1. valor manual editado pelo usuário (em modal)
+    2. valor explícito válido vindo do CSV
+    3. valor inferido automaticamente por e-mail (alta confiança)
+    4. sugestão pendente de confirmação (confiança média)
+    5. permanece ausente quando não há confiança suficiente
+
+    Args:
+        dados: Dict com campos já NORMALIZADOS para canônicos
+        campos_editados_manualmente: Set de nomes de campos editados manualmente
+
+    Returns:
+        (dados_enriquecidos, metadados_inferencia)
     """
     campos_editados_manualmente = campos_editados_manualmente or set()
     dados_saida = dict(dados or {})
-
-    # Mantem a compatibilidade entre o campo oficial e o legado antes de inferir.
-    if not dados_saida.get("setor") and dados_saida.get("departamento"):
-        dados_saida["setor"] = dados_saida.get("departamento")
-    if not dados_saida.get("departamento") and dados_saida.get("setor"):
-        dados_saida["departamento"] = dados_saida.get("setor")
 
     sugestoes = inferir_campos_por_email(dados_saida.get("email_responsavel"))
     metadados = {
@@ -263,12 +270,13 @@ def aplicar_inferencia_email_em_dados(
     for campo, sugestao in sugestoes.items():
         valor_atual = (dados_saida.get(campo) or "").strip()
 
-        # Valor manual sempre vence.
+        # ===== PRIORIDADE 1: Valor manual sempre vence =====
         if campo in campos_editados_manualmente:
             metadados["origem_campos"][campo] = "manual"
             continue
 
-        # Valor valido da planilha tambem vence e nao e sobrescrito.
+        # ===== PRIORIDADE 2: Valor válido do CSV não é sobrescrito =====
+        # Se o valor já existe e é válido no domínio, mantém como está.
         if campo == "setor" and _valor_setor_valido(valor_atual):
             metadados["origem_campos"][campo] = "planilha_valida"
             continue
@@ -276,6 +284,7 @@ def aplicar_inferencia_email_em_dados(
             metadados["origem_campos"][campo] = "planilha_valida"
             continue
 
+        # ===== PRIORIDADE 4: Sugestão pendente de confirmação =====
         if sugestao.requer_confirmacao:
             metadados["origem_campos"][campo] = "sugestao_pendente"
             metadados["sugestoes_pendentes"][campo] = {
@@ -288,11 +297,9 @@ def aplicar_inferencia_email_em_dados(
             }
             continue
 
-        # Inferencia automatica so ocorre quando a confianca e alta e nao ha conflito.
+        # ===== PRIORIDADE 3: Inferência automática (alta confiança) =====
+        # Aplica apenas se confiança > LIMIAR_AUTO_APLICACAO (0.9)
         dados_saida[campo] = sugestao.valor
-        if campo == "setor":
-            dados_saida["departamento"] = sugestao.valor
-
         metadados["origem_campos"][campo] = "inferido_automatico"
         metadados["aplicadas"][campo] = {
             "valor": sugestao.valor,
@@ -303,11 +310,11 @@ def aplicar_inferencia_email_em_dados(
             "aplicada_automaticamente": True,
         }
 
-    # Mantem a sincronia do alias legado apos as regras de prioridade.
-    if "setor" in dados_saida and "departamento" not in dados_saida:
-        dados_saida["departamento"] = dados_saida["setor"]
-    if "departamento" in dados_saida and "setor" not in dados_saida:
-        dados_saida["setor"] = dados_saida["departamento"]
+    # ===== REMOVIDO: Espelhamento legado =====
+    # Comentário: Esta função recebe dados já normalizados.
+    # normalizar_dados_importacao() (linha 1460 em ativos_service.py) já consolidou
+    # 'tipo' → 'tipo_ativo' e 'departamento' → 'setor' ANTES de chamar esta função.
+    # Logo, não há aliases para espelhar aqui. Dados contêm APENAS canônicos.
 
     return dados_saida, metadados
 
