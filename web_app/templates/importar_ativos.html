@@ -173,8 +173,12 @@
                         <span id="summary-discarded">0</span>
                     </div>
                     <div class="revisao-sumario-card to-import">
-                        <strong>A Importar</strong>
+                        <strong>A Importar (estimativa)</strong>
                         <span id="summary-to-import">0</span>
+                        <!-- ===== NOVO (2026-04-27): Indicar que é estimativa para gerenciar expectativas ===== -->
+                        <small style="display: block; font-size: 0.75rem; color: var(--text-2); margin-top: 4px; font-weight: normal;">
+                            Número real pode diferir se houver bloqueios no validador de lote
+                        </small>
                     </div>
                 </div>
             </div>
@@ -1131,6 +1135,14 @@
     }
 
     function renderCampoEdicao(numeroLinha, campo, valorOriginal, mensagensErro, sugestaoInferencia, inferenciaAplicada) {
+        // ===== NOVO (2026-04-27): Não renderizar "departamento" — use "setor" em vez disso =====
+        // "departamento" é alias legado de "setor". No contexto de importação/revisão,
+        // mantemos apenas "setor" como campo canônico para evitar redundância e confusão.
+        if (campo === 'departamento') {
+            console.warn(`[importacao] Campo "departamento" ignorado em modal de revisão — use "setor" para edição`);
+            return '';
+        }
+
         const valorAtual = estadoRevisao.edicoesPorLinha[numeroLinha]?.[campo] ?? valorOriginal ?? '';
         const opcoesControladas = LISTAS_CONTROLADAS_IMPORTACAO[campo] || null;
         const temErro = Array.isArray(mensagensErro) && mensagensErro.length > 0;
