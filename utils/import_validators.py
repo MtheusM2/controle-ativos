@@ -17,6 +17,69 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
 
+from utils.validators import STATUS_VALIDOS as STATUS_VALIDOS_DOMINIO
+
+
+# Contrato canônico da importação em massa.
+# Estes nomes representam o domínio único no backend.
+CAMPOS_CANONICOS_IMPORTACAO = {
+    'tipo_ativo',
+    'marca',
+    'modelo',
+    'setor',
+    'localizacao',
+    'status',
+    'data_entrada',
+    'email_responsavel',
+}
+
+
+# Aliases aceitos somente na entrada por compatibilidade.
+# Depois da normalização, o backend trabalha apenas com campos canônicos.
+ALIASES_CAMPOS_IMPORTACAO = {
+    'departamento': 'setor',
+    'unidade': 'localizacao',
+    'base': 'localizacao',
+    'tipo': 'tipo_ativo',
+}
+
+
+def normalizar_campo_importacao(nome_campo: str | None) -> str:
+    """Normaliza o nome de campo para chave canônica de importação."""
+    campo = (nome_campo or '').strip().lower()
+    if not campo:
+        return ''
+    return ALIASES_CAMPOS_IMPORTACAO.get(campo, campo)
+
+
+def normalizar_dados_importacao(linha: Dict[str, str] | None) -> Dict[str, str]:
+    """Consolida aliases de entrada em um payload canônico único."""
+    linha = linha or {}
+    normalizada: Dict[str, str] = {}
+
+    for chave, valor in linha.items():
+        campo_canonico = normalizar_campo_importacao(chave)
+        if not campo_canonico:
+            continue
+
+        # Mantém o primeiro valor não vazio para evitar sobrescrita silenciosa entre aliases.
+        valor_limpo = '' if valor is None else str(valor).strip()
+        valor_existente = normalizada.get(campo_canonico, '')
+        if valor_existente and not valor_limpo:
+            continue
+        if valor_existente and valor_limpo:
+            continue
+
+        normalizada[campo_canonico] = valor_limpo
+
+    # Espelha canônicos principais para compatibilidade com consumidores legados.
+    if normalizada.get('setor') and not normalizada.get('departamento'):
+        normalizada['departamento'] = normalizada['setor']
+    if normalizada.get('tipo_ativo') and not normalizada.get('tipo'):
+        normalizada['tipo'] = normalizada['tipo_ativo']
+
+    return normalizada
+
 
 class TipoErro(Enum):
     """Tipos de erro que causam rejeição de linha"""
@@ -38,6 +101,8 @@ class TipoAviso(Enum):
     SERIAL_AUSENTE = "serial_ausente"
     MAPEAMENTO_BAIXA_CONFIANCA = "mapeamento_baixa_confianca"
     COLUNA_IGNORADA = "coluna_ignorada"
+    # NOVO: Campo recomendável ausente gera aviso, não erro
+    CAMPO_RECOMENDAVEL_AUSENTE = "campo_recomendavel_ausente"
 
 
 @dataclass
@@ -66,11 +131,23 @@ class ResultadoValidacaoLote:
 class ValidadorCampos:
     """Valida campos individuais contra regras de tipo e integridade"""
 
-    # Campos críticos obrigatórios — DEVEM usar nomes canônicos (não aliases/sinônimos)
-    # Sincronizado com CRITICIDADE_CAMPOS em utils/import_schema.py (tipo_ativo, setor)
-    CAMPOS_CRITICOS = {
-        'tipo_ativo', 'marca', 'modelo', 'setor', 'status', 'data_entrada'
+    # ===== NOVA CLASSIFICAÇÃO DE CRITICIDADE (Camada 2 — Flexibilização) =====
+    # CAMPOS_BLOQUEANTES: Único que bloqueia a importação se ausente (TipoErro)
+    # CAMPOS_RECOMENDAVEIS: Ausentes geram aviso (TipoAviso), não erro — permitem importação
+    # CAMPOS_CRITICOS: Mantido para compatibilidade (união dos dois)
+
+    # Campos que realmente bloqueiam se não mapeados
+    CAMPOS_BLOQUEANTES = {
+        'tipo_ativo', 'marca', 'modelo'
     }
+
+    # Campos que geram aviso se ausentes, mas não bloqueiam
+    CAMPOS_RECOMENDAVEIS = {
+        'setor', 'status', 'data_entrada'
+    }
+
+    # Compatibilidade: union de bloqueantes + recomendáveis
+    CAMPOS_CRITICOS = CAMPOS_BLOQUEANTES | CAMPOS_RECOMENDAVEIS
 
     # Comprimentos máximos — usar APENAS nomes canônicos (devem coincidir com schema.sql)
     # Removidas entradas antigas: 'tipo' (substituído por 'tipo_ativo'), 'departamento' (substituído por 'setor')
@@ -94,13 +171,9 @@ class ValidadorCampos:
     }
 
     # Valores válidos para campos enumerados
-    STATUS_VALIDOS = {
-        'Em Uso',
-        'Armazenado',
-        'Descartado',
-        'Em Manutenção',
-        'Emprestado'
-    }
+    # Fonte única: usa o domínio oficial do backend para evitar divergência
+    # entre validação de preview e validação final.
+    STATUS_VALIDOS = set(STATUS_VALIDOS_DOMINIO)
 
     # Regex para validação
     REGEX_ID = re.compile(r'^[A-Za-z0-9\-]{1,20}$')  # Alfanumérico + hífen
@@ -263,6 +336,10 @@ class ValidadorLinha:
         dados_limpos = {}
         id_ativo = None
 
+        # Consolida aliases em campos canônicos antes de aplicar regras.
+        # Isso evita conflito entre setor/departamento e tipo/tipo_ativo na mesma linha.
+        linha = normalizar_dados_importacao(linha)
+
         # ===== VALIDAR CAMPO ID (opcional no preview/import) =====
         # Se ID vier preenchido no CSV, validamos formato.
         # Se não vier, não bloqueia: o ID pode ser gerado automaticamente no INSERT.
@@ -275,14 +352,26 @@ class ValidadorLinha:
                 id_ativo = id_valor
                 dados_limpos['id'] = id_ativo
 
-        # ===== VALIDAR CAMPOS CRÍTICOS =====
-        for campo in ValidadorCampos.CAMPOS_CRITICOS:
-
+        # ===== VALIDAR CAMPOS BLOQUEANTES (geram erro se vazios) =====
+        # (Camada 2: Flexibilização — apenas tipo_ativo, marca, modelo bloqueiam)
+        for campo in ValidadorCampos.CAMPOS_BLOQUEANTES:
             valor = linha.get(campo, '').strip() if linha.get(campo) else ''
-
             erro = self.validador_campos.validar_campo_critico(campo, valor)
             if erro:
                 erros.append(erro)
+            else:
+                dados_limpos[campo] = valor
+
+        # ===== VALIDAR CAMPOS RECOMENDÁVEIS (geram aviso se vazios) =====
+        # (Camada 2: Flexibilização — setor, status, data_entrada geram avisos, não erros)
+        for campo in ValidadorCampos.CAMPOS_RECOMENDAVEIS:
+            valor = linha.get(campo, '').strip() if linha.get(campo) else ''
+            if not valor:
+                # Campo vazio → aviso, não erro
+                avisos.append((
+                    TipoAviso.CAMPO_RECOMENDAVEL_AUSENTE,
+                    f"Campo recomendável '{campo}' está vazio"
+                ))
             else:
                 dados_limpos[campo] = valor
 
@@ -435,23 +524,40 @@ class ValidadorLote:
                 f"Taxa de erro > 50% ({linhas_com_erro}/{len(validacoes)} linhas)"
             )
 
-        # 4. Verificar campos críticos mapeados
+        # 4. Verificar campos bloqueantes mapeados (Camada 2: apenas bloqueantes bloqueiam)
         # IMPORTANTE: Contrato de mapeamento_campos = {coluna_origem: (campo_destino, score)}
-        # Devemos acumular os CAMPOS DESTINO (canônicos) que estão em CAMPOS_CRITICOS
+        # Devemos acumular os CAMPOS DESTINO (canônicos) que estão em CAMPOS_BLOQUEANTES
         # Não colunas de origem, que seria um tipo de dados diferente
         campos_destino_mapeados = {
-            campo for coluna, (campo, score) in mapeamento_campos.items()
-            if campo in ValidadorCampos.CAMPOS_CRITICOS
+            normalizar_campo_importacao(campo)
+            for coluna, (campo, score) in mapeamento_campos.items()
+            if campo and normalizar_campo_importacao(campo) in ValidadorCampos.CAMPOS_BLOQUEANTES
         }
 
-        # Campos críticos que NÃO foram mapeados a nenhuma coluna
-        campos_criticos_faltantes = (
-            ValidadorCampos.CAMPOS_CRITICOS - campos_destino_mapeados
+        # Campos bloqueantes que NÃO foram mapeados a nenhuma coluna
+        campos_bloqueantes_faltantes = (
+            ValidadorCampos.CAMPOS_BLOQUEANTES - campos_destino_mapeados
         )
 
-        if campos_criticos_faltantes:
+        if campos_bloqueantes_faltantes:
             bloqueios.append(
-                f"Campos críticos não mapeados: {', '.join(sorted(campos_criticos_faltantes))}"
+                f"Campos obrigatórios não mapeados: {', '.join(sorted(campos_bloqueantes_faltantes))}"
+            )
+
+        # 4b. Verificar campos recomendáveis mapeados (geram alerta, não bloqueio)
+        campos_recomendaveis_mapeados = {
+            normalizar_campo_importacao(campo)
+            for coluna, (campo, score) in mapeamento_campos.items()
+            if campo and normalizar_campo_importacao(campo) in ValidadorCampos.CAMPOS_RECOMENDAVEIS
+        }
+
+        campos_recomendaveis_faltantes = (
+            ValidadorCampos.CAMPOS_RECOMENDAVEIS - campos_recomendaveis_mapeados
+        )
+
+        if campos_recomendaveis_faltantes:
+            alertas.append(
+                f"Campos recomendáveis não mapeados (gerarão avisos): {', '.join(sorted(campos_recomendaveis_faltantes))}"
             )
 
         # 5. Verificar mapeamentos com baixa confiança

@@ -28,7 +28,7 @@ class TestIntegracaoRotasImportacao:
 
     # ========== POST /ativos/importar/preview ==========
 
-    def test_preview_csv_valido_retorna_200(self, authenticated_client, app_fixture):
+    def test_preview_csv_valido_retorna_200(self, authenticated_client, app_fixture, skip_se_banco_indisponivel):
         """Preview com CSV válido retorna 200 com id_lote."""
         with app_fixture.app_context():
             data = {
@@ -47,7 +47,7 @@ class TestIntegracaoRotasImportacao:
             assert 'id_lote' in payload
             assert 'preview' in payload
 
-    def test_preview_campo_critico_ausente_retorna_400(self, authenticated_client, app_fixture):
+    def test_preview_campo_critico_ausente_retorna_400(self, authenticated_client, app_fixture, skip_se_banco_indisponivel):
         """Preview com campo crítico ausente retorna 400."""
         with app_fixture.app_context():
             data = {
@@ -134,7 +134,7 @@ class TestIntegracaoRotasImportacao:
 
     # ========== POST /ativos/importar/confirmar ==========
 
-    def test_confirmar_checkboxes_incompletos_retorna_400(self, authenticated_client, app_fixture):
+    def test_confirmar_checkboxes_incompletos_retorna_400(self, authenticated_client, app_fixture, skip_se_banco_indisponivel):
         """Confirmar sem todos os checkboxes retorna 400."""
         with app_fixture.app_context():
             data = {
@@ -155,7 +155,7 @@ class TestIntegracaoRotasImportacao:
             assert payload.get('ok') is False
             assert 'checkbox' in payload.get('erro', '').lower() or 'confirmação' in payload.get('erro', '').lower()
 
-    def test_confirmar_checkboxes_completos_retorna_201(self, authenticated_client, app_fixture):
+    def test_confirmar_checkboxes_completos_retorna_201(self, authenticated_client, app_fixture, skip_se_banco_indisponivel):
         """Confirmar com todos os checkboxes retorna 201."""
         with app_fixture.app_context():
             # Primeiro, fazer preview para obter id_lote
@@ -193,7 +193,7 @@ class TestIntegracaoRotasImportacao:
             payload = response.get_json()
             assert payload.get('ok') is True or payload.get('ok') is not False
 
-    def test_confirmar_id_lote_retorna_no_resposta(self, authenticated_client, app_fixture):
+    def test_confirmar_id_lote_retorna_no_resposta(self, authenticated_client, app_fixture, skip_se_banco_indisponivel):
         """Resposta do confirmar inclui id_lote para rastreabilidade."""
         with app_fixture.app_context():
             # Preview
@@ -228,7 +228,7 @@ class TestIntegracaoRotasImportacao:
                 payload = response.get_json()
                 assert 'id_lote' in payload or 'id_lote' in payload.get('resultado', {})
 
-    def test_confirmar_sem_arquivo_retorna_400(self, authenticated_client, app_fixture):
+    def test_confirmar_sem_arquivo_retorna_400(self, authenticated_client, app_fixture, skip_se_banco_indisponivel):
         """Confirmar sem arquivo CSV retorna 400."""
         with app_fixture.app_context():
             data = {

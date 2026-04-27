@@ -10,6 +10,7 @@
 import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+from types import SimpleNamespace
 
 from services.importacao_service import ServicoImportacao
 from services.auditoria_importacao_service import AuditoriaImportacaoService
@@ -17,7 +18,9 @@ from utils.import_validators import (
     ValidadorLote,
     classificar_status_importacao,
 )
+from utils.email_inference import aplicar_inferencia_email_em_dados
 from utils.import_mapper import ResultadoMatch
+from utils.import_schema import CRITICIDADE_CAMPOS  # Para campos_destino_disponiveis
 
 logger = logging.getLogger(__name__)
 
@@ -99,10 +102,15 @@ class ServicoImportacaoComSeguranca:
 
         # 4. Converter linhas para formato de validação
         linhas_dict = []
+        inferencia_por_linha = {}
         for _numero_linha, row in linhas:
             # Mapear usando resultado_mapeamento.matches
             linha_mapeada = self._mapear_linha(row, resultado_mapeamento.matches)
-            linhas_dict.append(linha_mapeada)
+            # Aplica inferencia backend antes da validacao para que a pre-visualizacao
+            # reflita os dados revisados que serao usados na confirmacao final.
+            linha_revisada, metadados_inferencia = aplicar_inferencia_email_em_dados(linha_mapeada)
+            linhas_dict.append(linha_revisada)
+            inferencia_por_linha[_numero_linha] = metadados_inferencia
 
         # 5. Validar lote (com detectores de duplicata)
         usuarios_cache = AuditoriaImportacaoService.obter_usuarios_validos(empresa_id)
@@ -143,6 +151,79 @@ class ServicoImportacaoComSeguranca:
             usuarios_existentes=usuarios_cache,
             ativos_existentes=set(duplicatas_ids.keys())
         )
+
+        # ===== BUG FIX 1: Extrair erros e avisos reais por linha =====
+        # O validador_lote retorna validacoes_por_linha com dados reais de cada linha.
+        # Precisamos extrair isso para a UI em vez de herdar erros_por_linha vazios do preview_base.
+        erros_por_linha_seguro = []
+        avisos_por_linha_seguro = []
+        for idx, validacao in enumerate(validacao_lote.validacoes_por_linha):
+            numero_linha = linhas[idx][0] if idx < len(linhas) else idx + 2
+            if validacao.erros:
+                # Cada erro é tupla (TipoErro, mensagem_str)
+                erros_por_linha_seguro.append({
+                    "linha": numero_linha,
+                    "mensagem": validacao.erros[0][1],  # Primeira mensagem
+                    "erros": [
+                        {"tipo": e[0].name, "mensagem": e[1]}
+                        for e in validacao.erros
+                    ],
+                })
+            if validacao.avisos:
+                # Cada aviso é tupla (TipoAviso, mensagem_str)
+                avisos_por_linha_seguro.append({
+                    "linha": numero_linha,
+                    "mensagens": [a[1] for a in validacao.avisos],
+                })
+
+        # ===== BUG FIX 2: Construir amostra com dados mapeados =====
+        # O frontend lê preview_linhas[].dados_mapeados (nunca existe).
+        # Aqui construímos amostra com dados já convertidos para campos canônicos.
+        amostra_gravacao = [
+            {"linha": linhas[i][0], "dados_mapeados": linhas_dict[i]}
+            for i in range(min(5, len(linhas)))
+        ]
+
+        # ===== NOVO (Camada 4): Construir linhas_revisao completo para grade de revisão =====
+        # (Camada 2 — Central de Revisão: todas as linhas com status, erros, avisos para edição/descarte)
+        linhas_revisao = []
+        for i, (numero_linha, row) in enumerate(linhas):
+            # Comentário: Validar que validacao_por_linha[i] existe (contrato: uma validação por linha)
+            # Se não existir, usar validação default (valid=True, sem erros)
+            if i < len(validacao_lote.validacoes_por_linha):
+                validacao = validacao_lote.validacoes_por_linha[i]
+            else:
+                # Fallback: linha não foi validada (comportamento defensivo)
+                validacao = SimpleNamespace(
+                    valida=True,
+                    erros=[],
+                    avisos=[],
+                    id_ativo=None,
+                )
+            linhas_revisao.append({
+                "linha": numero_linha,
+                # Dados originais do CSV (para referência)
+                "dados_originais": dict(row),
+                # Snapshot mapeado antes da inferencia para rastrear origem dos valores.
+                "dados_mapeados_originais": self._mapear_linha(row, resultado_mapeamento.matches),
+                # Dados após mapeamento (prontos para persistência)
+                "dados_mapeados": linhas_dict[i],
+                # Status de validação
+                "valida": validacao.valida,
+                "tem_erro": len(validacao.erros) > 0,
+                "tem_aviso": len(validacao.avisos) > 0 and len(validacao.erros) == 0,
+                # Metadados da inferencia por e-mail para confirmacao assistida na UI.
+                "inferencia_email": inferencia_por_linha.get(numero_linha, {}),
+                # Erros e avisos estruturados (para exibição)
+                "erros": [
+                    {"tipo": e[0].name, "mensagem": e[1]}
+                    for e in validacao.erros
+                ],
+                "avisos": [
+                    {"tipo": a[0].name, "mensagem": a[1]}
+                    for a in validacao.avisos
+                ],
+            })
 
         # 6. Classificar status
         status_risco, cor = classificar_status_importacao(
@@ -214,6 +295,18 @@ class ServicoImportacaoComSeguranca:
             "colunas_ignoradas": len(preview_base.get("colunas", {}).get("ignoradas", [])),
             "campos_obrigatorios_nao_reconhecidos": len(preview_base.get("campos_obrigatorios_nao_reconhecidos", [])),
         }
+
+        # ===== BUG FIX 1 & 2: Sobrescrever campos com dados corretos do validador =====
+        # O preview_base herda erros_por_linha vazios (preview_base não valida linhas).
+        # Sobrescrevemos com dados reais extraídos de validacoes_por_linha acima.
+        preview_enriquecido["erros_por_linha"] = erros_por_linha_seguro
+        preview_enriquecido["avisos_por_linha"] = avisos_por_linha_seguro
+        preview_enriquecido["preview_linhas"] = amostra_gravacao
+        preview_enriquecido["campos_destino_disponiveis"] = sorted(list(CRITICIDADE_CAMPOS.keys()))
+
+        # ===== NOVO (Camada 4): Adicionar linhas_revisao completo ao preview =====
+        # Grade de revisão contém TODAS as linhas para que o usuário possa editar/descartar
+        preview_enriquecido["linhas_revisao"] = linhas_revisao
 
         logger.info(
             "importacao.preview_seguro id_lote=%s total_linhas=%s validas=%s invalidas=%s exatas=%s sugeridas=%s bloqueios=%s",

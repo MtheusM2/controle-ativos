@@ -1262,6 +1262,12 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         return render_template(
             "importar_ativos.html",
             usuario_email=session.get("user_email"),
+            # Disponibiliza listas controladas para renderização de selects no modal de revisão.
+            status_validos=STATUS_VALIDOS,
+            tipos_validos=TIPOS_ATIVO_VALIDOS,
+            setores_validos=SETORES_VALIDOS,
+            condicoes_validas=CONDICOES_VALIDAS,
+            unidades_validas=UNIDADES_VALIDAS,
             show_chrome=True,
         )
 
@@ -1770,6 +1776,45 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             confirmacoes[coluna_origem.strip()] = campo_destino.strip()
         return confirmacoes
 
+    def _ler_mapeamento_confirmado() -> dict[str, str | None] | None:
+        """
+        Lê o mapeamento consolidado enviado pelo frontend como fonte de verdade.
+
+        Contrato aceito:
+        - objeto JSON com {coluna_origem: campo_destino|null}
+        - valores vazios viram None
+        """
+        bruto = (request.form.get("mapeamento_confirmado") or "").strip()
+        if not bruto:
+            return None
+
+        try:
+            dados = json.loads(bruto)
+        except json.JSONDecodeError as erro:
+            raise AtivoErro("Payload de mapeamento confirmado inválido.") from erro
+
+        if not isinstance(dados, dict):
+            raise AtivoErro("Mapeamento confirmado deve ser enviado em objeto JSON.")
+
+        mapeamento: dict[str, str | None] = {}
+        for coluna_origem, campo_destino in dados.items():
+            if not isinstance(coluna_origem, str):
+                continue
+
+            coluna_norm = coluna_origem.strip()
+            if not coluna_norm:
+                continue
+
+            if campo_destino is None:
+                mapeamento[coluna_norm] = None
+                continue
+
+            if isinstance(campo_destino, str):
+                valor = campo_destino.strip()
+                mapeamento[coluna_norm] = valor or None
+
+        return mapeamento
+
     def _ler_checkboxes_confirmacao() -> dict[str, bool]:
         """
         Lê os 4 checkboxes obrigatórios de confirmação do FormData.
@@ -1846,17 +1891,11 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 len(preview.get('indicador_risco', {}).get('bloqueios', [])),
             )
 
-            # Se há bloqueios críticos, retornar 400 (importação não permitida)
-            bloqueios = preview.get('indicador_risco', {}).get('bloqueios', [])
-            if bloqueios:
-                return _json_error(
-                    "Importação bloqueada por requisitos críticos.",
-                    status=400,
-                    preview=preview,
-                    id_lote=id_lote
-                )
-
-            # Sucesso: retornar preview com id_lote para rastreabilidade
+            # FIX: Retornar 200 SEMPRE quando preview é gerado com sucesso.
+            # Bloqueios críticos são indicados em preview.indicador_risco.bloqueios,
+            # permitindo que o JS renderize a central de revisão mesmo com bloqueios.
+            # A UI decide se desabilita confirmação ou mostra aviso visual.
+            # Isso permite que o usuário veja a preview e edite linhas para resolver bloqueios.
             return _json_success(
                 "Pré-visualização gerada com sucesso.",
                 preview=preview,
@@ -1889,7 +1928,37 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             # Obter dados da requisição (FormData, não JSON)
             id_lote = request.form.get('id_lote', '').strip()
             modo_duplicata = request.form.get('modo_duplicata', 'atualizar').strip()
+            # O frontend envia modo_importacao como fonte de verdade operacional da revisão.
+            modo_importacao = request.form.get('modo_importacao', 'validas_e_avisos').strip()
             sugestoes_confirmadas = _ler_sugestoes_confirmadas()
+            # Usa parser dedicado para garantir contrato estável do mapeamento consolidado.
+            mapeamento_confirmado = _ler_mapeamento_confirmado()
+
+            # Backend normaliza modo para evitar dependência de flags soltas do cliente.
+            if modo_importacao not in {"validas_apenas", "validas_e_avisos", "tudo_ou_nada"}:
+                modo_importacao = "validas_e_avisos"
+
+            # Mapeia escolha da UI para o contrato legado booleano do service.
+            modo_tudo_ou_nada = modo_importacao == 'tudo_ou_nada'
+
+            # ===== NOVO (Camada 2): Ler linhas descartadas e edições manuais =====
+            linhas_descartadas_raw = request.form.get('linhas_descartadas', '[]')
+            edicoes_por_linha_raw = request.form.get('edicoes_por_linha', '{}')
+
+            # Parsear com fallback seguro em caso de JSON inválido
+            try:
+                # linhas_descartadas é um array JSON de números: [2, 5, 7]
+                linhas_descartadas = set(map(int, json.loads(linhas_descartadas_raw)))
+            except (ValueError, TypeError, json.JSONDecodeError):
+                linhas_descartadas = set()
+
+            try:
+                # edicoes_por_linha é um dict JSON: {"2": {"campo": "valor"}, ...}
+                edicoes_dict_parsed = json.loads(edicoes_por_linha_raw)
+                # Converter chaves de string para int para refletir números de linha
+                edicoes_por_linha = {int(k): v for k, v in edicoes_dict_parsed.items()}
+            except (ValueError, TypeError, json.JSONDecodeError):
+                edicoes_por_linha = {}
 
             # Validar checkboxes de confirmação (novo)
             checkboxes = _ler_checkboxes_confirmacao()
@@ -1901,9 +1970,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             ]
 
             logger.info(
-                "importacao.confirmar.recebido id_lote=%s modo_duplicata=%s sugestoes_confirmadas=%s checkboxes=%s form_keys=%s",
+                "importacao.confirmar.recebido id_lote=%s modo_duplicata=%s modo_importacao=%s sugestoes_confirmadas=%s checkboxes=%s form_keys=%s",
                 id_lote or '<vazio>',
                 modo_duplicata or '<vazio>',
+                modo_importacao,
                 len(sugestoes_confirmadas),
                 {k: v for k, v in checkboxes.items()},
                 sorted(request.form.keys()),
@@ -1950,7 +2020,11 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 conteudo_csv,
                 sugestoes_confirmadas,
                 user_id,
-                modo_tudo_ou_nada=True,
+                modo_tudo_ou_nada=modo_tudo_ou_nada,
+                modo_importacao=modo_importacao,
+                mapeamento_confirmado=mapeamento_confirmado,  # NOVO: frontend como fonte de verdade
+                linhas_descartadas=linhas_descartadas,  # NOVO (Camada 2): linhas a pular
+                edicoes_por_linha=edicoes_por_linha,  # NOVO (Camada 2): edições manuais
             )
 
             if not resultado.get("ok_importacao", False):
@@ -1964,12 +2038,15 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                     primeiro_erro,
                 )
                 # NOVO: Registrar erro em auditoria
+                # ===== BUG FIX: Usar campos corretos do resultado =====
+                # Campo correto é 'falhas' não 'total_erros'
+                # Campo correto é 'avisos' (list) não 'total_avisos'
                 if id_lote:
                     AuditoriaImportacaoService.registrar_resultado_importacao(
                         id_lote=id_lote,
                         linhas_importadas=0,
-                        linhas_rejeitadas=resultado.get('total_erros', 0),
-                        linhas_com_aviso=0,
+                        linhas_rejeitadas=resultado.get('falhas', 0),  # Corrigido
+                        linhas_com_aviso=len(resultado.get('avisos', [])),  # Corrigido
                         linhas_atualizadas=0,
                         ids_ativos_afetados=[],
                         mensagem_erro=resultado.get('mensagem_erro', 'Erro desconhecido')
@@ -1982,17 +2059,21 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 )
 
             # NOVO: Registrar sucesso em auditoria
+            # ===== BUG FIX: Usar campos corretos do resultado =====
+            # Campos corretos: ids_criados (não ids_importados/ids_atualizados),
+            # falhas (não total_erros), avisos (list, não total_avisos)
             if id_lote:
-                ids_importados = resultado.get('ids_importados', [])
-                ids_atualizados = resultado.get('ids_atualizados', [])
+                ids_criados = resultado.get('ids_criados', [])
+                total_falhas = resultado.get('falhas', 0)
+                total_avisos = len(resultado.get('avisos', []))
 
                 AuditoriaImportacaoService.registrar_resultado_importacao(
                     id_lote=id_lote,
-                    linhas_importadas=len(ids_importados),
-                    linhas_rejeitadas=resultado.get('total_erros', 0),
-                    linhas_com_aviso=resultado.get('total_avisos', 0),
-                    linhas_atualizadas=len(ids_atualizados),
-                    ids_ativos_afetados=ids_importados + ids_atualizados,
+                    linhas_importadas=len(ids_criados),
+                    linhas_rejeitadas=total_falhas,
+                    linhas_com_aviso=total_avisos,
+                    linhas_atualizadas=0,  # Confirmação sempre cria, não atualiza
+                    ids_ativos_afetados=ids_criados,
                     mensagem_erro=None
                 )
 

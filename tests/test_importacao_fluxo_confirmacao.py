@@ -125,7 +125,7 @@ class FakeBaseImportacao:
 
 
 class FakeValidacaoLote:
-    def __init__(self, total_linhas=2, linhas_validas=2, linhas_com_erro=0, linhas_com_aviso=0, taxa_erro_percentual=0.0, bloqueios=None, alertas=None):
+    def __init__(self, total_linhas=2, linhas_validas=2, linhas_com_erro=0, linhas_com_aviso=0, taxa_erro_percentual=0.0, bloqueios=None, alertas=None, validacoes_por_linha=None):
         self.total_linhas = total_linhas
         self.linhas_validas = linhas_validas
         self.linhas_com_erro = linhas_com_erro
@@ -133,6 +133,7 @@ class FakeValidacaoLote:
         self.taxa_erro_percentual = taxa_erro_percentual
         self.bloqueios = bloqueios or []
         self.alertas = alertas or []
+        self.validacoes_por_linha = validacoes_por_linha or []
 
 
 @pytest.fixture()
@@ -300,3 +301,94 @@ def test_confirmar_importacao_csv_bloqueia_payload_incompleto(monkeypatch):
     assert resultado["ok_importacao"] is False
     assert resultado["falhas"] == 1
     assert "não foi confirmado" in resultado["erros"][0].lower()
+
+
+def test_confirmacao_normaliza_aliases_para_campos_canonicos(monkeypatch):
+    """Aliases legados de entrada devem convergir para nomes canônicos no backend."""
+    servico = AtivosService()
+    capturado = {}
+
+    monkeypatch.setattr(servico, "_obter_contexto_acesso", lambda user_id: {"perfil": "admin", "empresa_id": 10})
+    monkeypatch.setattr(servico, "_usuario_eh_admin", lambda contexto: True)
+
+    monkeypatch.setattr(servico, "_validar_linha_importacao", lambda dados, numero_linha: SimpleNamespace(id_ativo=f"NTB-{numero_linha:03d}"))
+
+    def criar_ativo_fake(ativo, _user_id):
+        capturado["setor"] = ativo.setor
+        capturado["departamento"] = ativo.departamento
+        capturado["localizacao"] = ativo.localizacao
+        capturado["tipo_ativo"] = ativo.tipo_ativo
+        return "NTB-001"
+
+    monkeypatch.setattr(servico, "criar_ativo", criar_ativo_fake)
+
+    resultado = servico.confirmar_importacao_csv(
+        conteudo_csv=(
+            b"Tipo,Marca,Modelo,Departamento,Base,Status,Data Entrada\n"
+            b"Notebook,Dell,Latitude,Rh,Opus Medical,Em Uso,2026-01-15\n"
+        ),
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_importacao="validas_e_avisos",
+        mapeamento_confirmado={
+            "Tipo": "tipo",
+            "Marca": "marca",
+            "Modelo": "modelo",
+            "Departamento": "departamento",
+            "Base": "base",
+            "Status": "status",
+            "Data Entrada": "data_entrada",
+        },
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert capturado["setor"] == "Rh"
+    assert capturado["departamento"] == "Rh"
+    assert capturado["localizacao"] == "Opus Medical"
+    assert capturado["tipo_ativo"] == "Notebook"
+
+
+def test_confirmacao_modo_validas_apenas_descarta_linha_com_aviso(monkeypatch):
+    """Modo validas_apenas deve importar só linhas sem erro e sem aviso."""
+    servico = AtivosService()
+    ids_criados = []
+
+    monkeypatch.setattr(servico, "_obter_contexto_acesso", lambda user_id: {"perfil": "admin", "empresa_id": 10})
+    monkeypatch.setattr(servico, "_usuario_eh_admin", lambda contexto: True)
+    monkeypatch.setattr(servico, "_validar_linha_importacao", lambda dados, numero_linha: SimpleNamespace(id_ativo=f"NTB-{numero_linha:03d}"))
+    monkeypatch.setattr(servico, "criar_ativo", lambda ativo, _user_id: ids_criados.append(ativo.id_ativo) or ativo.id_ativo)
+
+    # Força validação compartilhada com uma linha válida e outra com aviso.
+    resultado_fake = SimpleNamespace(
+        bloqueios=[],
+        alertas=[],
+        validacoes_por_linha=[
+            SimpleNamespace(valida=True, erros=[], avisos=[]),
+            SimpleNamespace(valida=True, erros=[], avisos=[("CAMPO_RECOMENDAVEL_AUSENTE", "setor vazio")]),
+        ],
+    )
+    monkeypatch.setattr(servico._validador_lote_importacao, "validar_lote", lambda **kwargs: resultado_fake)
+
+    resultado = servico.confirmar_importacao_csv(
+        conteudo_csv=(
+            b"tipo_ativo,marca,modelo,setor,status,data_entrada\n"
+            b"Notebook,Dell,Latitude,T.I,Em Uso,2026-01-15\n"
+            b"Desktop,Lenovo,ThinkCentre,,Em Uso,2026-01-16\n"
+        ),
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_importacao="validas_apenas",
+        mapeamento_confirmado={
+            "tipo_ativo": "tipo_ativo",
+            "marca": "marca",
+            "modelo": "modelo",
+            "setor": "setor",
+            "status": "status",
+            "data_entrada": "data_entrada",
+        },
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert resultado["modo_importacao"] == "validas_apenas"
+    assert resultado["importados"] == 1
+    assert any("validas_apenas" in aviso for aviso in resultado["avisos"])

@@ -23,7 +23,7 @@ class TestAuditoriaImportacao:
         assert len(id_lote) > 10
         assert id_lote != AuditoriaImportacaoService.gerar_id_lote()  # Único
 
-    def test_iniciar_auditoria(self):
+    def test_iniciar_auditoria(self, skip_se_banco_indisponivel):
         """Auditoria é criada com status pendente"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -38,7 +38,7 @@ class TestAuditoriaImportacao:
         assert id_lote.startswith("IMP-")
         assert len(id_lote) > 10
 
-    def test_iniciar_auditoria_com_total_linhas(self):
+    def test_iniciar_auditoria_com_total_linhas(self, skip_se_banco_indisponivel):
         """Verifica que total_linhas_arquivo é salvo corretamente no banco"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -63,7 +63,7 @@ class TestAuditoriaImportacao:
         assert resultado['total_linhas_arquivo'] == 150, \
             f"Esperado total_linhas_arquivo=150, obtive {resultado['total_linhas_arquivo']}"
 
-    def test_iniciar_auditoria_sem_total_linhas_usa_default(self):
+    def test_iniciar_auditoria_sem_total_linhas_usa_default(self, skip_se_banco_indisponivel):
         """Verifica que total_linhas_arquivo padrão para 0 quando não informado"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -90,7 +90,7 @@ class TestAuditoriaImportacao:
         assert resultado['total_linhas_arquivo'] == 0, \
             f"Esperado total_linhas_arquivo=0 (padrão), obtive {resultado['total_linhas_arquivo']}"
 
-    def test_registrar_preview_gerado(self):
+    def test_registrar_preview_gerado(self, skip_se_banco_indisponivel):
         """Preview é registrado com bloqueios/alertas"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -115,7 +115,7 @@ class TestAuditoriaImportacao:
         # Se chegou aqui, funcionou
         assert True
 
-    def test_registrar_confirmacao(self):
+    def test_registrar_confirmacao(self, skip_se_banco_indisponivel):
         """Confirmação é registrada"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -135,7 +135,7 @@ class TestAuditoriaImportacao:
         # Se chegou aqui, funcionou
         assert True
 
-    def test_registrar_linha_importada(self):
+    def test_registrar_linha_importada(self, skip_se_banco_indisponivel):
         """Linha importada é registrada"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -159,7 +159,7 @@ class TestAuditoriaImportacao:
         # Se chegou aqui, funcionou
         assert True
 
-    def test_registrar_linha_rejeitada(self):
+    def test_registrar_linha_rejeitada(self, skip_se_banco_indisponivel):
         """Linha rejeitada é registrada"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -182,7 +182,7 @@ class TestAuditoriaImportacao:
         # Se chegou aqui, funcionou
         assert True
 
-    def test_registrar_resultado_importacao(self):
+    def test_registrar_resultado_importacao(self, skip_se_banco_indisponivel):
         """Resultado de importação é registrado"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,
@@ -207,7 +207,7 @@ class TestAuditoriaImportacao:
         # Se chegou aqui, funcionou
         assert True
 
-    def test_detectar_duplicatas(self):
+    def test_detectar_duplicatas(self, skip_se_banco_indisponivel):
         """Detecta IDs que já existem"""
         # Usar IDs conhecidos que podem existir ou não
         ids = ["NTB-001", "NTB-002", "NTB-999999"]
@@ -219,7 +219,7 @@ class TestAuditoriaImportacao:
         # Função retorna dict (pode estar vazio ou com IDs)
         assert isinstance(duplicatas, dict)
 
-    def test_obter_usuarios_validos(self):
+    def test_obter_usuarios_validos(self, skip_se_banco_indisponivel):
         """Retorna cache de usuários da empresa"""
         usuarios = AuditoriaImportacaoService.obter_usuarios_validos(
             empresa_id=1
@@ -228,7 +228,7 @@ class TestAuditoriaImportacao:
         # Deve retornar um set
         assert isinstance(usuarios, set)
 
-    def test_obter_relatorio_importacao(self):
+    def test_obter_relatorio_importacao(self, skip_se_banco_indisponivel):
         """Gera relatório de importação"""
         id_lote = AuditoriaImportacaoService.iniciar_auditoria(
             usuario_id=1,

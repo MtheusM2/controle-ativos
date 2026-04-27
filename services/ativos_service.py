@@ -16,6 +16,12 @@ from difflib import get_close_matches
 from models.ativos import Ativo
 from database.connection import cursor_mysql
 from services.importacao_service import ServicoImportacao
+from utils.email_inference import aplicar_inferencia_email_em_dados
+from utils.import_validators import (
+    ValidadorLote,
+    normalizar_campo_importacao,
+    normalizar_dados_importacao,
+)
 from utils.validators import (
     STATUS_VALIDOS,
     validar_ativo,
@@ -322,7 +328,6 @@ def _snapshot_movimentacao(ativo: Ativo) -> dict:
 # apenas estes campos podem entrar no domínio.
 CAMPOS_IMPORTACAO_SCHEMA = {
     "tipo_ativo",
-    "tipo",
     "marca",
     "modelo",
     "serial",
@@ -332,7 +337,6 @@ CAMPOS_IMPORTACAO_SCHEMA = {
     "condicao",
     "localizacao",
     "setor",
-    "departamento",
     "usuario_responsavel",
     "email_responsavel",
     "status",
@@ -363,6 +367,22 @@ CAMPOS_IMPORTACAO_SCHEMA = {
     "garantia",
 }
 
+# Aliases legados aceitos apenas no payload de entrada.
+# Depois da normalização, o backend persiste e valida em nomes canônicos.
+ALIASES_IMPORTACAO_ENTRADA = {
+    "departamento": "setor",
+    "unidade": "localizacao",
+    "base": "localizacao",
+    "tipo": "tipo_ativo",
+}
+
+# Modos suportados oficialmente no backend.
+MODOS_IMPORTACAO_SUPORTADOS = {
+    "validas_apenas",
+    "validas_e_avisos",
+    "tudo_ou_nada",
+}
+
 # Campos mínimos exigidos para uma importação válida no fluxo web.
 CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW = {
     "tipo_ativo",
@@ -378,6 +398,10 @@ CAMPOS_IMPORTACAO_BLOQUEADOS = {"pc", "conta", "imei", "imei1", "imei2", "imei_1
 
 # Aliases aceitos como sugestão (nunca importados automaticamente).
 ALIASES_IMPORTACAO_SUGERIDOS = {
+    "departamento": "setor",
+    "unidade": "localizacao",
+    "base": "localizacao",
+    "tipo": "tipo_ativo",
     "tipoativo": "tipo_ativo",
     "tipo do ativo": "tipo_ativo",
     "tipo de ativo": "tipo_ativo",
@@ -428,6 +452,19 @@ def _normalizar_nome_coluna_importacao(nome_coluna: str | None) -> str:
     # Mantém apenas caracteres úteis para identificação de campos.
     sem_ruido = re.sub(r"[^a-z0-9_ ]+", "", sem_acentos)
     return re.sub(r"\s+", " ", sem_ruido).strip()
+
+
+def _resolver_modo_importacao_backend(
+    modo_importacao: str | None,
+    modo_tudo_ou_nada: bool,
+) -> str:
+    """Resolve o modo final no backend sem depender de booleano solto do cliente."""
+    modo = (modo_importacao or "").strip().lower()
+    if modo in MODOS_IMPORTACAO_SUPORTADOS:
+        return modo
+
+    # Compatibilidade com chamadas legadas que só enviam booleano.
+    return "tudo_ou_nada" if modo_tudo_ou_nada else "validas_e_avisos"
 
 
 def _eh_coluna_sensivel_importacao(coluna_normalizada: str) -> bool:
@@ -536,7 +573,14 @@ def _aplicar_mapeamento_linha_importacao(row: dict, mapeamento_colunas: dict[str
         valor = (row.get(coluna_origem) or "").strip()
         if not valor:
             continue
-        dados_mapeados[campo_destino] = valor
+        # Normaliza alvo para campo canônico e mantém aliases apenas como entrada.
+        campo_canonico = normalizar_campo_importacao(campo_destino)
+        if not campo_canonico:
+            continue
+        dados_mapeados[campo_canonico] = valor
+
+    # Consolida aliases remanescentes do payload bruto em chaves canônicas.
+    dados_mapeados = normalizar_dados_importacao(dados_mapeados)
 
     # Mantém compatibilidade entre campo oficial e legado.
     if "tipo_ativo" not in dados_mapeados and "tipo" in dados_mapeados:
@@ -671,6 +715,8 @@ class AtivosService:
         Inicializa o serviço com o motor flexível de importação.
         """
         self._servico_importacao = ServicoImportacao()
+        # Reutiliza o mesmo validador de lote do preview seguro para evitar regra divergente.
+        self._validador_lote_importacao = ValidadorLote()
 
     def _construir_ativo_para_atualizacao(self, atual: Ativo, dados: dict) -> Ativo:
         """
@@ -1124,6 +1170,8 @@ class AtivosService:
                 "ignoradas": classificacao["ignoradas"],
             },
             "campos_destino_disponiveis": sorted(CAMPOS_IMPORTACAO_SCHEMA),
+            # Contrato explícito para o frontend validar pendências obrigatórias localmente.
+            "campos_obrigatorios_preview": sorted(CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW),
             "campos_obrigatorios_nao_reconhecidos": campos_obrigatorios_nao_reconhecidos,
             "preview_linhas": linhas_preview,
             "erros_por_linha": erros_por_linha,
@@ -1159,90 +1207,267 @@ class AtivosService:
         user_id: int,
         *,
         modo_tudo_ou_nada: bool = True,
+        modo_importacao: str | None = None,
+        mapeamento_confirmado: dict[str, str | None] | None = None,  # NOVO: frontend como fonte de verdade
+        linhas_descartadas: set[int] | None = None,  # NOVO (Camada 2): linhas a pular {numero_linha, ...}
+        edicoes_por_linha: dict[int, dict] | None = None,  # NOVO (Camada 2): {numero_linha: {campo: valor}}
     ) -> dict:
         """
         Confirma importação em massa com schema-first e confirmação explícita de sugestões.
+
+        Novo (2026-04-23): Parâmetro mapeamento_confirmado permite que o frontend seja
+        a fonte de verdade do mapeamento de colunas. Se fornecido, usa direto sem re-análise.
+
+        Novo (Camada 2 — Revisão por Linha):
+        - linhas_descartadas: set de números de linha a pular ({2, 5, ...})
+        - edicoes_por_linha: dict {numero_linha: {campo: valor}} para sobrescrever valores do CSV
         """
         contexto = self._obter_contexto_acesso(user_id)
         if not self._usuario_eh_admin(contexto):
             raise PermissaoNegada("Apenas administradores podem importar ativos em massa.")
 
         headers, linhas_csv = _carregar_csv_em_memoria(conteudo_csv)
+        modo_importacao_resolvido = _resolver_modo_importacao_backend(modo_importacao, modo_tudo_ou_nada)
+
+        # ===== BUG FIX 3: Suporte a mapeamento_confirmado do frontend =====
+        # Se o frontend fornece mapeamento_confirmado, ele é a fonte de verdade.
+        # Não re-analisamos colunas — apenas validamos dados de linhas.
+        if mapeamento_confirmado is not None:
+            # Frontend enviou mapeamento completo (sem re-análise).
+            # Ainda validamos contrato mínimo para evitar inconsistências de payload.
+            headers_validos = {(header or "").strip() for header in headers}
+            campos_destino_usados = set()
+            avisos_confirmacao: list[str] = []
+            mapeamento_final: dict[str, str] = {}
+
+            for coluna_origem, campo_destino in mapeamento_confirmado.items():
+                coluna = (coluna_origem or "").strip()
+                campo = (campo_destino or "").strip() if isinstance(campo_destino, str) else ""
+
+                if not coluna or not campo or campo == "__ignorar__":
+                    continue
+
+                if coluna not in headers_validos:
+                    avisos_confirmacao.append(
+                        f"Coluna '{coluna}' foi ignorada porque não existe no CSV confirmado."
+                    )
+                    continue
+
+                # Resolve aliases legados para um único campo canônico no backend.
+                campo_norm = normalizar_campo_importacao(_normalizar_nome_coluna_importacao(campo).replace(" ", "_"))
+                if campo_norm not in CAMPOS_IMPORTACAO_SCHEMA:
+                    avisos_confirmacao.append(
+                        f"Campo destino '{campo}' para coluna '{coluna}' foi ignorado por estar fora do schema."
+                    )
+                    continue
+
+                if campo_norm in campos_destino_usados:
+                    avisos_confirmacao.append(
+                        f"Mapeamento ignorado para coluna '{coluna}': campo destino '{campo_norm}' já utilizado."
+                    )
+                    continue
+
+                campos_destino_usados.add(campo_norm)
+                mapeamento_final[coluna] = campo_norm
+
+            campos_faltantes = CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW - set(mapeamento_final.values())
+            if campos_faltantes:
+                logger.warning(
+                    "importacao.confirmacao.mapeamento_incompleto user_id=%s faltantes=%s",
+                    user_id,
+                    sorted(campos_faltantes),
+                )
+                return {
+                    "ok_importacao": False,
+                    "modo_tudo_ou_nada": modo_tudo_ou_nada,
+                    "importados": 0,
+                    "falhas": len(campos_faltantes),
+                    "ids_criados": [],
+                    "avisos": [],
+                    "erros": [
+                        f"Campos obrigatórios não mapeados: {', '.join(sorted(campos_faltantes))}."
+                    ],
+                    "bloqueios_importacao": ["Mapeamento incompleto enviado pelo cliente."],
+                    "colunas": {"exatas": [], "sugeridas": [], "ignoradas": []},
+                }
+            avisos_confirmacao: list[str] = []
+            classificacao = {"exatas": [], "sugeridas": [], "ignoradas": []}
+            # Pular análise de colunas — ir direto para validação de linhas
+            usar_mapeamento_confirmado = True
+        else:
+            # Código existente (backward compat com sugestoes_confirmadas)
+            usar_mapeamento_confirmado = False
+
         logger.info(
-            "importacao.confirmacao.inicio user_id=%s headers=%s linhas=%s sugestoes_confirmadas=%s modo_tudo_ou_nada=%s",
+            "importacao.confirmacao.inicio user_id=%s headers=%s linhas=%s mapeamento_confirmado=%s sugestoes_confirmadas=%s modo_tudo_ou_nada=%s modo_importacao=%s",
             user_id,
             len(headers),
             len(linhas_csv),
+            "sim" if usar_mapeamento_confirmado else "não",
             len(sugestoes_confirmadas or {}),
             modo_tudo_ou_nada,
+            modo_importacao_resolvido,
         )
 
-        # Comentário: Tenta motor inteligente primeiro; fallback para antigo se falhar
-        try:
-            classificacao = self._fazer_classificacao_inteligente(headers)
-            usando_motor_novo = True
-        except (AttributeError, KeyError, TypeError, ValueError) as e:
-            # Comentário: Fallback para motor antigo se novo falhar
-            print(f"Fallback para motor antigo em confirmar_importacao_csv: {e}")
-            classificacao = _classificar_colunas_importacao(headers)
-            usando_motor_novo = False
+        if not usar_mapeamento_confirmado:
+            # ===== Path legado: análise de colunas antes de validação de linhas =====
+            # Comentário: Tenta motor inteligente primeiro; fallback para antigo se falhar
+            try:
+                classificacao = self._fazer_classificacao_inteligente(headers)
+                usando_motor_novo = True
+            except (AttributeError, KeyError, TypeError, ValueError) as e:
+                # Comentário: Fallback para motor antigo se novo falhar
+                print(f"Fallback para motor antigo em confirmar_importacao_csv: {e}")
+                classificacao = _classificar_colunas_importacao(headers)
+                usando_motor_novo = False
 
-        mapeamento_exato = classificacao.get("mapeamento_exato", {})
-        if usando_motor_novo:
-            mapeamento_exato = self._extrair_mapeamento_exato(classificacao)
-        classificacao["mapeamento_exato"] = mapeamento_exato
+            mapeamento_exato = classificacao.get("mapeamento_exato", {})
+            if usando_motor_novo:
+                mapeamento_exato = self._extrair_mapeamento_exato(classificacao)
+            classificacao["mapeamento_exato"] = mapeamento_exato
 
-        mapeamento_final, avisos_confirmacao = self._resolver_mapeamento_confirmado(
-            classificacao,
-            sugestoes_confirmadas,
-        )
-
-        sugestoes_obrigatorias_pendentes = []
-        for sugestao in classificacao.get("sugeridas", []):
-            campo_sugerido = sugestao.get("campo_sugerido")
-            coluna_origem = sugestao.get("coluna_origem")
-            if campo_sugerido not in CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW:
-                continue
-            if coluna_origem in mapeamento_final:
-                continue
-            sugestoes_obrigatorias_pendentes.append((coluna_origem, campo_sugerido))
-
-        if sugestoes_obrigatorias_pendentes:
-            erros_confirmacao = [
-                f"Campo obrigatório '{campo}' não foi confirmado para a coluna '{coluna}'."
-                for coluna, campo in sugestoes_obrigatorias_pendentes
-            ]
-            logger.warning(
-                "importacao.confirmacao.bloqueio_sugestoes user_id=%s faltantes=%s primeiro=%s",
-                user_id,
-                len(erros_confirmacao),
-                erros_confirmacao[0] if erros_confirmacao else None,
+            mapeamento_final, avisos_confirmacao = self._resolver_mapeamento_confirmado(
+                classificacao,
+                sugestoes_confirmadas,
             )
+
+            sugestoes_obrigatorias_pendentes = []
+            for sugestao in classificacao.get("sugeridas", []):
+                campo_sugerido = sugestao.get("campo_sugerido")
+                coluna_origem = sugestao.get("coluna_origem")
+                if campo_sugerido not in CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW:
+                    continue
+                if coluna_origem in mapeamento_final:
+                    continue
+                sugestoes_obrigatorias_pendentes.append((coluna_origem, campo_sugerido))
+
+            if sugestoes_obrigatorias_pendentes:
+                erros_confirmacao = [
+                    f"Campo obrigatório '{campo}' não foi confirmado para a coluna '{coluna}'."
+                    for coluna, campo in sugestoes_obrigatorias_pendentes
+                ]
+                logger.warning(
+                    "importacao.confirmacao.bloqueio_sugestoes user_id=%s faltantes=%s primeiro=%s",
+                    user_id,
+                    len(erros_confirmacao),
+                    erros_confirmacao[0] if erros_confirmacao else None,
+                )
+                return {
+                    "ok_importacao": False,
+                    "modo_tudo_ou_nada": modo_tudo_ou_nada,
+                    "importados": 0,
+                    "falhas": len(erros_confirmacao),
+                    "ids_criados": [],
+                    "erros": erros_confirmacao,
+                    "avisos": avisos_confirmacao,
+                    "bloqueios_importacao": [
+                        "Existem mapeamentos obrigatórios sugeridos sem confirmação explícita."
+                    ],
+                    "colunas": {
+                        "exatas": classificacao["exatas"],
+                        "sugeridas": classificacao["sugeridas"],
+                        "ignoradas": classificacao["ignoradas"],
+                    },
+                }
+
+        ativos_validos: list[Ativo] = []
+        erros: list[str] = []
+        pendencias_inferencia: list[str] = []
+        linhas_ativas_revisadas: list[tuple[int, dict]] = []
+
+        for numero_linha, row in linhas_csv:
+            # Em todos os modos, apenas linhas ativas (não descartadas) entram no cálculo final.
+            if linhas_descartadas and numero_linha in linhas_descartadas:
+                continue
+
+            dados_mapeados = _aplicar_mapeamento_linha_importacao(row, mapeamento_final)
+
+            # Edição manual tem prioridade e é aplicada no payload canônico.
+            campos_editados_manualmente: set[str] = set()
+            if edicoes_por_linha and numero_linha in edicoes_por_linha:
+                edicoes = edicoes_por_linha[numero_linha] or {}
+                for campo, valor in edicoes.items():
+                    campo_norm = normalizar_campo_importacao(
+                        _normalizar_nome_coluna_importacao(str(campo)).replace(" ", "_")
+                    )
+                    if campo_norm not in CAMPOS_IMPORTACAO_SCHEMA:
+                        continue
+                    campos_editados_manualmente.add(campo_norm)
+                    dados_mapeados[campo_norm] = "" if valor is None else str(valor).strip()
+
+            # Consolida aliases de entrada para evitar competição entre campos equivalentes.
+            dados_mapeados = normalizar_dados_importacao(dados_mapeados)
+
+            # Inferência por e-mail só preenche campo ausente/inválido e nunca sobrepõe edição manual.
+            dados_mapeados, metadados_inferencia = aplicar_inferencia_email_em_dados(
+                dados_mapeados,
+                campos_editados_manualmente=campos_editados_manualmente,
+            )
+
+            sugestoes_pendentes = metadados_inferencia.get("sugestoes_pendentes", {})
+            if sugestoes_pendentes:
+                campos_pendentes = ", ".join(sorted(sugestoes_pendentes.keys()))
+                pendencias_inferencia.append(
+                    f"Linha {numero_linha}: inferência pendente para {campos_pendentes}."
+                )
+
+            linhas_ativas_revisadas.append((numero_linha, dados_mapeados))
+
+        # A confirmação usa o mesmo validador de lote da prévia para eliminar divergência de regra.
+        mapeamento_para_validacao = {
+            coluna: (normalizar_campo_importacao(campo_destino), 1.0)
+            for coluna, campo_destino in mapeamento_final.items()
+            if campo_destino
+        }
+        validacao_lote = self._validador_lote_importacao.validar_lote(
+            linhas=[dados for _, dados in linhas_ativas_revisadas],
+            mapeamento_campos=mapeamento_para_validacao,
+        )
+
+        # Bloqueios de contrato do lote sempre interrompem a confirmação.
+        if validacao_lote.bloqueios:
             return {
                 "ok_importacao": False,
-                "modo_tudo_ou_nada": modo_tudo_ou_nada,
+                "modo_tudo_ou_nada": modo_importacao_resolvido == "tudo_ou_nada",
+                "modo_importacao": modo_importacao_resolvido,
                 "importados": 0,
-                "falhas": len(erros_confirmacao),
+                "falhas": len(validacao_lote.bloqueios),
                 "ids_criados": [],
-                "erros": erros_confirmacao,
-                "avisos": avisos_confirmacao,
-                "bloqueios_importacao": [
-                    "Existem mapeamentos obrigatórios sugeridos sem confirmação explícita."
-                ],
+                "erros": list(validacao_lote.bloqueios),
+                "avisos": avisos_confirmacao + list(validacao_lote.alertas),
+                "bloqueios_importacao": list(validacao_lote.bloqueios),
                 "colunas": {
                     "exatas": classificacao["exatas"],
                     "sugeridas": classificacao["sugeridas"],
                     "ignoradas": classificacao["ignoradas"],
                 },
+                "linhas_descartadas": len(linhas_descartadas) if linhas_descartadas else 0,
+                "linhas_editadas": len(edicoes_por_linha) if edicoes_por_linha else 0,
             }
 
-        ativos_validos: list[Ativo] = []
-        erros: list[str] = []
-        for numero_linha, row in linhas_csv:
-            dados_mapeados = _aplicar_mapeamento_linha_importacao(row, mapeamento_final)
+        for indice, resultado_validacao in enumerate(validacao_lote.validacoes_por_linha):
+            numero_linha, dados_mapeados = linhas_ativas_revisadas[indice]
+
+            if not resultado_validacao.valida:
+                # Linha com erro do validador compartilhado é sempre rejeitada na confirmação.
+                for _tipo, mensagem in resultado_validacao.erros:
+                    erros.append(f"Linha {numero_linha}: {mensagem}")
+                continue
+
+            if (
+                modo_importacao_resolvido == "validas_apenas"
+                and resultado_validacao.avisos
+            ):
+                # Em validas_apenas, linhas com aviso não bloqueiam o lote, mas são ignoradas.
+                avisos_confirmacao.append(
+                    f"Linha {numero_linha}: ignorada no modo validas_apenas por conter avisos."
+                )
+                continue
+
             try:
                 ativos_validos.append(self._validar_linha_importacao(dados_mapeados, numero_linha))
             except AtivoErro as erro:
+                # Validação de domínio final mantém consistência de persistência.
                 erros.append(str(erro))
 
         logger.info(
@@ -1254,8 +1479,8 @@ class AtivosService:
             erros[0] if erros else None,
         )
 
-        # Evita importação parcial silenciosa: padrão é bloquear persistência se houver erro.
-        if erros and modo_tudo_ou_nada:
+        # Modo tudo_ou_nada é decidido no backend e considera apenas linhas ativas revisadas.
+        if erros and modo_importacao_resolvido == "tudo_ou_nada":
             logger.warning(
                 "importacao.confirmacao.bloqueio_linhas user_id=%s falhas=%s primeiro_erro=%s",
                 user_id,
@@ -1265,6 +1490,7 @@ class AtivosService:
             return {
                 "ok_importacao": False,
                 "modo_tudo_ou_nada": True,
+                "modo_importacao": modo_importacao_resolvido,
                 "importados": 0,
                 "falhas": len(erros),
                 "ids_criados": [],
@@ -1290,21 +1516,44 @@ class AtivosService:
                 erros_persistencia.append(
                     f"Linha validada #{indice + 1}: falha ao persistir ({str(erro)})."
                 )
-                if modo_tudo_ou_nada:
+                if modo_importacao_resolvido == "tudo_ou_nada":
                     # Não há transação única entre múltiplas criações; a resposta deixa isso explícito.
                     break
 
         erros_finais = erros + erros_persistencia
+
+        # Em modos parciais, linhas inválidas ativas são rejeitadas individualmente sem derrubar o lote inteiro.
+        if erros and modo_importacao_resolvido != "tudo_ou_nada":
+            avisos_confirmacao.append(
+                f"{len(erros)} linha(s) ativa(s) foram rejeitadas por validação e não serão importadas neste lote."
+            )
+        if pendencias_inferencia:
+            # Exibe no maximo 5 pendencias para manter retorno legivel.
+            avisos_confirmacao.extend(pendencias_inferencia[:5])
+
+        ok_importacao = False
+        if modo_importacao_resolvido == "tudo_ou_nada":
+            ok_importacao = len(erros_finais) == 0
+        else:
+            # No modo parcial, sucesso significa: sem falha de persistência e ao menos uma linha importada.
+            ok_importacao = len(erros_persistencia) == 0 and len(ids_criados) > 0
+        # ===== NOVO (Camada 2): Contadores de descarte e edição =====
+        linhas_descartadas_count = len(linhas_descartadas) if linhas_descartadas else 0
+        linhas_editadas_count = len(edicoes_por_linha) if edicoes_por_linha else 0
+
         logger.info(
-            "importacao.confirmacao.resultado user_id=%s importados=%s falhas=%s persistencia_falhas=%s",
+            "importacao.confirmacao.resultado user_id=%s importados=%s falhas=%s persistencia_falhas=%s descartadas=%s editadas=%s",
             user_id,
             len(ids_criados),
             len(erros_finais),
             len(erros_persistencia),
+            linhas_descartadas_count,
+            linhas_editadas_count,
         )
         return {
-            "ok_importacao": len(erros_finais) == 0,
-            "modo_tudo_ou_nada": modo_tudo_ou_nada,
+            "ok_importacao": ok_importacao,
+            "modo_tudo_ou_nada": modo_importacao_resolvido == "tudo_ou_nada",
+            "modo_importacao": modo_importacao_resolvido,
             "importados": len(ids_criados),
             "falhas": len(erros_finais),
             "ids_criados": ids_criados,
@@ -1316,6 +1565,9 @@ class AtivosService:
                 "sugeridas": classificacao["sugeridas"],
                 "ignoradas": classificacao["ignoradas"],
             },
+            # ===== NOVO (Camada 2): Metadados de revisão =====
+            "linhas_descartadas": linhas_descartadas_count,
+            "linhas_editadas": linhas_editadas_count,
         }
 
     def gerar_preview_atualizacao(self, id_ativo: str, dados: dict, user_id: int) -> dict:

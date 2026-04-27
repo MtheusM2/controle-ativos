@@ -2278,3 +2278,410 @@ body.app-body {
     color: var(--text-2);
     font-size: 0.82rem;
 }
+
+/* =============================== */
+/* Importação em Massa — Central de Revisão (novas classes) */
+/* =============================== */
+
+/* Select de mapeamento de coluna — corrige o tema escuro */
+/* Usa .select-control em vez de .input-control para fundo escuro consistente */
+.mapping-select {
+    /* Herda de .select-control — fundo escuro, borda clara, foco com glow vinho */
+}
+
+/* Tabela de mapeamento — estados visuais por linha */
+.mapping-row {
+    position: relative;
+    border-left: 3px solid transparent;
+    transition: border-left-color 0.2s ease;
+}
+
+/* Auto-confirmada: coluna reconhecida com confiança alta */
+.mapping-row.mapping-auto-confirmada {
+    border-left-color: var(--ok);
+    background: linear-gradient(90deg, rgba(21, 143, 106, 0.06), transparent 40%);
+}
+
+/* Precisa confirmar: sugestão que exige decisão do usuário */
+.mapping-row.mapping-precisa-confirmar {
+    border-left-color: var(--warning);
+    background: linear-gradient(90deg, rgba(187, 122, 27, 0.08), transparent 40%);
+}
+
+/* Confirmada manualmente: sugestão que foi aceita/remapeada */
+.mapping-row.mapping-confirmada-manual {
+    border-left-color: var(--ok);
+    background: linear-gradient(90deg, rgba(21, 143, 106, 0.04), transparent 40%);
+}
+
+/* Ignorada: coluna não mapeada, será descartada */
+.mapping-row.mapping-ignorada {
+    opacity: 0.55;
+    border-left-color: var(--text-2);
+}
+
+/* Badges de estado de mapeamento */
+.badge-auto_confirmada {
+    background: rgba(21, 143, 106, 0.16);
+    border: 1px solid rgba(21, 143, 106, 0.5);
+    color: #8ae5c3;
+}
+
+.badge-precisa_confirmar {
+    background: rgba(187, 122, 27, 0.16);
+    border: 1px solid rgba(187, 122, 27, 0.55);
+    color: #ffd89d;
+}
+
+.badge-confirmada_manual {
+    background: rgba(21, 143, 106, 0.16);
+    border: 1px solid rgba(21, 143, 106, 0.5);
+    color: #8ae5c3;
+}
+
+.badge-ignorada {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line-strong);
+    color: var(--text-2);
+}
+
+/* =============================== */
+/* Tabela de Revisão por Linha */
+/* =============================== */
+
+.table-review {
+    /* Variante menor de .table-premium para grade de revisão */
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+.table-review thead {
+    background: rgba(255, 255, 255, 0.02);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table-review th {
+    color: var(--text-2);
+    padding: 9px 10px;
+    text-align: left;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.table-review td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--text-0);
+    vertical-align: middle;
+}
+
+/* Estados visuais de linha na grade de revisão */
+
+/* Linha com dados válidos */
+.review-row-valida {
+    border-left: 3px solid var(--ok);
+}
+
+.review-row-valida:hover {
+    background: rgba(21, 143, 106, 0.06);
+}
+
+/* Linha com aviso (válida mas com ressalvas) */
+.review-row-aviso {
+    border-left: 3px solid var(--warning);
+}
+
+.review-row-aviso:hover {
+    background: rgba(187, 122, 27, 0.08);
+}
+
+/* Linha com erro (não será importada) */
+.review-row-erro {
+    border-left: 3px solid var(--danger);
+}
+
+.review-row-erro:hover {
+    background: rgba(179, 38, 71, 0.08);
+}
+
+/* Linha descartada manualmente pelo usuário */
+.review-row-descartada {
+    opacity: 0.45;
+    text-decoration: line-through;
+    border-left-color: var(--text-2);
+}
+
+.review-row-descartada:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Status badge dentro da grade de revisão */
+.review-status-badge {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.review-status-valida {
+    background: rgba(21, 143, 106, 0.2);
+    border: 1px solid rgba(21, 143, 106, 0.5);
+    color: #8ae5c3;
+}
+
+.review-status-aviso {
+    background: rgba(187, 122, 27, 0.2);
+    border: 1px solid rgba(187, 122, 27, 0.55);
+    color: #ffd89d;
+}
+
+.review-status-erro {
+    background: rgba(179, 38, 71, 0.2);
+    border: 1px solid rgba(179, 38, 71, 0.55);
+    color: #ffc7d4;
+}
+
+.review-status-descartada {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line-strong);
+    color: var(--text-2);
+}
+
+/* Ícone de status (✓, ⚠, ✗, —) */
+.review-status-icon {
+    font-weight: 700;
+    font-size: 0.75rem;
+}
+
+/* Resumo de erros/avisos em célula compacta */
+.review-cell-messages {
+    font-size: 0.75rem;
+    color: var(--text-2);
+    line-height: 1.3;
+}
+
+.review-cell-messages-error {
+    color: #ffc7d4;
+    font-weight: 500;
+}
+
+.review-cell-messages-warning {
+    color: #ffd89d;
+}
+
+/* Botões de ação em cada linha de revisão */
+.review-row-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.review-action-btn {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+    border-radius: 6px;
+    border: 1px solid var(--line-soft);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-1);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.review-action-btn:hover {
+    border-color: var(--wine-2);
+    background: rgba(168, 25, 54, 0.15);
+    color: var(--text-0);
+}
+
+.review-action-btn.delete {
+    border-color: rgba(179, 38, 71, 0.4);
+    color: #ffdbe2;
+}
+
+.review-action-btn.delete:hover {
+    border-color: var(--danger);
+    background: rgba(179, 38, 71, 0.2);
+}
+
+/* =============================== */
+/* Resumo e Opções de Lote */
+/* =============================== */
+
+/* Grade de contadores da revisão */
+.revisao-sumario {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+/* Card individual do sumário */
+.revisao-sumario-card {
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    background: var(--bg-1);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: center;
+}
+
+.revisao-sumario-card strong {
+    color: var(--text-2);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.revisao-sumario-card span {
+    color: var(--text-0);
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+/* Destaque para número de linhas a importar */
+.revisao-sumario-card.to-import {
+    border-color: rgba(21, 143, 106, 0.5);
+    background: rgba(21, 143, 106, 0.1);
+}
+
+.revisao-sumario-card.to-import span {
+    color: #8ae5c3;
+}
+
+/* Opções de modo de importação */
+.import-mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.import-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.import-mode-option:hover {
+    border-color: rgba(168, 25, 54, 0.3);
+    background: rgba(168, 25, 54, 0.08);
+}
+
+.import-mode-option input[type="radio"] {
+    cursor: pointer;
+}
+
+.import-mode-option input[type="radio"]:checked + label {
+    color: var(--text-0);
+    font-weight: 600;
+}
+
+.import-mode-option label {
+    margin: 0;
+    cursor: pointer;
+    color: var(--text-1);
+    flex: 1;
+}
+
+.import-mode-option .mode-description {
+    display: block;
+    color: var(--text-2);
+    font-size: 0.75rem;
+    margin-top: 2px;
+}
+
+/* =============================== */
+/* Modal de Edição de Linha */
+/* =============================== */
+
+/* Mini-modal para editar dados de uma linha específica */
+.edit-line-modal {
+    /* Herda do .modal — apenas ajustes de tamanho */
+}
+
+.edit-line-modal .modal-content {
+    width: min(680px, 100%);
+}
+
+.edit-line-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.edit-line-modal-header h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-0);
+}
+
+/* Grid de campos dentro do modal de edição */
+.edit-line-fields {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.edit-line-fields .field-group {
+    grid-column: auto;
+}
+
+/* Campo com erro no modal: destaca visualmente causa raiz sem poluir layout. */
+.edit-line-fields .field-group.edit-field-error {
+    border: 1px solid rgba(179, 38, 71, 0.45);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(179, 38, 71, 0.08);
+}
+
+/* Label compacto para modal de edição */
+.edit-line-fields label {
+    font-size: 0.73rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-1);
+    display: block;
+    margin-bottom: 4px;
+    letter-spacing: 0.3px;
+}
+
+/* Input compacto para modal de edição */
+.edit-line-fields input,
+.edit-line-fields select {
+    font-size: 0.83rem;
+    padding: 7px 9px;
+    border-radius: 8px;
+}
+
+/* Botões de ação do modal de edição */
+.edit-line-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.edit-line-actions .btn {
+    font-size: 0.78rem;
+    padding: 8px 12px;
+}

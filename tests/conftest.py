@@ -284,3 +284,64 @@ def aplicar_headers_csrf_no_client_teste(test_client, flask_app, user_id: int) -
     headers = gerar_headers_csrf_para_teste(flask_app, user_id=user_id)
     test_client.environ_base["HTTP_X_CSRF_TOKEN"] = headers["X-CSRF-Token"]
     test_client.environ_base["HTTP_X_REQUESTED_WITH"] = headers["X-Requested-With"]
+
+
+def verificar_banco_dados_teste_disponivel() -> bool:
+    """
+    Verifica se o banco de dados de teste está disponível.
+    Tenta conectar com as credenciais configuradas no ambiente.
+    """
+    try:
+        import mysql.connector
+        
+        conn = mysql.connector.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            port=int(os.getenv("DB_PORT", "3306")),
+            user=os.getenv("DB_USER", "test"),
+            password=os.getenv("DB_PASSWORD", "test"),
+            database=os.getenv("DB_NAME", "test"),
+            autocommit=True,
+            connection_timeout=2
+        )
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+# Adiciona marcador para testes que requerem banco de dados
+def pytest_configure(config):
+    """
+    Registra o marcador 'requires_db' para testes que precisam de conexão com banco de dados.
+    Estes testes serão pulados se o banco de dados não estiver disponível.
+    """
+    config.addinivalue_line(
+        "markers",
+        "requires_db: marca testes que requerem banco de dados disponível"
+    )
+
+
+# Fixture para pular testes se o banco não estiver disponível
+@pytest.fixture(scope="session", autouse=True)
+def verificar_banco_dados():
+    """
+    Verifica disponibilidade do banco de dados no início da sessão de testes.
+    Se não estiver disponível, marca testes 'requires_db' para serem pulados.
+    """
+    banco_disponivel = verificar_banco_dados_teste_disponivel()
+    
+    if not banco_disponivel:
+        # Store flag para que testes possam verificar later
+        pytest.skip_db_tests = True
+
+
+@pytest.fixture
+def skip_se_banco_indisponivel(request):
+    """
+    Fixture para ser usada em testes que requerem banco de dados.
+    Pula o teste se o banco não estiver disponível.
+    """
+    if getattr(pytest, 'skip_db_tests', False):
+        pytest.skip("Banco de dados de teste não disponível. " +
+                   "Para usar este teste, configure um usuário 'test' com senha 'test' no MySQL.")
+    return True

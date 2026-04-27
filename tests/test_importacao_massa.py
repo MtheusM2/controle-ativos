@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from types import SimpleNamespace
 
 from services.ativos_service import AtivoErro, AtivosService
 
@@ -40,6 +41,9 @@ def test_preview_importacao_classifica_exatas_sugeridas_e_ignoradas():
     assert any(item["coluna_origem"] == "PC" for item in ignoradas)
     assert any(item["coluna_origem"] == "IMEI" for item in ignoradas)
     assert any(item["coluna_origem"] == "password" for item in ignoradas)
+    # Contrato explícito para o frontend validar obrigatórios no estado consolidado.
+    assert "campos_obrigatorios_preview" in resultado
+    assert "data_entrada" in resultado["campos_obrigatorios_preview"]
     assert resumo["total_linhas"] == 1
     assert resumo["linhas_validas"] == 1
 
@@ -174,3 +178,230 @@ def test_preview_importacao_rejeita_csv_vazio():
 
     with pytest.raises(AtivoErro):
         service.gerar_preview_importacao_csv(b"", user_id=1)
+
+
+def test_confirmar_importacao_tudo_ou_nada_ignora_linha_descartada_com_erro(monkeypatch):
+    """
+    Regressão: linha descartada não pode bloquear o modo tudo-ou-nada.
+    """
+    service = _service_admin()
+
+    monkeypatch.setattr(service, "_usuario_eh_admin", lambda _ctx: True)
+
+    def validar_linha(_dados, numero_linha):
+        if numero_linha == 3:
+            raise AtivoErro("Linha 3: Setor inválido. Use um destes: T.I, Rh, Adm.")
+        return SimpleNamespace(id_ativo=f"OPU-{numero_linha:06d}")
+
+    monkeypatch.setattr(service, "_validar_linha_importacao", validar_linha)
+    monkeypatch.setattr(service, "criar_ativo", lambda ativo, _user_id: ativo.id_ativo)
+
+    conteudo_csv = (
+        "tipo_ativo,marca,modelo,setor,status,data_entrada\n"
+        "Notebook,Dell,XPS,T.I,Disponível,2026-04-17\n"
+        "Notebook,Dell,XPS,Compras,Disponível,2026-04-17\n"
+    ).encode("utf-8")
+
+    resultado = service.confirmar_importacao_csv(
+        conteudo_csv,
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_tudo_ou_nada=True,
+        mapeamento_confirmado={
+            "tipo_ativo": "tipo_ativo",
+            "marca": "marca",
+            "modelo": "modelo",
+            "setor": "setor",
+            "status": "status",
+            "data_entrada": "data_entrada",
+        },
+        linhas_descartadas={3},
+        edicoes_por_linha={},
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert resultado["importados"] == 1
+    assert resultado["falhas"] == 0
+
+
+def test_confirmar_importacao_aplica_edicao_em_campo_canonico_apos_mapeamento(monkeypatch):
+    """
+    Regressão de contrato: edição enviada como campo canônico (setor)
+    deve sobrescrever valor mapeado mesmo quando o CSV usa outro cabeçalho.
+    """
+    service = _service_admin()
+    dados_recebidos = {}
+
+    monkeypatch.setattr(service, "_usuario_eh_admin", lambda _ctx: True)
+
+    def validar_linha(dados, numero_linha):
+        dados_recebidos[numero_linha] = dict(dados)
+        if dados.get("setor") != "T.I":
+            raise AtivoErro(f"Linha {numero_linha}: Setor inválido. Use um destes: T.I, Rh, Adm.")
+        return SimpleNamespace(id_ativo=f"OPU-{numero_linha:06d}")
+
+    monkeypatch.setattr(service, "_validar_linha_importacao", validar_linha)
+    monkeypatch.setattr(service, "criar_ativo", lambda ativo, _user_id: ativo.id_ativo)
+
+    conteudo_csv = (
+        "Tipo,Marca,Modelo,Departamento,Status,Data Entrada\n"
+        "Notebook,Dell,XPS,Compras,Disponível,2026-04-17\n"
+    ).encode("utf-8")
+
+    resultado = service.confirmar_importacao_csv(
+        conteudo_csv,
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_tudo_ou_nada=True,
+        mapeamento_confirmado={
+            "Tipo": "tipo_ativo",
+            "Marca": "marca",
+            "Modelo": "modelo",
+            "Departamento": "setor",
+            "Status": "status",
+            "Data Entrada": "data_entrada",
+        },
+        linhas_descartadas=set(),
+        edicoes_por_linha={2: {"setor": "T.I"}},
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert dados_recebidos[2]["setor"] == "T.I"
+    assert dados_recebidos[2]["departamento"] == "T.I"
+
+
+def test_confirmar_importacao_modo_parcial_nao_falha_por_linhas_invalidas_ativas(monkeypatch):
+    """
+    Em modo parcial, erros de validação por linha devem gerar rejeição parcial,
+    sem derrubar importação das linhas válidas.
+    """
+    service = _service_admin()
+
+    monkeypatch.setattr(service, "_usuario_eh_admin", lambda _ctx: True)
+
+    def validar_linha(_dados, numero_linha):
+        if numero_linha == 3:
+            raise AtivoErro("Linha 3: Setor inválido. Use um destes: T.I, Rh, Adm.")
+        return SimpleNamespace(id_ativo=f"OPU-{numero_linha:06d}")
+
+    monkeypatch.setattr(service, "_validar_linha_importacao", validar_linha)
+    monkeypatch.setattr(service, "criar_ativo", lambda ativo, _user_id: ativo.id_ativo)
+
+    conteudo_csv = (
+        "tipo_ativo,marca,modelo,setor,status,data_entrada\n"
+        "Notebook,Dell,XPS,T.I,Disponível,2026-04-17\n"
+        "Notebook,Dell,XPS,Compras,Disponível,2026-04-17\n"
+    ).encode("utf-8")
+
+    resultado = service.confirmar_importacao_csv(
+        conteudo_csv,
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_tudo_ou_nada=False,
+        mapeamento_confirmado={
+            "tipo_ativo": "tipo_ativo",
+            "marca": "marca",
+            "modelo": "modelo",
+            "setor": "setor",
+            "status": "status",
+            "data_entrada": "data_entrada",
+        },
+        linhas_descartadas=set(),
+        edicoes_por_linha={},
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert resultado["importados"] == 1
+    assert resultado["falhas"] == 1
+    assert any("rejeitadas" in aviso.lower() for aviso in resultado["avisos"])
+
+
+def test_confirmar_importacao_aplica_inferencia_email_em_campos_ausentes(monkeypatch):
+    """
+    Regressao: confirmacao deve validar linha com base na versao revisada,
+    incluindo inferencia por e-mail quando setor/localizacao estiverem ausentes.
+    """
+    service = _service_admin()
+    dados_recebidos = {}
+
+    monkeypatch.setattr(service, "_usuario_eh_admin", lambda _ctx: True)
+
+    def validar_linha(dados, numero_linha):
+        dados_recebidos[numero_linha] = dict(dados)
+        if dados.get("setor") != "T.I":
+            raise AtivoErro(f"Linha {numero_linha}: Setor inválido.")
+        if dados.get("localizacao") != "Opus Medical":
+            raise AtivoErro(f"Linha {numero_linha}: Localização inválida.")
+        return SimpleNamespace(id_ativo=f"OPU-{numero_linha:06d}")
+
+    monkeypatch.setattr(service, "_validar_linha_importacao", validar_linha)
+    monkeypatch.setattr(service, "criar_ativo", lambda ativo, _user_id: ativo.id_ativo)
+
+    conteudo_csv = (
+        "tipo_ativo,marca,modelo,status,data_entrada,email_responsavel\n"
+        "Notebook,Dell,XPS,Disponível,2026-04-17,ti@opusmedical.com.br\n"
+    ).encode("utf-8")
+
+    resultado = service.confirmar_importacao_csv(
+        conteudo_csv,
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_tudo_ou_nada=True,
+        mapeamento_confirmado={
+            "tipo_ativo": "tipo_ativo",
+            "marca": "marca",
+            "modelo": "modelo",
+            "status": "status",
+            "data_entrada": "data_entrada",
+            "email_responsavel": "email_responsavel",
+        },
+        linhas_descartadas=set(),
+        edicoes_por_linha={},
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert dados_recebidos[2]["setor"] == "T.I"
+    assert dados_recebidos[2]["localizacao"] == "Opus Medical"
+
+
+def test_confirmar_importacao_inferencia_nao_sobrescreve_setor_manual(monkeypatch):
+    """
+    Prioridade de fontes: setor editado manualmente deve vencer inferencia de e-mail.
+    """
+    service = _service_admin()
+    dados_recebidos = {}
+
+    monkeypatch.setattr(service, "_usuario_eh_admin", lambda _ctx: True)
+
+    def validar_linha(dados, numero_linha):
+        dados_recebidos[numero_linha] = dict(dados)
+        return SimpleNamespace(id_ativo=f"OPU-{numero_linha:06d}")
+
+    monkeypatch.setattr(service, "_validar_linha_importacao", validar_linha)
+    monkeypatch.setattr(service, "criar_ativo", lambda ativo, _user_id: ativo.id_ativo)
+
+    conteudo_csv = (
+        "tipo_ativo,marca,modelo,status,data_entrada,email_responsavel\n"
+        "Notebook,Dell,XPS,Disponível,2026-04-17,ti@opusmedical.com.br\n"
+    ).encode("utf-8")
+
+    resultado = service.confirmar_importacao_csv(
+        conteudo_csv,
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_tudo_ou_nada=True,
+        mapeamento_confirmado={
+            "tipo_ativo": "tipo_ativo",
+            "marca": "marca",
+            "modelo": "modelo",
+            "status": "status",
+            "data_entrada": "data_entrada",
+            "email_responsavel": "email_responsavel",
+        },
+        linhas_descartadas=set(),
+        edicoes_por_linha={2: {"setor": "Rh"}},
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert dados_recebidos[2]["setor"] == "Rh"
+    assert dados_recebidos[2]["departamento"] == "Rh"

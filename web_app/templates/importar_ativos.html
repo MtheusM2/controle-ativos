@@ -6,7 +6,7 @@
 <section class="page-intro">
     <div>
         <h2 class="page-title">Importação em massa de ativos</h2>
-        <p class="page-subtitle">Fluxo schema-first com pré-visualização, confirmação de sugestões e gravação segura.</p>
+        <p class="page-subtitle">Central de revisão com pré-visualização, mapeamento, edição por linha e gravação segura.</p>
     </div>
 
     <div class="page-actions">
@@ -15,8 +15,12 @@
     </div>
 </section>
 
+<!-- Feedback central para mensagens de sucesso/erro -->
 <div id="import-feedback" class="flash-stack" hidden></div>
 
+<!-- =============================== -->
+<!-- SEÇÃO 1: Upload e Análise (existente) -->
+<!-- =============================== -->
 <section class="panel">
     <div class="panel-header panel-header-split">
         <h3 class="title-section">Upload e análise do CSV</h3>
@@ -36,33 +40,147 @@
     </div>
 </section>
 
+<!-- Painel de pré-visualização (oculto até sucesso na análise) -->
 <section class="panel" id="import-preview-panel" hidden>
     <div class="panel-header panel-header-split">
-        <h3 class="title-section">Pré-visualização</h3>
+        <h3 class="title-section">Pré-visualização e Revisão</h3>
     </div>
     <div class="panel-body">
+        <!-- Resumo de contadores -->
         <div id="import-summary" class="field-group import-preview-summary"></div>
 
-        <div class="field-group">
-            <h4>Campos reconhecidos automaticamente</h4>
-            <div id="exact-columns-container"></div>
+        <!-- =============================== -->
+        <!-- BLOCO A: Mapeamento de Colunas (refactor — corrigir select branco) -->
+        <!-- =============================== -->
+        <div class="field-group" id="mapping-table-container" hidden>
+            <h4>Bloco A — Mapeamento de Colunas</h4>
+            <p class="field-help">Revise e ajuste o mapeamento de cada coluna do CSV para os campos correspondentes. As colunas destacadas em amarelo exigem sua confirmação explícita.</p>
+            <div class="table-wrapper">
+                <table class="table-premium table-mapping">
+                    <thead>
+                        <tr>
+                            <th>Coluna do CSV</th>
+                            <th>Campo de Destino</th>
+                            <th>Confiança</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mapping-table-body"></tbody>
+                </table>
+            </div>
         </div>
 
-        <div class="field-group">
-            <h4>Mapeamentos sugeridos (confirme ou ajuste)</h4>
-            <div id="suggested-columns-container"></div>
-        </div>
-
-        <div class="field-group">
-            <h4>Colunas ignoradas</h4>
-            <div id="ignored-columns-container"></div>
-        </div>
-
+        <!-- Campos obrigatórios não reconhecidos -->
         <div class="field-group">
             <h4>Campos obrigatórios não reconhecidos</h4>
             <div id="missing-required-container"></div>
         </div>
 
+        <!-- =============================== -->
+        <!-- BLOCO B: Revisão por Linha (NOVO) -->
+        <!-- =============================== -->
+        <div class="field-group" id="review-lines-container" hidden>
+            <h4>Bloco B — Revisão por Linha</h4>
+            <p class="field-help">Revise cada linha do CSV: veja o status (válida/aviso/erro), edite valores antes de importar ou descarte a linha. Ao descartar, a linha não será importada.</p>
+
+            <!-- Filtros de visualização -->
+            <div class="field-group">
+                <label>Mostrar:</label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary btn-mini review-filter-btn" data-filter="todas">Todas</button>
+                    <button type="button" class="btn btn-secondary btn-mini review-filter-btn" data-filter="validas">Válidas</button>
+                    <button type="button" class="btn btn-secondary btn-mini review-filter-btn" data-filter="avisos">Com aviso</button>
+                    <button type="button" class="btn btn-secondary btn-mini review-filter-btn" data-filter="erros">Com erro</button>
+                    <button type="button" class="btn btn-secondary btn-mini review-filter-btn" data-filter="descartadas">Descartadas</button>
+                </div>
+            </div>
+
+            <!-- Grade de revisão -->
+            <div class="table-wrapper">
+                <table class="table-review" id="review-lines-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 100px;">Status</th>
+                            <th>Dados</th>
+                            <th style="width: 150px;">Mensagens</th>
+                            <th style="width: 120px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="review-lines-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- =============================== -->
+        <!-- BLOCO C: Opções de Lote (NOVO) -->
+        <!-- =============================== -->
+        <div class="field-group" id="batch-options-container" hidden>
+            <h4>Bloco C — Opções de Importação</h4>
+            <p class="field-help">Escolha como lidar com linhas que têm avisos ou erros. O modo "Importar válidas + avisos" é recomendado para máxima compatibilidade.</p>
+
+            <!-- Modo de importação -->
+            <div class="import-mode-options">
+                <div class="import-mode-option">
+                    <input type="radio" id="mode-validas-apenas" name="modo_importacao" value="validas_apenas">
+                    <label for="mode-validas-apenas">Importar apenas linhas válidas</label>
+                    <span class="mode-description">Descarta automaticamente linhas com avisos ou erros</span>
+                </div>
+
+                <div class="import-mode-option">
+                    <input type="radio" id="mode-validas-avisos" name="modo_importacao" value="validas_e_avisos" checked>
+                    <label for="mode-validas-avisos">Importar válidas + linhas com aviso (recomendado)</label>
+                    <span class="mode-description">Bloqueia apenas erros críticos, importa avisos</span>
+                </div>
+
+                <div class="import-mode-option">
+                    <input type="radio" id="mode-tudo-ou-nada" name="modo_importacao" value="tudo_ou_nada">
+                    <label for="mode-tudo-ou-nada">Tentar importar tudo (modo tudo-ou-nada)</label>
+                    <span class="mode-description">Se houver qualquer erro, descarta o lote inteiro</span>
+                </div>
+            </div>
+
+            <!-- Opção de campos opcionais -->
+            <div class="field-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="allow-empty-optional" checked>
+                    Permitir campos opcionais vazios
+                </label>
+                <span class="field-help">Se marcado, campos recomendáveis (setor, data_entrada) vazios geram aviso, não erro.</span>
+            </div>
+
+            <!-- Info dinâmica -->
+            <div class="field-group">
+                <div class="revisao-sumario">
+                    <div class="revisao-sumario-card">
+                        <strong>Total</strong>
+                        <span id="summary-total">0</span>
+                    </div>
+                    <div class="revisao-sumario-card">
+                        <strong>Válidas</strong>
+                        <span id="summary-valid">0</span>
+                    </div>
+                    <div class="revisao-sumario-card">
+                        <strong>Com Aviso</strong>
+                        <span id="summary-warning">0</span>
+                    </div>
+                    <div class="revisao-sumario-card">
+                        <strong>Com Erro</strong>
+                        <span id="summary-error">0</span>
+                    </div>
+                    <div class="revisao-sumario-card">
+                        <strong>Descartadas</strong>
+                        <span id="summary-discarded">0</span>
+                    </div>
+                    <div class="revisao-sumario-card to-import">
+                        <strong>A Importar</strong>
+                        <span id="summary-to-import">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Amostra de gravação (preview das 5 primeiras linhas) -->
         <div class="field-group">
             <h4>Amostra de gravação (como cada linha será salva)</h4>
             <div class="table-wrapper">
@@ -73,6 +191,7 @@
             </div>
         </div>
 
+        <!-- Erros e avisos gerais -->
         <div class="field-group">
             <h4>Erros por linha</h4>
             <div id="line-errors-container"></div>
@@ -93,8 +212,13 @@
             <div id="validation-messages-container"></div>
         </div>
 
+        <!-- =============================== -->
+        <!-- BLOCO D: Confirmação Final (refactor existente) -->
+        <!-- =============================== -->
         <div class="field-group">
-            <h4>Confirmações obrigatórias</h4>
+            <h4>Bloco D — Confirmação Final</h4>
+            <p class="field-help">Confirme que reviu os dados e está autorizado a prosseguir com a importação.</p>
+
             <div class="checkboxes-confirmacao">
                 <label class="checkbox-label">
                     <input type="checkbox" name="revisor_dados" id="revisor-dados" class="checkbox-obrigatorio">
@@ -115,25 +239,111 @@
             </div>
         </div>
 
+        <!-- Botões de ação -->
         <div class="field-group">
             <button type="button" class="btn btn-primary" id="confirm-import-btn" disabled>Confirmar importação</button>
             <small id="confirm-requirements-hint" class="field-help"></small>
         </div>
     </div>
 </section>
+
+<!-- Modal de edição de linha (NOVO para Bloco B) -->
+<div id="edit-line-modal" class="modal edit-line-modal" hidden>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h4 id="edit-line-modal-title">Editar linha</h4>
+            <button type="button" class="btn btn-close" data-close-modal="edit-line-modal">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="edit-line-fields" id="edit-line-fields"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal="edit-line-modal">Cancelar</button>
+            <button type="button" class="btn btn-primary" id="edit-line-save-btn">Confirmar edição</button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Referências do fluxo de importação.
+    // ===== NOVA ARQUITETURA (Camada 2 — Central de Revisão) =====
+    // Listas oficiais para campos controlados no modal de revisão por linha.
+    const LISTAS_CONTROLADAS_IMPORTACAO = {
+        tipo_ativo: {{ tipos_validos | tojson }},
+        status: {{ status_validos | tojson }},
+        setor: {{ setores_validos | tojson }},
+        localizacao: {{ unidades_validas | tojson }},
+        unidade: {{ unidades_validas | tojson }},
+        condicao: {{ condicoes_validas | tojson }},
+    };
+
+    // Campos críticos que costumam bloquear importação; aparecem primeiro no modal.
+    const CAMPOS_CRITICOS_IMPORTACAO = [
+        "tipo_ativo",
+        "status",
+        "setor",
+        "localizacao",
+        "usuario_responsavel",
+        "email_responsavel",
+        "marca",
+        "modelo",
+        "data_entrada",
+    ];
+
+    // Campos que permanecem livres como texto por natureza do domínio.
+    const CAMPOS_LIVRES_PREFERIDOS = new Set([
+        "modelo",
+        "marca",
+        "observacoes",
+        "serial",
+        "codigo_interno",
+        "descricao",
+    ]);
+
+    // Estado centralizado da revisão — único ponto de verdade
+    let estadoRevisao = {
+        // Dados do preview
+        linhas: [],                    // array de {linha, valida, tem_erro, tem_aviso, erros, avisos, dados_mapeados, ...}
+        preview: null,                 // último preview completo
+
+        // Decisões do usuário
+        descartadas: new Set(),        // números de linha descartadas
+        edicoesPorLinha: {},           // {numero_linha: {campo: valor}}
+
+        // Configurações
+        modoImportacao: 'validas_e_avisos',  // 'validas_apenas' | 'validas_e_avisos' | 'tudo_ou_nada'
+        filtroAtual: 'todas',
+        mapeamento: {},                // estadoMapeamento existente (unificado)
+
+        // Contadores calculados
+        totais: {
+            total: 0,
+            validas: 0,
+            avisos: 0,
+            erros: 0,
+            descartadas: 0,
+            aImportar: 0
+        }
+    };
+
+    // Referências do DOM (mantidas para compatibilidade)
     const importFeedback = document.getElementById("import-feedback");
     const previewPanel = document.getElementById("import-preview-panel");
     const previewButton = document.getElementById("preview-import-btn");
     const confirmButton = document.getElementById("confirm-import-btn");
     const fileInput = document.getElementById("csv-file-input");
-    const exactColumnsContainer = document.getElementById("exact-columns-container");
-    const suggestedColumnsContainer = document.getElementById("suggested-columns-container");
-    const ignoredColumnsContainer = document.getElementById("ignored-columns-container");
+
+    const mappingTableContainer = document.getElementById("mapping-table-container");
+    const mappingTableBody = document.getElementById("mapping-table-body");
+
+    const reviewLinesContainer = document.getElementById("review-lines-container");
+    const reviewLinesBody = document.getElementById("review-lines-body");
+    const reviewLinesTable = document.getElementById("review-lines-table");
+
+    const batchOptionsContainer = document.getElementById("batch-options-container");
+
     const missingRequiredContainer = document.getElementById("missing-required-container");
     const importSummaryContainer = document.getElementById("import-summary");
     const validationMessagesContainer = document.getElementById("validation-messages-container");
@@ -144,8 +354,22 @@
     const previewTableHead = document.getElementById("preview-table-head");
     const previewTableBody = document.getElementById("preview-table-body");
 
-    // Estado do último preview para montar confirmação sem ambiguidade.
-    let currentPreview = null;
+    const editLineModal = document.getElementById("edit-line-modal");
+    const editLineModalTitle = document.getElementById("edit-line-modal-title");
+    const editLineFields = document.getElementById("edit-line-fields");
+    const editLineSaveBtn = document.getElementById("edit-line-save-btn");
+
+    // ===== FUNÇÕES UTILITÁRIAS =====
+
+    function setContainerHtml(element, html, nomeContainer) {
+        // Guarda defensiva para evitar quebra global quando um container não existir.
+        if (!element) {
+            console.warn(`[importacao] Container ausente: ${nomeContainer}`);
+            return false;
+        }
+        element.innerHTML = html;
+        return true;
+    }
 
     function escapeHtml(text) {
         const raw = String(text ?? "");
@@ -188,6 +412,8 @@
         `;
     }
 
+    // ===== FUNÇÕES DE RENDERIZAÇÃO =====
+
     function renderSummary(preview) {
         const resumo = preview.validacao_detalhes || preview.resumo_validacao || preview.resumo_analise || {};
         importSummaryContainer.innerHTML = `
@@ -203,67 +429,16 @@
     }
 
     function renderColumns(preview) {
-        const colunas = preview.colunas || {};
-        const camposDestinoDisponiveis = preview.campos_destino_disponiveis || [];
-
-        exactColumnsContainer.innerHTML = renderSimpleList(
-            colunas.exatas || [],
-            "Nenhuma correspondência exata encontrada.",
-            (item) => `${escapeHtml(item.coluna_origem)} → <strong>${escapeHtml(item.campo_destino)}</strong>`
-        );
-
-        // Cada sugestão exige decisão explícita para evitar importação cega.
-        if (!colunas.sugeridas?.length) {
-            suggestedColumnsContainer.innerHTML = "<p>Nenhuma sugestão pendente.</p>";
-        } else {
-            suggestedColumnsContainer.innerHTML = `
-                <ul>
-                    ${colunas.sugeridas.map((item, index) => `
-                        <li>
-                            <div class="suggestion-item">
-                                <div>
-                                    <strong>${escapeHtml(item.coluna_origem)}</strong>
-                                    <span> → ${escapeHtml(item.campo_sugerido)}</span>
-                                    <span class="suggestion-meta">score ${Number(item.score || 0).toFixed(2)} | ${escapeHtml(item.motivo || "sugestão")}</span>
-                                </div>
-                                <label for="suggestion-select-${index}">Decisão</label>
-                                <select
-                                    id="suggestion-select-${index}"
-                                    class="input-control suggestion-select"
-                                    data-coluna-origem="${escapeHtml(item.coluna_origem)}"
-                                    data-campo-sugerido="${escapeHtml(item.campo_sugerido)}"
-                                >
-                                    <option value="__pendente__" selected>Selecione uma decisão</option>
-                                    <option value="${escapeHtml(item.campo_sugerido)}">Aplicar sugestão</option>
-                                    ${camposDestinoDisponiveis.map((campo) => {
-                                        if (campo === item.campo_sugerido) return "";
-                                        return `<option value="${escapeHtml(campo)}">Ajustar para ${escapeHtml(campo)}</option>`;
-                                    }).join("")}
-                                    <option value="__ignorar__">Ignorar coluna</option>
-                                </select>
-                            </div>
-                        </li>
-                    `).join("")}
-                </ul>
-            `;
-        }
-
-        ignoredColumnsContainer.innerHTML = renderSimpleList(
-            colunas.ignoradas || [],
-            "Nenhuma coluna ignorada.",
-            (item) => `${escapeHtml(item.coluna_origem)} — ${escapeHtml(item.motivo || "ignorada")}`
-        );
-
         const camposObrigatoriosFaltando = preview.campos_obrigatorios_nao_reconhecidos || [];
-        missingRequiredContainer.innerHTML = renderSimpleList(
-            camposObrigatoriosFaltando,
-            "Nenhum campo obrigatório faltando no reconhecimento.",
-            (item) => `<strong>${escapeHtml(item)}</strong>`
+        setContainerHtml(
+            missingRequiredContainer,
+            renderSimpleList(
+                camposObrigatoriosFaltando,
+                "Nenhum campo obrigatório faltando no reconhecimento.",
+                (item) => `<strong>${escapeHtml(item)}</strong>`
+            ),
+            "missing-required-container"
         );
-
-        document.querySelectorAll(".suggestion-select").forEach((select) => {
-            select.addEventListener("change", atualizarEstadoConfirmacao);
-        });
     }
 
     function renderPreviewRows(preview) {
@@ -343,12 +518,190 @@
     }
 
     function renderBlockers(preview) {
-        const bloqueios = preview.bloqueios_importacao || [];
-        importBlockersContainer.innerHTML = renderSimpleList(
-            bloqueios,
-            "Sem bloqueios técnicos no preview.",
-            (item) => escapeHtml(item)
-        );
+        // FIX: Ler bloqueios do indicador_risco (estrutura corrigida).
+        // Bloqueios são emitidos pelo ValidadorLote como uma lista de strings.
+        const indicadorRisco = preview.indicador_risco || {};
+        const bloqueios = indicadorRisco.bloqueios || [];
+
+        // Renderizar bloqueios com destaque visual
+        if (bloqueios.length > 0) {
+            let html = '<div class="blockers-list">';
+            for (const bloqueio of bloqueios) {
+                html += `<div class="blocker-item" style="padding: 8px; margin: 4px 0; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 2px;">
+                    <strong>⛔ Bloqueio: </strong>${escapeHtml(bloqueio)}
+                </div>`;
+            }
+            html += '</div>';
+            importBlockersContainer.innerHTML = html;
+        } else {
+            importBlockersContainer.innerHTML = '<div style="color: var(--text-2); font-size: 0.9rem;">Sem bloqueios técnicos no preview.</div>';
+        }
+    }
+
+    // ===== FUNÇÕES DE MAPEAMENTO DE COLUNAS =====
+
+    // Estado interno de mapeamento (compatível com código existente)
+    let estadoMapeamento = {};
+
+    function construirTabelaMapeamento(preview) {
+        estadoMapeamento = {};
+        if (!mappingTableBody || !mappingTableContainer) {
+            console.warn("[importacao] Tabela de mapeamento não encontrada no DOM.");
+            return;
+        }
+        mappingTableBody.innerHTML = "";
+
+        const colunas = preview.colunas || {};
+        const camposDisponiveis = preview.campos_destino_disponiveis || [];
+
+        // Unificar todas as colunas com seus estados
+        const todasColunas = [
+            ...(colunas.exatas || []).map(c => ({...c, estado: 'auto_confirmada'})),
+            ...(colunas.sugeridas || []).map(c => ({...c, estado: 'precisa_confirmar'})),
+            ...(colunas.ignoradas || []).map(c => ({...c, estado: 'ignorada'})),
+        ];
+
+        // Registrar estado de cada coluna
+        for (const col of todasColunas) {
+            const colunaOrigem = col.coluna_origem || '';
+            const campoSugerido = col.campo_sugerido || null;
+            const campo = col.estado === 'precisa_confirmar' ? null : (col.campo_destino || null);
+            estadoMapeamento[colunaOrigem] = {
+                campo: campo,
+                estado: col.estado,
+                estado_original: col.estado,
+                campo_sugerido: campoSugerido,
+                score: col.score || 0,
+                motivo: col.motivo || '',
+            };
+        }
+
+        // Renderizar tabela
+        for (const col of todasColunas) {
+            const tr = criarLinhaTabela(col, camposDisponiveis);
+            mappingTableBody.appendChild(tr);
+        }
+
+        mappingTableContainer.hidden = false;
+    }
+
+    function criarLinhaTabela(col, camposDisponiveis) {
+        const tr = document.createElement('tr');
+        const estado = col.estado || 'auto_confirmada';
+        const colunaOrigem = col.coluna_origem || '';
+        const estadoAtual = estadoMapeamento[colunaOrigem] || {};
+        const campoAtual = estadoAtual.campo;
+        const campoSugerido = estadoAtual.campo_sugerido;
+
+        // CSS por estado
+        let classeEstado = '';
+        let badgeTexto = '';
+        if (estado === 'auto_confirmada') {
+            classeEstado = 'mapping-auto-confirmada';
+            badgeTexto = '✓ Auto-confirmada';
+        } else if (estado === 'precisa_confirmar') {
+            classeEstado = 'mapping-precisa-confirmar';
+            badgeTexto = '⚠ Confirmar';
+        } else if (estado === 'ignorada') {
+            classeEstado = 'mapping-ignorada';
+            badgeTexto = '—  Ignorada';
+        }
+
+        tr.className = `mapping-row ${classeEstado}`;
+
+        // Coluna 1: Nome da coluna CSV
+        const tdColuna = document.createElement('td');
+        tdColuna.textContent = colunaOrigem;
+        tr.appendChild(tdColuna);
+
+        // Coluna 2: Campo de destino (dropdown — CORRIGIDO para usar .select-control)
+        const tdCampo = document.createElement('td');
+        const select = document.createElement('select');
+        select.className = 'input-control mapping-select';  // FIX: usar .input-control para compatibilidade
+        select.dataset.colunaOrigem = colunaOrigem;
+
+        if (estado === 'precisa_confirmar') {
+            const optPendente = document.createElement('option');
+            optPendente.value = '__pendente__';
+            optPendente.textContent = 'Selecione uma decisão';
+            optPendente.selected = campoAtual === null;
+            select.appendChild(optPendente);
+        }
+
+        if (campoSugerido) {
+            const optSugestao = document.createElement('option');
+            optSugestao.value = campoSugerido;
+            optSugestao.textContent = `Aplicar sugestão: ${campoSugerido}`;
+            optSugestao.selected = campoAtual === campoSugerido;
+            select.appendChild(optSugestao);
+        }
+
+        for (const c of camposDisponiveis) {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = `Mapear para: ${c}`;
+            opt.selected = campoAtual === c;
+            select.appendChild(opt);
+        }
+
+        const optIgnorar = document.createElement('option');
+        optIgnorar.value = '__ignorar__';
+        optIgnorar.textContent = 'Ignorar coluna';
+        optIgnorar.selected = estadoAtual.estado === 'ignorada';
+        select.appendChild(optIgnorar);
+
+        select.addEventListener('change', () => {
+            atualizarEstadoMapeamento(colunaOrigem, select.value);
+            const estadoLinha = estadoMapeamento[colunaOrigem]?.estado || 'precisa_confirmar';
+            tr.className = `mapping-row ${estadoLinha === 'auto_confirmada' ? 'mapping-auto-confirmada' : (estadoLinha === 'ignorada' ? 'mapping-ignorada' : 'mapping-precisa-confirmar')}`;
+            tdEstado.innerHTML = `<span class="badge badge-${estadoLinha}">${escapeHtml(estadoLinha === 'auto_confirmada' ? '✓ Auto-confirmada' : (estadoLinha === 'ignorada' ? '—  Ignorada' : '⚠ Confirmar'))}</span>`;
+        });
+        tdCampo.appendChild(select);
+        tr.appendChild(tdCampo);
+
+        // Coluna 3: Confiança (score)
+        const tdScore = document.createElement('td');
+        const scoreNormalizado = Number(col.score || 0);
+        tdScore.textContent = scoreNormalizado > 0 ? `${(scoreNormalizado * 100).toFixed(0)}%` : '—';
+        tr.appendChild(tdScore);
+
+        // Coluna 4: Estado (badge)
+        const tdEstado = document.createElement('td');
+        tdEstado.innerHTML = `<span class="badge badge-${estado}">${escapeHtml(badgeTexto)}</span>`;
+        tr.appendChild(tdEstado);
+
+        return tr;
+    }
+
+    function atualizarEstadoMapeamento(colunaOrigem, valor) {
+        if (!estadoMapeamento[colunaOrigem]) {
+            estadoMapeamento[colunaOrigem] = {};
+        }
+
+        if (valor === '__ignorar__') {
+            estadoMapeamento[colunaOrigem].campo = null;
+            estadoMapeamento[colunaOrigem].estado = 'ignorada';
+        } else if (valor === '__pendente__') {
+            estadoMapeamento[colunaOrigem].campo = null;
+            estadoMapeamento[colunaOrigem].estado = 'precisa_confirmar';
+        } else {
+            estadoMapeamento[colunaOrigem].campo = valor;
+            const estadoOriginal = estadoMapeamento[colunaOrigem].estado_original;
+            const campoOriginal = estadoMapeamento[colunaOrigem].campo_sugerido || valor;
+            estadoMapeamento[colunaOrigem].estado = (
+                estadoOriginal === 'auto_confirmada' && campoOriginal === valor
+            ) ? 'auto_confirmada' : 'confirmada_manual';
+        }
+
+        atualizarEstadoConfirmacao();
+    }
+
+    function construirMapeamentoConfirmado() {
+        const resultado = {};
+        for (const [coluna, dados] of Object.entries(estadoMapeamento)) {
+            resultado[coluna] = dados.estado === 'ignorada' ? null : dados.campo;
+        }
+        return resultado;
     }
 
     function coletarDecisoesSugestoes() {
@@ -356,44 +709,534 @@
         const destinosSelecionados = [];
         let pendentes = 0;
 
-        document.querySelectorAll(".suggestion-select").forEach((select) => {
-            const colunaOrigem = select.dataset.colunaOrigem || "";
-            const valorSelecionado = String(select.value || "").trim();
+        Object.entries(estadoMapeamento).forEach(([colunaOrigem, dados]) => {
+            const estado = dados?.estado;
+            const campo = String(dados?.campo || '').trim();
+            const estadoOriginal = dados?.estado_original;
 
-            if (!colunaOrigem) return;
-            if (!valorSelecionado || valorSelecionado === "__pendente__") {
+            if (estadoOriginal === 'precisa_confirmar' && !campo && estado !== 'ignorada') {
                 pendentes += 1;
                 return;
             }
-            if (valorSelecionado === "__ignorar__") {
+            if (!campo || estado === 'ignorada') {
                 return;
             }
 
-            confirmacoes[colunaOrigem] = valorSelecionado;
-            destinosSelecionados.push(valorSelecionado);
+            destinosSelecionados.push(campo);
+            if (estadoOriginal === 'precisa_confirmar' || estado === 'confirmada_manual') {
+                confirmacoes[colunaOrigem] = campo;
+            }
         });
 
         return { confirmacoes, pendentes, destinosSelecionados };
     }
 
-    function atualizarEstadoConfirmacao() {
-        const controles = currentPreview?.controles_importacao || {};
-        const bloqueiosBase = Array.isArray(controles.motivos_bloqueio) ? controles.motivos_bloqueio.slice() : [];
-        const podeContinuarBase = Boolean(controles.pode_continuar_base);
-        const decisoes = coletarDecisoesSugestoes();
+    // ===== FUNÇÕES DE REVISÃO POR LINHA (NOVO) =====
 
-        const destinosExatos = new Set((currentPreview?.colunas?.exatas || []).map((item) => item.campo_destino));
+    function renderGradeRevisao(linhas) {
+        if (!linhas || !linhas.length) {
+            reviewLinesBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">Nenhuma linha para revisar</td></tr>';
+            reviewLinesContainer.hidden = false;
+            return;
+        }
+
+        // A grade opera sobre a versao revisada da linha (dados mapeados + edicoes + revalidacao local).
+        const linhasRevisadas = linhas.map((linha) => construirLinhaRevisada(linha));
+
+        // Calcular contadores
+        let totais = {
+            total: linhasRevisadas.length,
+            validas: 0,
+            avisos: 0,
+            erros: 0,
+            descartadas: 0,
+        };
+
+        for (const linha of linhasRevisadas) {
+            if (estadoRevisao.descartadas.has(linha.linha)) {
+                totais.descartadas++;
+            } else if (linha.tem_erro) {
+                totais.erros++;
+            } else if (linha.tem_aviso) {
+                totais.avisos++;
+            } else {
+                totais.validas++;
+            }
+        }
+
+        // Quantidade importável depende do modo selecionado e das linhas ativas.
+        if (estadoRevisao.modoImportacao === 'validas_apenas') {
+            totais.aImportar = totais.validas;
+        } else if (estadoRevisao.modoImportacao === 'validas_e_avisos') {
+            totais.aImportar = totais.validas + totais.avisos;
+        } else {
+            // Em tudo-ou-nada, qualquer erro ativo derruba o lote inteiro.
+            totais.aImportar = totais.erros > 0 ? 0 : (totais.total - totais.descartadas);
+        }
+
+        // Armazenar no estado para usar em outros lugares
+        estadoRevisao.totais = totais;
+        estadoRevisao.linhas = linhasRevisadas;
+
+        // Renderizar grid
+        let html = '';
+        const linhasFiltradas = filtrarLinhasRevisao(linhasRevisadas, estadoRevisao.filtroAtual);
+        for (const linha of linhasFiltradas) {
+            const isDescartada = estadoRevisao.descartadas.has(linha.linha);
+            let statusClass = 'review-row-descartada';
+            let statusBadge = 'review-status-descartada';
+            let statusTexto = '— Descartada';
+            let statusIcon = '—';
+
+            if (!isDescartada) {
+                if (linha.tem_erro) {
+                    statusClass = 'review-row-erro';
+                    statusBadge = 'review-status-erro';
+                    statusTexto = '✗ Erro';
+                    statusIcon = '✗';
+                } else if (linha.tem_aviso) {
+                    statusClass = 'review-row-aviso';
+                    statusBadge = 'review-status-aviso';
+                    statusTexto = '⚠ Aviso';
+                    statusIcon = '⚠';
+                } else {
+                    statusClass = 'review-row-valida';
+                    statusBadge = 'review-status-valida';
+                    statusTexto = '✓ Válida';
+                    statusIcon = '✓';
+                }
+            }
+
+            // Resumo de dados (primeiros campos)
+            const dadosMapeados = linha.dados_mapeados || {};
+            const campos = Object.keys(dadosMapeados).slice(0, 4);
+            const resumoDados = campos.map(c => `${c}: ${escapeHtml((dadosMapeados[c] || '').toString().slice(0, 20))}`).join(' | ') || '(sem dados)';
+
+            // Mensagens de erro/aviso
+            let mensagens = '';
+            if (linha.erros && linha.erros.length) {
+                mensagens += `<div class="review-cell-messages-error">Erros: ${linha.erros.map(e => escapeHtml(e.mensagem)).join('; ')}</div>`;
+            }
+            if (linha.avisos && linha.avisos.length) {
+                mensagens += `<div class="review-cell-messages-warning">Avisos: ${linha.avisos.map(a => escapeHtml(a.mensagem)).join('; ')}</div>`;
+            }
+
+            // Botões de ação
+            let botoes = '';
+            if (!isDescartada) {
+                botoes += `<button type="button" class="review-action-btn" onclick="abrirModalEdicao(${linha.linha})">Editar</button>`;
+                botoes += `<button type="button" class="review-action-btn delete" onclick="descartarLinha(${linha.linha})">Descartar</button>`;
+            } else {
+                botoes += `<button type="button" class="review-action-btn" onclick="restaurarLinha(${linha.linha})">Restaurar</button>`;
+            }
+
+            html += `
+                <tr class="${statusClass}">
+                    <td>${linha.linha}</td>
+                    <td><span class="review-status-badge ${statusBadge}"><span class="review-status-icon">${statusIcon}</span> ${statusTexto}</span></td>
+                    <td style="font-size: 0.8rem; color: var(--text-2);">${resumoDados}</td>
+                    <td class="review-cell-messages">${mensagens}</td>
+                    <td class="review-row-actions">${botoes}</td>
+                </tr>
+            `;
+        }
+
+        reviewLinesBody.innerHTML = html;
+        reviewLinesContainer.hidden = false;
+        atualizarSumarioRevisao();
+        atualizarEstadoBotoesFiltro();
+        // Mantem o preview consolidado sincronizado com a grade revisada e recalcula o CTA.
+        if (estadoRevisao.preview) {
+            estadoRevisao.preview.linhas_revisao = linhasRevisadas;
+        }
+        atualizarEstadoConfirmacao();
+    }
+
+    function obterDadosRevisadosLinha(linha) {
+        // Consolida dados da linha com edicoes locais para manter uma unica fonte de verdade no frontend.
+        const base = { ...(linha?.dados_mapeados || {}) };
+        const edicoes = estadoRevisao.edicoesPorLinha[linha?.linha] || {};
+        Object.entries(edicoes).forEach(([campo, valor]) => {
+            base[campo] = valor;
+        });
+        if (base.setor && !base.departamento) {
+            base.departamento = base.setor;
+        }
+        if (base.departamento && !base.setor) {
+            base.setor = base.departamento;
+        }
+        return base;
+    }
+
+    function emListaControlada(campo, valor) {
+        const lista = LISTAS_CONTROLADAS_IMPORTACAO[campo];
+        if (!Array.isArray(lista) || !lista.length) {
+            return true;
+        }
+        return lista.includes(valor);
+    }
+
+    function revalidarLinhaEmMemoria(dadosRevisados) {
+        // Revalidacao imediata para UX operacional: remove erro antigo assim que o valor e corrigido no modal.
+        const erros = [];
+        const avisos = [];
+
+        const tipoAtivo = (dadosRevisados.tipo_ativo || dadosRevisados.tipo || '').trim();
+        const marca = (dadosRevisados.marca || '').trim();
+        const modelo = (dadosRevisados.modelo || '').trim();
+        const setor = (dadosRevisados.setor || dadosRevisados.departamento || '').trim();
+        const localizacao = (dadosRevisados.localizacao || '').trim();
+        const status = (dadosRevisados.status || '').trim();
+        const responsavel = (dadosRevisados.usuario_responsavel || '').trim();
+        const email = (dadosRevisados.email_responsavel || '').trim();
+
+        if (!tipoAtivo) {
+            erros.push({ tipo: 'CAMPO_OBRIGATORIO', mensagem: 'Campo obrigatório tipo_ativo está vazio.' });
+        } else if (!emListaControlada('tipo_ativo', tipoAtivo)) {
+            erros.push({ tipo: 'TIPO_INVALIDO', mensagem: 'Tipo de ativo inválido para a lista controlada.' });
+        }
+
+        if (!marca) {
+            erros.push({ tipo: 'CAMPO_OBRIGATORIO', mensagem: 'Campo obrigatório marca está vazio.' });
+        }
+        if (!modelo) {
+            erros.push({ tipo: 'CAMPO_OBRIGATORIO', mensagem: 'Campo obrigatório modelo está vazio.' });
+        }
+
+        if (setor && !emListaControlada('setor', setor)) {
+            erros.push({ tipo: 'SETOR_INVALIDO', mensagem: 'Setor inválido. Selecione um valor controlado.' });
+        }
+        if (localizacao && !emListaControlada('localizacao', localizacao)) {
+            erros.push({ tipo: 'LOCALIZACAO_INVALIDA', mensagem: 'Localização inválida. Selecione uma unidade válida.' });
+        }
+        if (status && !emListaControlada('status', status)) {
+            erros.push({ tipo: 'STATUS_INVALIDO', mensagem: 'Status inválido para a lista controlada.' });
+        }
+        if (status === 'Em Uso' && !responsavel) {
+            erros.push({ tipo: 'RESPONSAVEL_OBRIGATORIO', mensagem: 'Status Em Uso exige usuario_responsavel preenchido.' });
+        }
+        if (email) {
+            const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+            if (!emailRegex.test(email)) {
+                erros.push({ tipo: 'EMAIL_INVALIDO', mensagem: 'Email do responsável em formato inválido.' });
+            }
+        } else {
+            avisos.push({ tipo: 'EMAIL_AUSENTE', mensagem: 'Email não fornecido.' });
+        }
+
+        return {
+            erros,
+            avisos,
+            tem_erro: erros.length > 0,
+            tem_aviso: erros.length === 0 && avisos.length > 0,
+        };
+    }
+
+    function construirLinhaRevisada(linha) {
+        const dadosRevisados = obterDadosRevisadosLinha(linha);
+        const resultadoRevalidacao = revalidarLinhaEmMemoria(dadosRevisados);
+        return {
+            ...linha,
+            dados_mapeados: dadosRevisados,
+            erros: resultadoRevalidacao.erros,
+            avisos: resultadoRevalidacao.avisos,
+            tem_erro: resultadoRevalidacao.tem_erro,
+            tem_aviso: resultadoRevalidacao.tem_aviso,
+            valida: !resultadoRevalidacao.tem_erro,
+        };
+    }
+
+    function filtrarLinhasRevisao(linhas, filtro) {
+        if (!Array.isArray(linhas) || !linhas.length) {
+            return [];
+        }
+
+        // Filtro opera sempre no dataset base de linhas, nunca no subconjunto já filtrado.
+        return linhas.filter((linha) => {
+            const isDescartada = estadoRevisao.descartadas.has(linha.linha);
+            if (filtro === 'descartadas') {
+                return isDescartada;
+            }
+            if (isDescartada) {
+                return false;
+            }
+            if (filtro === 'validas') {
+                return !linha.tem_erro && !linha.tem_aviso;
+            }
+            if (filtro === 'avisos') {
+                return !linha.tem_erro && linha.tem_aviso;
+            }
+            if (filtro === 'erros') {
+                return linha.tem_erro;
+            }
+            return true;
+        });
+    }
+
+    function atualizarEstadoBotoesFiltro() {
+        document.querySelectorAll('.review-filter-btn').forEach((btn) => {
+            const ativo = btn.dataset.filter === estadoRevisao.filtroAtual;
+            btn.classList.toggle('btn-primary', ativo);
+            btn.classList.toggle('btn-secondary', !ativo);
+        });
+    }
+
+    function descartarLinha(numeroLinha) {
+        estadoRevisao.descartadas.add(numeroLinha);
+        // Remover edições da linha se existirem
+        delete estadoRevisao.edicoesPorLinha[numeroLinha];
+        // Re-renderizar
+        renderGradeRevisao(estadoRevisao.linhas);
+    }
+
+    function restaurarLinha(numeroLinha) {
+        estadoRevisao.descartadas.delete(numeroLinha);
+        // Re-renderizar
+        renderGradeRevisao(estadoRevisao.linhas);
+    }
+
+    function abrirModalEdicao(numeroLinha) {
+        const linha = estadoRevisao.linhas.find(l => l.linha === numeroLinha);
+        if (!linha) return;
+
+        editLineModalTitle.textContent = `Editar linha ${numeroLinha}`;
+        editLineFields.innerHTML = '';
+
+        const dados = obterDadosRevisadosLinha(linha);
+        const mapaErros = construirMapaErrosPorCampo(linha);
+        const camposOrdenados = ordenarCamposParaEdicao(dados, mapaErros);
+        const camposPrioritarios = camposOrdenados.filter((campo) => mapaErros[campo] || CAMPOS_CRITICOS_IMPORTACAO.includes(campo));
+        const camposSecundarios = camposOrdenados.filter((campo) => !camposPrioritarios.includes(campo));
+        const inferenciaLinha = linha.inferencia_email || {};
+        const sugestoesPendentes = inferenciaLinha.sugestoes_pendentes || {};
+        const aplicadasAutomaticamente = inferenciaLinha.aplicadas || {};
+
+        // O bloco principal foca nos campos que realmente bloqueiam a importação.
+        let html = '<div class="field-group"><strong>Campos críticos para correção</strong></div>';
+        for (const campo of camposPrioritarios) {
+            html += renderCampoEdicao(numeroLinha, campo, dados[campo], mapaErros[campo], sugestoesPendentes[campo], aplicadasAutomaticamente[campo]);
+        }
+
+        if (camposSecundarios.length) {
+            html += '<div class="field-group"><strong>Campos opcionais</strong></div>';
+            for (const campo of camposSecundarios) {
+                html += renderCampoEdicao(numeroLinha, campo, dados[campo], null, sugestoesPendentes[campo], aplicadasAutomaticamente[campo]);
+            }
+        }
+
+        editLineFields.innerHTML = html;
+        editLineSaveBtn.dataset.numeroLinha = numeroLinha;
+
+        // Confirmacao assistida: usuario pode aplicar sugestao de inferencia explicitamente.
+        editLineFields.querySelectorAll('.apply-inference-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const field = btn.dataset.field;
+                const valor = btn.dataset.value || '';
+                const input = editLineFields.querySelector(`.edit-field[data-field="${field}"]`);
+                if (input) {
+                    input.value = valor;
+                }
+            });
+        });
+
+        // Abrir modal
+        editLineModal.hidden = false;
+    }
+
+    function confirmarEdicaoLinha() {
+        const numeroLinha = parseInt(editLineSaveBtn.dataset.numeroLinha, 10);
+        const edicoes = {};
+
+        // Coletar valores dos campos editáveis
+        document.querySelectorAll('.edit-field').forEach(input => {
+            const campo = input.dataset.field;
+            const valor = input.value.trim();
+            // Preserva string vazia para permitir correção explícita/remoção de valor.
+            edicoes[campo] = valor;
+        });
+
+        // Armazenar edições no estado
+        if (Object.keys(edicoes).length > 0) {
+            estadoRevisao.edicoesPorLinha[numeroLinha] = edicoes;
+        }
+
+        // Fechar modal e re-renderizar
+        editLineModal.hidden = true;
+        renderGradeRevisao(estadoRevisao.linhas);
+    }
+
+    function atualizarSumarioRevisao() {
+        const t = estadoRevisao.totais;
+        document.getElementById('summary-total').textContent = t.total;
+        document.getElementById('summary-valid').textContent = t.validas;
+        document.getElementById('summary-warning').textContent = t.avisos;
+        document.getElementById('summary-error').textContent = t.erros;
+        document.getElementById('summary-discarded').textContent = t.descartadas;
+        document.getElementById('summary-to-import').textContent = t.aImportar;
+    }
+
+    function construirMapaErrosPorCampo(linha) {
+        const mapa = {};
+        const erros = Array.isArray(linha?.erros) ? linha.erros : [];
+
+        // Mapeia mensagens para campos por palavras-chave para orientar edição com causa raiz.
+        erros.forEach((erroObj) => {
+            const mensagem = String(erroObj?.mensagem || '').toLowerCase();
+            const candidatos = [];
+
+            if (mensagem.includes('setor')) candidatos.push('setor');
+            if (mensagem.includes('status')) candidatos.push('status');
+            if (mensagem.includes('tipo')) candidatos.push('tipo_ativo');
+            if (mensagem.includes('email')) candidatos.push('email_responsavel');
+            if (mensagem.includes('usuário') || mensagem.includes('usuario') || mensagem.includes('responsável') || mensagem.includes('responsavel')) {
+                candidatos.push('usuario_responsavel');
+            }
+            if (mensagem.includes('localização') || mensagem.includes('localizacao') || mensagem.includes('unidade')) {
+                candidatos.push('localizacao');
+            }
+            if (mensagem.includes('condição') || mensagem.includes('condicao')) {
+                candidatos.push('condicao');
+            }
+            if (mensagem.includes('marca')) candidatos.push('marca');
+            if (mensagem.includes('modelo')) candidatos.push('modelo');
+            if (mensagem.includes('data')) candidatos.push('data_entrada');
+
+            if (!candidatos.length) {
+                candidatos.push('tipo_ativo');
+            }
+
+            candidatos.forEach((campo) => {
+                if (!mapa[campo]) {
+                    mapa[campo] = [];
+                }
+                mapa[campo].push(erroObj?.mensagem || 'Valor inválido.');
+            });
+        });
+
+        return mapa;
+    }
+
+    function ordenarCamposParaEdicao(dados, mapaErros) {
+        const campos = Object.keys(dados || {});
+        return campos.sort((a, b) => {
+            const aErro = mapaErros[a] ? 0 : 1;
+            const bErro = mapaErros[b] ? 0 : 1;
+            if (aErro !== bErro) return aErro - bErro;
+
+            const aCritico = CAMPOS_CRITICOS_IMPORTACAO.includes(a) ? 0 : 1;
+            const bCritico = CAMPOS_CRITICOS_IMPORTACAO.includes(b) ? 0 : 1;
+            if (aCritico !== bCritico) return aCritico - bCritico;
+            return a.localeCompare(b);
+        });
+    }
+
+    function renderCampoEdicao(numeroLinha, campo, valorOriginal, mensagensErro, sugestaoInferencia, inferenciaAplicada) {
+        const valorAtual = estadoRevisao.edicoesPorLinha[numeroLinha]?.[campo] ?? valorOriginal ?? '';
+        const opcoesControladas = LISTAS_CONTROLADAS_IMPORTACAO[campo] || null;
+        const temErro = Array.isArray(mensagensErro) && mensagensErro.length > 0;
+        const obrigatorioOuCritico = CAMPOS_CRITICOS_IMPORTACAO.includes(campo);
+
+        let controleHtml = '';
+        if (opcoesControladas && !CAMPOS_LIVRES_PREFERIDOS.has(campo)) {
+            const options = opcoesControladas.map((item) => {
+                const selected = String(item) === String(valorAtual) ? 'selected' : '';
+                return `<option value="${escapeHtml(item)}" ${selected}>${escapeHtml(item)}</option>`;
+            }).join('');
+
+            controleHtml = `
+                <select class="select-control edit-field" data-field="${escapeHtml(campo)}">
+                    <option value="">Selecione</option>
+                    ${options}
+                </select>
+            `;
+        } else {
+            controleHtml = `<input type="text" class="input-control edit-field" data-field="${escapeHtml(campo)}" value="${escapeHtml(valorAtual)}">`;
+        }
+
+        const marcadorCritico = obrigatorioOuCritico ? '<span class="badge badge-precisa_confirmar">Crítico</span>' : '<span class="badge badge-ignorada">Opcional</span>';
+        const blocoErros = temErro
+            ? `<div class="review-cell-messages review-cell-messages-error">${mensagensErro.map((msg) => escapeHtml(msg)).join('<br>')}</div>`
+            : '';
+
+        const blocoInferenciaAplicada = inferenciaAplicada
+            ? `<div class="review-cell-messages review-cell-messages-warning">Inferência aplicada automaticamente: ${escapeHtml(inferenciaAplicada.valor || valorAtual)}.</div>`
+            : '';
+
+        const blocoSugestaoPendente = sugestaoInferencia
+            ? `
+                <div class="review-cell-messages review-cell-messages-warning">
+                    Sugestão por e-mail (${Number(sugestaoInferencia.confianca || 0).toFixed(2)}): ${escapeHtml(sugestaoInferencia.valor || '')}<br>
+                    <button type="button" class="btn btn-secondary btn-mini apply-inference-btn" data-field="${escapeHtml(campo)}" data-value="${escapeHtml(sugestaoInferencia.valor || '')}">Aplicar sugestão</button>
+                </div>
+            `
+            : '';
+
+        return `
+            <div class="field-group ${temErro ? 'edit-field-error' : ''}">
+                <label>${escapeHtml(campo)} ${marcadorCritico}</label>
+                ${controleHtml}
+                ${blocoErros}
+                ${blocoInferenciaAplicada}
+                ${blocoSugestaoPendente}
+            </div>
+        `;
+    }
+
+    function calcularLinhasDescartadasConsolidadas() {
+        const descartadasConsolidadas = new Set(Array.from(estadoRevisao.descartadas));
+
+        // Política por modo: em parcial, linhas fora da política são descartadas do payload final.
+        estadoRevisao.linhas.forEach((linha) => {
+            if (estadoRevisao.descartadas.has(linha.linha)) {
+                return;
+            }
+            if (estadoRevisao.modoImportacao === 'validas_apenas' && (linha.tem_erro || linha.tem_aviso)) {
+                descartadasConsolidadas.add(linha.linha);
+            }
+            if (estadoRevisao.modoImportacao === 'validas_e_avisos' && linha.tem_erro) {
+                descartadasConsolidadas.add(linha.linha);
+            }
+        });
+
+        return descartadasConsolidadas;
+    }
+
+    function construirEdicoesAtivas(descartadasConsolidadas) {
+        const ativas = {};
+        Object.entries(estadoRevisao.edicoesPorLinha).forEach(([linhaStr, edicoes]) => {
+            const numeroLinha = Number(linhaStr);
+            if (descartadasConsolidadas.has(numeroLinha)) {
+                return;
+            }
+            ativas[numeroLinha] = edicoes;
+        });
+        return ativas;
+    }
+
+    // ===== FUNÇÕES DE CONFIRMAÇÃO =====
+
+    function atualizarEstadoConfirmacao() {
+        const modeImportacao = document.querySelector('input[name="modo_importacao"]:checked')?.value || 'validas_e_avisos';
+        estadoRevisao.modoImportacao = modeImportacao;
+        const decisoes = coletarDecisoesSugestoes();
+        const mapeamentoConsolidado = construirMapeamentoConfirmado();
+        const camposObrigatoriosPreview = estadoRevisao.preview?.campos_obrigatorios_preview || [];
+        const destinosConsolidados = Object.values(mapeamentoConsolidado).filter(Boolean);
+        const camposObrigatoriosFaltantes = camposObrigatoriosPreview.filter(
+            (campoObrigatorio) => !destinosConsolidados.includes(campoObrigatorio)
+        );
+
         const destinosComConflito = [];
         const destinoJaEscolhido = new Set();
 
-        for (const destino of decisoes.destinosSelecionados) {
-            if (destinosExatos.has(destino) || destinoJaEscolhido.has(destino)) {
+        for (const destino of destinosConsolidados) {
+            if (destinoJaEscolhido.has(destino)) {
                 destinosComConflito.push(destino);
             }
             destinoJaEscolhido.add(destino);
         }
 
-        // Validar checkboxes obrigatórios de confirmação (NOVO)
+        // Validar checkboxes
         const checkboxesObrigatorios = [
             'revisor-dados',
             'confirma-duplicatas',
@@ -403,17 +1246,22 @@
         const checkboxesDesmarcados = checkboxesObrigatorios.filter(id => !document.getElementById(id).checked);
 
         const motivos = [];
-        if (!podeContinuarBase) {
-            motivos.push(...bloqueiosBase);
-        }
         if (decisoes.pendentes > 0) {
             motivos.push(`Existem ${decisoes.pendentes} sugestão(ões) sem decisão.`);
         }
         if (destinosComConflito.length > 0) {
             motivos.push(`Existem conflitos de campo destino: ${destinosComConflito.join(", ")}.`);
         }
+        if (camposObrigatoriosFaltantes.length > 0) {
+            motivos.push(`Campos obrigatórios sem destino confirmado: ${camposObrigatoriosFaltantes.join(", ")}.`);
+        }
         if (checkboxesDesmarcados.length > 0) {
             motivos.push(`Você deve marcar todas as 4 confirmações obrigatórias para prosseguir.`);
+        }
+
+        // Regra explícita para tudo-ou-nada: somente linhas ativas com erro bloqueiam.
+        if (modeImportacao === 'tudo_ou_nada' && estadoRevisao.totais.erros > 0) {
+            motivos.push('Modo tudo-ou-nada bloqueado: existem linhas ativas com erro crítico.');
         }
 
         const podeContinuar = motivos.length === 0;
@@ -442,20 +1290,51 @@
             });
 
             const payload = await response.json();
-            if (!response.ok || !payload.ok) {
+
+            // FIX: Aceitar resposta mesmo com bloqueios críticos.
+            // A rota retorna 200 sempre quando preview é gerado com sucesso.
+            // Bloqueios vão em preview.indicador_risco.bloqueios como dados,
+            // permitindo que o JS renderize a central de revisão mesmo com avisos.
+            // Só rejeitar se erro HTTP real ou se não há preview para renderizar.
+            if (!response.ok) {
                 throw new Error(payload.erro || "Falha ao gerar pré-visualização.");
             }
 
-            currentPreview = payload.preview;
+            // Se há erro de aplicação mas preview foi gerado, renderizar mesmo assim
+            // (para casos onde há bloqueios, que são validações, não erros)
+            if (!payload.preview) {
+                throw new Error(payload.erro || "Falha ao gerar pré-visualização.");
+            }
+
+            estadoRevisao.preview = payload.preview;
             previewPanel.hidden = false;
-            renderSummary(currentPreview);
-            renderColumns(currentPreview);
-            renderPreviewRows(currentPreview);
-            renderLineMessages(currentPreview);
-            renderBlockers(currentPreview);
-            renderValidationMessages(currentPreview);
+
+            // Renderizar seções
+            renderSummary(payload.preview);
+            renderColumns(payload.preview);
+            construirTabelaMapeamento(payload.preview);
+            renderPreviewRows(payload.preview);
+            renderLineMessages(payload.preview);
+            renderBlockers(payload.preview);
+            renderValidationMessages(payload.preview);
+
+            // Novo: Renderizar grade de revisão (BLOCO B)
+            if (payload.preview.linhas_revisao && payload.preview.linhas_revisao.length) {
+                renderGradeRevisao(payload.preview.linhas_revisao);
+            }
+
+            // Mostrar opções de lote (BLOCO C)
+            batchOptionsContainer.hidden = false;
+
             atualizarEstadoConfirmacao();
-            showMessage("success", payload.mensagem || "Pré-visualização concluída.");
+
+            // Mostrar mensagem apropriada conforme o estado
+            const temBloqueios = payload.preview.indicador_risco?.bloqueios?.length > 0;
+            if (temBloqueios) {
+                showMessage("warning", "Pré-visualização com bloqueios críticos detectados. Revise os detalhes abaixo.");
+            } else {
+                showMessage("success", payload.mensagem || "Pré-visualização concluída.");
+            }
         } catch (error) {
             showMessage("danger", error.message || "Erro ao analisar CSV.");
         } finally {
@@ -470,7 +1349,7 @@
         confirmButton.textContent = "Importando...";
 
         try {
-            if (!currentPreview) {
+            if (!estadoRevisao.preview) {
                 throw new Error("Gere a pré-visualização antes de confirmar.");
             }
 
@@ -480,15 +1359,20 @@
             }
 
             const formData = montarFormDataBasico();
-            // Envia mapeamentos aprovados/ajustados explicitamente pelo usuário.
             formData.append("sugestoes_confirmadas", JSON.stringify(estadoConfirmacao.confirmacoes));
+            formData.append("mapeamento_confirmado", JSON.stringify(construirMapeamentoConfirmado()));
 
-            // Adicionar id_lote do preview para rastreabilidade (NOVO)
-            if (currentPreview?.metadados_auditoria?.id_lote) {
-                formData.append("id_lote", currentPreview.metadados_auditoria.id_lote);
+            // ===== NOVO (Camada 2): Enviar linhas descartadas e edições =====
+            const descartadasConsolidadas = calcularLinhasDescartadasConsolidadas();
+            const edicoesAtivas = construirEdicoesAtivas(descartadasConsolidadas);
+            formData.append("linhas_descartadas", JSON.stringify(Array.from(descartadasConsolidadas)));
+            formData.append("edicoes_por_linha", JSON.stringify(edicoesAtivas));
+            formData.append("modo_importacao", estadoRevisao.modoImportacao);
+
+            if (estadoRevisao.preview?.metadados_auditoria?.id_lote) {
+                formData.append("id_lote", estadoRevisao.preview.metadados_auditoria.id_lote);
             }
 
-            // Adicionar checkboxes de confirmação (NOVO)
             const checkboxNames = ['revisor_dados', 'confirma_duplicatas', 'aceita_avisos', 'autoriza_importacao'];
             checkboxNames.forEach(name => {
                 const checkbox = document.querySelector(`input[name="${name}"]`);
@@ -529,15 +1413,58 @@
         }
     }
 
+    // ===== EVENT LISTENERS =====
+
     fileInput.addEventListener("change", () => {
-        currentPreview = null;
+        estadoRevisao.preview = null;
+        estadoRevisao.linhas = [];
+        estadoRevisao.descartadas = new Set();
+        estadoRevisao.edicoesPorLinha = {};
+        estadoRevisao.filtroAtual = 'todas';
         confirmButton.disabled = true;
         confirmRequirementsHint.textContent = "Analise o CSV para habilitar a continuidade da importação.";
     });
 
-    // Adicionar listeners aos checkboxes obrigatórios (NOVO)
     document.querySelectorAll(".checkbox-obrigatorio").forEach((checkbox) => {
         checkbox.addEventListener("change", atualizarEstadoConfirmacao);
+    });
+
+    document.querySelectorAll('input[name="modo_importacao"]').forEach((radio) => {
+        radio.addEventListener("change", () => {
+            estadoRevisao.modoImportacao = radio.value;
+            renderGradeRevisao(estadoRevisao.linhas);
+            atualizarEstadoConfirmacao();
+        });
+    });
+
+    // Botões de filtro de revisão
+    document.querySelectorAll('.review-filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            estadoRevisao.filtroAtual = btn.dataset.filter || 'todas';
+            renderGradeRevisao(estadoRevisao.linhas);
+        });
+    });
+
+    // Modal de edição
+    editLineSaveBtn.addEventListener('click', confirmarEdicaoLinha);
+
+    // Fechar modal
+    document.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const modalId = btn.dataset.closeModal;
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.hidden = true;
+            }
+        });
+    });
+
+    // Fechar modal ao clicar fora
+    editLineModal.addEventListener('click', (e) => {
+        if (e.target === editLineModal) {
+            editLineModal.hidden = true;
+        }
     });
 
     previewButton.addEventListener("click", executarPreview);

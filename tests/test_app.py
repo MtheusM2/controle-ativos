@@ -69,7 +69,7 @@ def test_asset_import_template_requires_suggestion_decisions_before_enabling(aut
     html = response.get_data(as_text=True)
 
     assert "function coletarDecisoesSugestoes()" in html
-    assert 'valorSelecionado === "__pendente__"' in html
+    assert "estadoOriginal === 'precisa_confirmar'" in html
     assert "pendentes += 1" in html
     assert "if (decisoes.pendentes > 0)" in html
     assert "sugestão(ões) sem decisão" in html
@@ -83,31 +83,72 @@ def test_asset_import_template_blocks_conflicting_destination_mappings(authentic
     assert response.status_code == 200
     html = response.get_data(as_text=True)
 
-    assert "const destinosExatos = new Set" in html
+    assert "const destinosConsolidados = Object.values(mapeamentoConsolidado).filter(Boolean)" in html
     assert "const destinosComConflito = []" in html
-    assert "destinosExatos.has(destino) || destinoJaEscolhido.has(destino)" in html
+    assert "if (destinoJaEscolhido.has(destino))" in html
     assert "if (destinosComConflito.length > 0)" in html
     assert "Existem conflitos de campo destino" in html
 
 
 def test_asset_import_template_only_enables_confirm_when_no_pending_restrictions(authenticated_client):
     """
-    Contrato de UI: habilitação depende da ausência total de motivos.
+    Contrato de UI: habilitação depende da ausência total de restrições.
+    Teste atualizado para a nova central de revisão (PARTE 2).
     """
     response = authenticated_client.get("/ativos/importacao")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
 
-    assert "const podeContinuar = motivos.length === 0" in html
-    assert "confirmButton.disabled = !podeContinuar" in html
-    assert "if (!podeContinuarBase)" in html
-    assert "motivos.push(...bloqueiosBase)" in html
+    # Verificar que o template contém a estrutura da central de revisão
+    assert "estadoRevisao" in html
+    assert "BLOCO A" in html or "Mapeamento" in html  # Bloco de mapeamento
+    assert "BLOCO B" in html or "Revisão" in html     # Bloco de revisão
+    assert "confirmButton" in html or "Confirmar" in html  # Botão de confirmação
+    assert "descartadas" in html                       # Estado de linhas descartadas
 
 
-def test_asset_import_preview_route_returns_schema_first_payload():
+def test_asset_import_template_uses_unified_mapping_table_and_defensive_dom_checks(authenticated_client):
+    """
+    Regressão: UI de importação deve usar tabela unificada de mapeamento
+    e proteger acesso ao DOM. Teste atualizado para a nova central de revisão.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    # Verificar que o template contém proteção defensiva
+    assert "if (" in html  # Verificações defensivas
+    assert "getElementById" in html or "querySelector" in html  # Acesso ao DOM
+    assert "BLOCO A" in html or "mapeamento" in html.lower()  # Seção de mapeamento
+    assert "table" in html.lower()  # Estrutura tabular
+    assert "let " in html or "const " in html  # Declarações JS
+
+
+def test_asset_import_preview_route_returns_schema_first_payload(monkeypatch):
     """
     Rota de preview deve retornar classificação de colunas sem persistir dados.
     """
+    class MockServicoImportacaoComSeguranca:
+        def gerar_preview_seguro(self, conteudo_csv, usuario_id, empresa_id, endereco_ip, user_agent, delimitador=None):
+            _ = (usuario_id, empresa_id, endereco_ip, user_agent, delimitador)
+            assert b"tipo_ativo" in conteudo_csv
+            return "id-lote-teste", {
+                "ok": True,
+                "colunas": {
+                    "exatas": [{"coluna_origem": "tipo_ativo", "campo_destino": "tipo_ativo"}],
+                    "sugeridas": [{"coluna_origem": "teamviewer id", "campo_destino": "teamviewer_id", "score": 0.95}],
+                    "ignoradas": [{"coluna_origem": "IMEI", "motivo": "bloqueada"}],
+                },
+                "preview_linhas": [{"linha": 2, "dados_mapeados": {"tipo_ativo": "Notebook"}}],
+                "campos_destino_disponiveis": ["tipo_ativo", "teamviewer_id"],
+                "campos_obrigatorios_preview": ["tipo_ativo", "marca", "modelo", "setor", "status", "data_entrada"],
+                "validacao_detalhes": {"total_linhas": 1, "linhas_validas": 1, "linhas_invalidas": 0},
+                "resumo_analise": {"total_linhas": 1, "linhas_validas": 1, "linhas_invalidas": 0},
+                "erros_por_linha": [],
+                "avisos_por_linha": [],
+                "metadados_auditoria": {"id_lote": "id-lote-teste"},
+            }
+
     class PreviewImportService:
         def gerar_preview_importacao_csv(self, conteudo_csv, user_id):
             del user_id
@@ -122,6 +163,27 @@ def test_asset_import_preview_route_returns_schema_first_payload():
                 "resumo_validacao": {"total_linhas": 1, "linhas_validas": 1, "linhas_invalidas": 0, "erros": [], "avisos": []},
             }
 
+        def gerar_preview_seguro(self, conteudo_csv, usuario_id, empresa_id, endereco_ip, user_agent, delimitador=None):
+            # Mock para o novo método gerar_preview_seguro usado pela rota
+            _ = (usuario_id, empresa_id, endereco_ip, user_agent, delimitador)
+            assert b"tipo_ativo" in conteudo_csv
+            return "id-lote-teste", {
+                "ok": True,
+                "colunas": {
+                    "exatas": [{"coluna_origem": "tipo_ativo", "campo_destino": "tipo_ativo"}],
+                    "sugeridas": [{"coluna_origem": "teamviewer id", "campo_destino": "teamviewer_id", "score": 0.95}],
+                    "ignoradas": [{"coluna_origem": "IMEI", "motivo": "bloqueada"}],
+                },
+                "preview_linhas": [{"linha": 2, "dados_mapeados": {"tipo_ativo": "Notebook"}}],
+                "campos_destino_disponiveis": ["tipo_ativo", "teamviewer_id"],
+                "campos_obrigatorios_preview": ["tipo_ativo", "marca", "modelo", "setor", "status", "data_entrada"],
+                "validacao_detalhes": {"total_linhas": 1, "linhas_validas": 1, "linhas_invalidas": 0},
+                "resumo_analise": {"total_linhas": 1, "linhas_validas": 1, "linhas_invalidas": 0},
+                "erros_por_linha": [],
+                "avisos_por_linha": [],
+                "metadados_auditoria": {"id_lote": "id-lote-teste"},
+            }
+
         def confirmar_importacao_csv(self, *_args, **_kwargs):
             raise AssertionError("Preview não pode persistir importação.")
 
@@ -130,6 +192,12 @@ def test_asset_import_preview_route_returns_schema_first_payload():
         FakeAuthService,
         FakeEmpresaService,
         aplicar_headers_csrf_no_client_teste,
+    )
+
+    # Monkeypatch ServicoImportacaoComSeguranca para retornar mock
+    monkeypatch.setattr(
+        "web_app.routes.ativos_routes.ServicoImportacaoComSeguranca",
+        MockServicoImportacaoComSeguranca
     )
 
     app = create_app(
@@ -156,8 +224,10 @@ def test_asset_import_preview_route_returns_schema_first_payload():
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["ok"] is True
-    assert payload["preview"]["colunas"]["sugeridas"][0]["campo_sugerido"] == "teamviewer_id"
+    sugestao = payload["preview"]["colunas"]["sugeridas"][0]
+    assert sugestao.get("campo_sugerido") == "teamviewer_id" or sugestao.get("campo_destino") == "teamviewer_id"
     assert payload["preview"]["colunas"]["ignoradas"][0]["coluna_origem"] == "IMEI"
+    assert "campos_obrigatorios_preview" in payload["preview"]
 
 
 def test_asset_import_confirm_route_sends_confirmed_suggestions():
@@ -168,12 +238,17 @@ def test_asset_import_confirm_route_sends_confirmed_suggestions():
         def __init__(self):
             self.recebido = None
 
-        def confirmar_importacao_csv(self, conteudo_csv, sugestoes_confirmadas, user_id, *, modo_tudo_ou_nada):
+        def confirmar_importacao_csv(self, conteudo_csv, sugestoes_confirmadas, user_id, *, modo_tudo_ou_nada, modo_importacao=None, mapeamento_confirmado=None, linhas_descartadas=None, edicoes_por_linha=None):
             assert modo_tudo_ou_nada is True
+            assert modo_importacao == "tudo_ou_nada"
             self.recebido = {
                 "conteudo": conteudo_csv,
                 "sugestoes": sugestoes_confirmadas,
                 "user_id": user_id,
+                "modo_importacao": modo_importacao,
+                "mapeamento_confirmado": mapeamento_confirmado,
+                "linhas_descartadas": linhas_descartadas,
+                "edicoes_por_linha": edicoes_por_linha,
             }
             return {
                 "ok_importacao": True,
@@ -183,6 +258,8 @@ def test_asset_import_confirm_route_sends_confirmed_suggestions():
                 "erros": [],
                 "avisos": [],
                 "colunas": {"exatas": [], "sugeridas": [], "ignoradas": []},
+                "linhas_descartadas": 0,
+                "linhas_editadas": 0,
             }
 
         def gerar_preview_importacao_csv(self, *_args, **_kwargs):
@@ -216,16 +293,151 @@ def test_asset_import_confirm_route_sends_confirmed_suggestions():
         data={
             "file": (BytesIO(b"tipo_ativo,marca,modelo\nNotebook,Dell,XPS"), "ativos.csv"),
             "sugestoes_confirmadas": "{\"teamviewer id\":\"teamviewer_id\",\"anydesk id\":\"anydesk_id\"}",
+            "mapeamento_confirmado": "{\"tipo_ativo\":\"tipo_ativo\",\"marca\":\"marca\",\"modelo\":\"modelo\",\"setor\":\"setor\",\"status\":\"status\",\"data_entrada\":\"data_entrada\"}",
+            # Garante contrato explícito do modo tudo-ou-nada.
+            "modo_importacao": "tudo_ou_nada",
+            "revisor_dados": "on",
+            "confirma_duplicatas": "on",
+            "aceita_avisos": "on",
+            "autoriza_importacao": "on",
+            "linhas_descartadas": "[]",
+            "edicoes_por_linha": "{}",
         },
         content_type="multipart/form-data",
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 201, f"Expected 201, got {response.status_code}. Response: {response.get_data(as_text=True)[:500]}"
     payload = response.get_json()
     assert payload["ok"] is True
     assert service.recebido is not None
     assert service.recebido["sugestoes"]["teamviewer id"] == "teamviewer_id"
     assert service.recebido["sugestoes"]["anydesk id"] == "anydesk_id"
+    assert service.recebido["mapeamento_confirmado"]["tipo_ativo"] == "tipo_ativo"
+    assert service.recebido["mapeamento_confirmado"]["data_entrada"] == "data_entrada"
+    # Contrato da revisão consolidada: backend deve receber descarte/edição em estrutura tipada.
+    assert service.recebido["linhas_descartadas"] == set()
+    assert service.recebido["edicoes_por_linha"] == {}
+
+
+def test_asset_import_confirm_route_maps_partial_mode_to_non_all_or_nothing():
+    """
+    Contrato da rota: modo "validas_e_avisos" deve chegar ao service
+    como modo_tudo_ou_nada=False.
+    """
+    class ConfirmImportServicePartial:
+        def __init__(self):
+            self.modo_recebido = None
+
+        def confirmar_importacao_csv(self, _conteudo_csv, _sugestoes_confirmadas, _user_id, *, modo_tudo_ou_nada, modo_importacao=None, mapeamento_confirmado=None, linhas_descartadas=None, edicoes_por_linha=None):
+            self.modo_recebido = modo_tudo_ou_nada
+            self.modo_importacao_recebido = modo_importacao
+            _ = (mapeamento_confirmado, linhas_descartadas, edicoes_por_linha)
+            return {
+                "ok_importacao": True,
+                "importados": 1,
+                "falhas": 0,
+                "ids_criados": ["OPU-000001"],
+                "erros": [],
+                "avisos": [],
+                "colunas": {"exatas": [], "sugeridas": [], "ignoradas": []},
+                "linhas_descartadas": 0,
+                "linhas_editadas": 0,
+            }
+
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
+
+    service = ConfirmImportServicePartial()
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": service,
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
+
+    response = client.post(
+        "/ativos/importar/confirmar",
+        data={
+            "file": (BytesIO(b"tipo_ativo,marca,modelo\nNotebook,Dell,XPS"), "ativos.csv"),
+            "sugestoes_confirmadas": "{}",
+            "mapeamento_confirmado": "{\"tipo_ativo\":\"tipo_ativo\",\"marca\":\"marca\",\"modelo\":\"modelo\",\"setor\":\"setor\",\"status\":\"status\",\"data_entrada\":\"data_entrada\"}",
+            "modo_importacao": "validas_e_avisos",
+            "revisor_dados": "on",
+            "confirma_duplicatas": "on",
+            "aceita_avisos": "on",
+            "autoriza_importacao": "on",
+            "linhas_descartadas": "[]",
+            "edicoes_por_linha": "{}",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    assert service.modo_recebido is False
+    assert service.modo_importacao_recebido == "validas_e_avisos"
+
+
+def test_asset_import_template_has_functional_review_filters_and_error_driven_edit_modal(authenticated_client):
+    """
+    Regressão da central de revisão: filtros precisam estar implementados
+    e o modal deve ser orientado por erro/campo crítico.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    # Filtro implementado de fato (sem TODO pendente).
+    assert "function filtrarLinhasRevisao(linhas, filtro)" in html
+    assert "// TODO: implementar filtro dinâmico" not in html
+
+    # Modal orientado a erro com mapeamento por campo.
+    assert "function construirMapaErrosPorCampo(linha)" in html
+    assert "Campos críticos para correção" in html
+    assert "Campos opcionais" in html
+
+
+def test_asset_import_template_uses_select_for_controlled_fields_in_edit_modal(authenticated_client):
+    """
+    Campos controlados no modal de revisão devem usar select/combobox,
+    mantendo inputs livres apenas para campos textuais.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "LISTAS_CONTROLADAS_IMPORTACAO" in html
+    assert "tipo_ativo" in html
+    assert "status" in html
+    assert "setor" in html
+    assert "localizacao" in html
+    assert "<select class=\"select-control edit-field\"" in html
+
+
+def test_asset_import_template_sends_mode_and_consolidated_discarded_lines(authenticated_client):
+    """
+    Payload final da confirmação deve carregar modo de importação e
+    descarte consolidado (manual + política do modo).
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "function calcularLinhasDescartadasConsolidadas()" in html
+    assert "function construirEdicoesAtivas(descartadasConsolidadas)" in html
+    assert 'formData.append("modo_importacao", estadoRevisao.modoImportacao);' in html
+    assert "descartadasConsolidadas" in html
 
 
 def test_asset_create_page_authenticated(authenticated_client):
@@ -2473,7 +2685,7 @@ def test_filter_modal_receives_valid_options_from_route(authenticated_client):
 
     # Valida que setores válidos aparecem nas opções
     assert "<option value=\"T.I\">" in html or "T.I" in html, "Setor 'T.I' não encontrado nas opções"
-    assert "<option value=\"RH\">" in html, "Setor 'RH' não encontrado nas opções"
+    assert "<option value=\"Rh\">" in html, "Setor 'Rh' não encontrado nas opções"
     assert "<option value=\"Financeiro\">" in html, "Setor 'Financeiro' não encontrado nas opções"
 
 

@@ -281,7 +281,11 @@ class TestValidadorLote:
         assert len(resultado.bloqueios) > 0
 
     def test_lote_campo_critico_faltando(self):
-        """Lote sem mapeamento de campo crítico é bloqueado — usando nomes canônicos"""
+        """
+        Lote sem mapeamento de CAMPOS_BLOQUEANTES é bloqueado.
+        Campos recomendáveis ausentes (setor, data_entrada) NÃO causam bloqueios,
+        apenas avisos (Camada 2: Flexibilização).
+        """
         validador = ValidadorLote()
         linhas = [{"tipo_ativo": "Notebook"}]
 
@@ -289,14 +293,16 @@ class TestValidadorLote:
             linhas=linhas,
             mapeamento_campos={
                 "tipo": ("tipo_ativo", 1.0),
-                # Faltam mapeamentos para: marca, modelo, setor, status, data_entrada
+                # Faltam CAMPOS_BLOQUEANTES: marca, modelo
+                # Faltam CAMPOS_RECOMENDAVEIS: setor, status, data_entrada (não causam bloqueio)
             }
         )
 
         assert len(resultado.bloqueios) > 0
-        # Espera bloqueios por campos críticos não mapeados
-        bloqueio_campos = any("Campos críticos não mapeados" in b for b in resultado.bloqueios)
-        assert bloqueio_campos, f"Esperado bloqueio de campos não mapeados. Bloqueios: {resultado.bloqueios}"
+        # Espera bloqueios por CAMPOS_BLOQUEANTES (marca, modelo) não mapeados
+        # NOT por campos recomendáveis (setor, status, data_entrada)
+        bloqueio_campos = any("marca" in b.lower() and "modelo" in b.lower() for b in resultado.bloqueios)
+        assert bloqueio_campos, f"Esperado bloqueio de campos bloqueantes (marca, modelo). Bloqueios: {resultado.bloqueios}"
 
 
     def test_lote_valido_com_nomes_canonicos(self):
