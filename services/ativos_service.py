@@ -17,6 +17,7 @@ from models.ativos import Ativo
 from database.connection import cursor_mysql
 from services.importacao_service import ServicoImportacao
 from utils.email_inference import aplicar_inferencia_email_em_dados
+from utils.normalizador_valores_importacao import normalizar_dados_importacao_valores  # ===== NOVO (2026-04-27) =====
 from utils.import_validators import (
     ValidadorLote,
     normalizar_campo_importacao,
@@ -1170,6 +1171,12 @@ class AtivosService:
         for indice, (numero_linha, row) in enumerate(linhas_csv):
             dados_mapeados = _aplicar_mapeamento_linha_importacao(row, mapeamento_exato)
 
+            # ===== NOVO (2026-04-27): Normalizar VALORES no preview =====
+            # Aplicar mesma normalização que será usada na confirmação
+            # Exemplos: "rh" → "Rh", "mkt" → "Marketing"
+            # Isto garante que preview e confirmação validam com os mesmos valores normalizados
+            dados_mapeados = normalizar_dados_importacao_valores(dados_mapeados)
+
             colunas_descartadas_com_valor = [
                 coluna for coluna in colunas_ignoradas if (row.get(coluna) or "").strip()
             ]
@@ -1483,6 +1490,12 @@ class AtivosService:
             # (Redundante, mas safe para edições que podem trazer alias)
             dados_mapeados = normalizar_dados_importacao(dados_mapeados)
 
+            # ===== NOVO (2026-04-27): Normalizar VALORES de domínio antes de validação =====
+            # Exemplo: "mkt" → "Marketing", "rh" → "RH", "t.i." → "T.I"
+            # Isso permite que abreviações e variações sejam reconhecidas automaticamente.
+            # A validação ainda acontece depois (se valor normalizado não estiver na enum, gera erro).
+            dados_mapeados = normalizar_dados_importacao_valores(dados_mapeados)
+
             # ===== INFERÊNCIA DE EMAIL (PARTE 6): user_responsavel a partir de email =====
             # Inferência por e-mail só preenche campo ausente/inválido e nunca sobrepõe edição manual.
             dados_mapeados, metadados_inferencia = aplicar_inferencia_email_em_dados(
@@ -1542,15 +1555,29 @@ class AtivosService:
                 "linhas_editadas": len(edicoes_por_linha) if edicoes_por_linha else 0,
             }
 
+        # ===== FILTRAGEM DE LINHAS POR MODO (2026-04-27) =====
+        # Cada modo tem política diferente:
+        # 1. validas_apenas: descarta linhas com ERRO ou AVISO
+        # 2. validas_e_avisos: descarta apenas linhas com ERRO, aceita AVISOS
+        # 3. tudo_ou_nada: trata um erro como falha de todo lote
         for indice, resultado_validacao in enumerate(validacao_lote.validacoes_por_linha):
             numero_linha, dados_mapeados = linhas_ativas_revisadas[indice]
 
+            # ===== POLÍTICA 1: Erro é sempre rejeitado (independente de modo) =====
             if not resultado_validacao.valida:
                 # Linha com erro do validador compartilhado é sempre rejeitada na confirmação.
                 for _tipo, mensagem in resultado_validacao.erros:
                     erros.append(f"Linha {numero_linha}: {mensagem}")
+                # Diagnóstico: log de rejeição por erro
+                logger.debug(
+                    "importacao.confirmacao.linha_rejeitada_erro numero_linha=%s modo=%s erros=%s",
+                    numero_linha,
+                    modo_importacao_resolvido,
+                    str(resultado_validacao.erros[:1]) if resultado_validacao.erros else "desconhecido",
+                )
                 continue
 
+            # ===== POLÍTICA 2: Aviso em "validas_apenas" é rejeitado =====
             if (
                 modo_importacao_resolvido == "validas_apenas"
                 and resultado_validacao.avisos
@@ -1559,29 +1586,79 @@ class AtivosService:
                 avisos_confirmacao.append(
                     f"Linha {numero_linha}: ignorada no modo validas_apenas por conter avisos."
                 )
+                # Diagnóstico: log de rejeição por aviso em modo validas_apenas
+                logger.debug(
+                    "importacao.confirmacao.linha_rejeitada_aviso numero_linha=%s modo=%s avisos=%s",
+                    numero_linha,
+                    modo_importacao_resolvido,
+                    str(resultado_validacao.avisos[:2]) if resultado_validacao.avisos else "desconhecido",
+                )
                 continue
 
+            # ===== POLÍTICA 3: Aviso em "validas_e_avisos" é ACEITO =====
+            # Se chegou aqui: é válido OU (tem aviso E modo é validas_e_avisos)
+            # Em ambos os casos, processa normalmente
             try:
                 ativos_validos.append(self._validar_linha_importacao(dados_mapeados, numero_linha))
+                # Diagnóstico: log de aceite
+                logger.debug(
+                    "importacao.confirmacao.linha_aceita numero_linha=%s modo=%s tem_aviso=%s",
+                    numero_linha,
+                    modo_importacao_resolvido,
+                    bool(resultado_validacao.avisos),
+                )
             except AtivoErro as erro:
                 # Validação de domínio final mantém consistência de persistência.
                 erros.append(str(erro))
+                # Diagnóstico: log de rejeição após validação de domínio
+                logger.debug(
+                    "importacao.confirmacao.validacao_dominio_rejeitada numero_linha=%s modo=%s erro=%s",
+                    numero_linha,
+                    modo_importacao_resolvido,
+                    str(erro),
+                )
 
+        # ===== DIAGNÓSTICO (2026-04-27): Log de resultado da validação =====
         logger.info(
-            "importacao.confirmacao.validacao user_id=%s mapeados=%s validos=%s erros=%s primeiro_erro=%s",
+            "importacao.confirmacao.validacao user_id=%s modo=%s mapeados=%s linhas_processadas=%s validos=%s erros=%s avisos=%s primeiro_erro=%s",
             user_id,
+            modo_importacao_resolvido,
             len(mapeamento_final),
+            len(linhas_ativas_revisadas),
             len(ativos_validos),
             len(erros),
+            len(avisos_confirmacao),
             erros[0] if erros else None,
         )
 
+        # ===== BLOQUEIO TUDO-OU-NADA (2026-04-27): Diagnóstico claro =====
         # Modo tudo_ou_nada é decidido no backend e considera apenas linhas ativas revisadas.
         if erros and modo_importacao_resolvido == "tudo_ou_nada":
+            # ===== DIAGNÓSTICO (2026-04-27): Extrair números de linha para melhor mensagem =====
+            import re
+            linhas_com_erro = set()
+            for erro in erros:
+                match = re.match(r'Linha (\d+):', erro)
+                if match:
+                    linhas_com_erro.add(int(match.group(1)))
+
+            linhas_erro_str = ", ".join(map(str, sorted(list(linhas_com_erro))[:10]))  # Primeiras 10
+            if len(linhas_com_erro) > 10:
+                linhas_erro_str += f" ... ({len(linhas_com_erro)} total)"
+
+            mensagem_bloqueio = (
+                f"Importação bloqueada (modo tudo-ou-nada): {len(erros)} linha(s) com erro. "
+                f"Linhas afetadas: {linhas_erro_str}. "
+                f"Primeiro erro: {erros[0][:100]}. "
+                f"Ação: Revise as linhas listadas no relatório de erros e tente novamente "
+                f"em modo 'Importar válidas + avisos' para máxima compatibilidade."
+            )
+
             logger.warning(
-                "importacao.confirmacao.bloqueio_linhas user_id=%s falhas=%s primeiro_erro=%s",
+                "importacao.confirmacao.bloqueio_tudo_ou_nada user_id=%s falhas=%s linhas_com_erro=%s primeiro_erro=%s",
                 user_id,
                 len(erros),
+                linhas_erro_str,
                 erros[0] if erros else None,
             )
             return {
@@ -1594,8 +1671,13 @@ class AtivosService:
                 "erros": erros,
                 "avisos": avisos_confirmacao,
                 "bloqueios_importacao": [
-                    "Existem linhas inválidas na importação. Corrija o arquivo e execute nova pré-visualização."
+                    mensagem_bloqueio,
                 ],
+                "diagnostico": {
+                    "linhas_com_erro": sorted(list(linhas_com_erro)),
+                    "total_erros": len(erros),
+                    "primeiro_erro": erros[0] if erros else None,
+                },
                 "colunas": {
                     "exatas": classificacao["exatas"],
                     "sugeridas": classificacao["sugeridas"],
