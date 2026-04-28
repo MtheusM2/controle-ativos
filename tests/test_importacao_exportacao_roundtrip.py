@@ -223,9 +223,15 @@ class TestRoundTripExportacaoImportacao:
         """
         Testa que a normalização de valores coloca valores alias no formato canônico.
         """
-        from utils.normalizador_valores_importacao import normalizar_valor_setor
+        from utils.normalizador_valores_importacao import (
+            normalizar_valor_setor,
+            normalizar_valor_status,
+            normalizar_valor_tipo_ativo,
+            normalizar_dados_importacao_valores
+        )
 
-        casos_teste = [
+        # ===== TESTE: Normalizar setor =====
+        casos_setor = [
             ("rh", "Rh"),      # Minúsculo → Title Case
             ("RH", "Rh"),      # Maiúsculo → Title Case
             ("adm", "Adm"),    # Minúsculo → Title Case
@@ -233,10 +239,72 @@ class TestRoundTripExportacaoImportacao:
             ("Rh", "Rh"),      # Já é canônico → sem mudança
             ("t.i", "T.I"),    # Minúsculo com ponto → sem mudança no case mas reconhecido
             ("T.I", "T.I"),    # Já é canônico → sem mudança
+            ("marketing", "Marketing"),
+            ("mkt", "Marketing"),
         ]
 
-        for entrada, esperado in casos_teste:
+        for entrada, esperado in casos_setor:
             resultado = normalizar_valor_setor(entrada)
             assert resultado == esperado, \
                 f"normalizar_valor_setor('{entrada}') deveria retornar '{esperado}', " \
                 f"mas retornou '{resultado}'"
+
+        # ===== TESTE: Normalizar status (NOVO 2026-04-28) =====
+        casos_status = [
+            ("disponível", "Disponível"),
+            ("disponivel", "Disponível"),
+            ("em uso", "Em Uso"),
+            ("emuso", "Em Uso"),
+            ("Em Manutenção", "Em Manutenção"),
+            ("em manutencao", "Em Manutenção"),
+            ("reservado", "Reservado"),
+            ("baixado", "Baixado"),
+        ]
+
+        for entrada, esperado in casos_status:
+            resultado = normalizar_valor_status(entrada)
+            assert resultado == esperado, \
+                f"normalizar_valor_status('{entrada}') deveria retornar '{esperado}', " \
+                f"mas retornou '{resultado}'"
+
+        # ===== TESTE: Normalizar tipo_ativo (NOVO 2026-04-28) =====
+        casos_tipo = [
+            ("notebook", "Notebook"),
+            ("NOTEBOOK", "Notebook"),
+            ("laptop", "Notebook"),
+            ("computador portatil", "Notebook"),
+            ("computador portátil", "Notebook"),
+            ("desktop", "Desktop"),
+            ("computador", "Desktop"),
+            ("pc", "Desktop"),
+            ("celular", "Celular"),
+            ("smartphone", "Celular"),
+            ("monitor", "Monitor"),
+        ]
+
+        for entrada, esperado in casos_tipo:
+            resultado = normalizar_valor_tipo_ativo(entrada)
+            assert resultado == esperado, \
+                f"normalizar_valor_tipo_ativo('{entrada}') deveria retornar '{esperado}', " \
+                f"mas retornou '{resultado}'"
+
+        # ===== TESTE: Normalizar dados inteiros (novo 2026-04-28) =====
+        # Simula dados após mapeamento de CSV
+        dados_brutos = {
+            "id": "NTB-001",
+            "tipo_ativo": "notebook",  # minúsculo
+            "marca": "Dell",
+            "modelo": "Latitude",
+            "setor": "mkt",  # abreviação
+            "status": "em uso",  # lowercase com espaço
+            "data_entrada": "2026-01-15",
+        }
+
+        dados_normalizados = normalizar_dados_importacao_valores(dados_brutos)
+
+        assert dados_normalizados["tipo_ativo"] == "Notebook", \
+            f"tipo_ativo deveria ser normalizado para 'Notebook'"
+        assert dados_normalizados["setor"] == "Marketing", \
+            f"setor deveria ser normalizado para 'Marketing'"
+        assert dados_normalizados["status"] == "Em Uso", \
+            f"status deveria ser normalizado para 'Em Uso'"

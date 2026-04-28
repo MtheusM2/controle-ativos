@@ -15,6 +15,7 @@ from difflib import get_close_matches
 
 from models.ativos import Ativo
 from database.connection import cursor_mysql
+from services.auditoria_importacao_service import AuditoriaImportacaoService
 from services.importacao_service import ServicoImportacao
 from utils.email_inference import aplicar_inferencia_email_em_dados
 from utils.normalizador_valores_importacao import normalizar_dados_importacao_valores  # ===== NOVO (2026-04-27) =====
@@ -479,6 +480,45 @@ def _normalizar_nome_coluna_importacao(nome_coluna: str | None) -> str:
     return re.sub(r"\s+", " ", sem_ruido).strip()
 
 
+def _normalizar_chave_mapeamento_importacao(nome_coluna: str | None) -> str:
+    """
+    Normaliza cabeçalhos tratando espaço e underscore como equivalentes.
+    """
+    valor = _normalizar_nome_coluna_importacao(nome_coluna)
+    if not valor:
+        return ""
+    return re.sub(r"\s+", " ", valor.replace("_", " ")).strip()
+
+
+def _resolver_chave_original_csv(
+    chave_recebida: str | None,
+    *,
+    headers_por_chave_normalizada: dict[str, str] | None = None,
+    row: dict | None = None,
+) -> str | None:
+    """
+    Resolve a chave original do CSV a partir de uma versão crua ou normalizada.
+    """
+    chave = (chave_recebida or "").strip()
+    if not chave:
+        return None
+
+    if row is not None and chave in row:
+        return chave
+
+    chave_normalizada = _normalizar_chave_mapeamento_importacao(chave)
+    lookup = headers_por_chave_normalizada or {}
+    if chave_normalizada and chave_normalizada in lookup:
+        return lookup[chave_normalizada]
+
+    if row is not None:
+        for chave_row in row:
+            if _normalizar_chave_mapeamento_importacao(chave_row) == chave_normalizada:
+                return chave_row
+
+    return None
+
+
 def _resolver_modo_importacao_backend(
     modo_importacao: str | None,
     modo_tudo_ou_nada: bool,
@@ -621,9 +661,22 @@ def _aplicar_mapeamento_linha_importacao(row: dict, mapeamento_colunas: dict[str
     Se houver aliases misturados na entrada, normalizar_dados_importacao() consolidará.
     """
     dados_mapeados: dict[str, str] = {}
+    headers_por_chave_normalizada: dict[str, str] = {}
+    for chave_row in row:
+        chave_real = (chave_row or "").strip()
+        if not chave_real:
+            continue
+        chave_normalizada = _normalizar_chave_mapeamento_importacao(chave_real)
+        if chave_normalizada and chave_normalizada not in headers_por_chave_normalizada:
+            headers_por_chave_normalizada[chave_normalizada] = chave_real
 
     for coluna_origem, campo_destino in mapeamento_colunas.items():
-        valor = (row.get(coluna_origem) or "").strip()
+        coluna_real = _resolver_chave_original_csv(
+            coluna_origem,
+            headers_por_chave_normalizada=headers_por_chave_normalizada,
+            row=row,
+        )
+        valor = (row.get(coluna_real or "") or "").strip()
         if not valor:
             continue
         # ===== NORMALIZAR CAMPO: alias → canônico (PARTE 3) =====
@@ -1319,9 +1372,19 @@ class AtivosService:
             # Frontend enviou mapeamento completo (sem re-análise).
             # Ainda validamos contrato mínimo para evitar inconsistências de payload.
             headers_validos = {(header or "").strip() for header in headers}
+            headers_por_chave_normalizada: dict[str, str] = {}
+            for header in headers_validos:
+                chave_normalizada = _normalizar_chave_mapeamento_importacao(header)
+                if chave_normalizada and chave_normalizada not in headers_por_chave_normalizada:
+                    headers_por_chave_normalizada[chave_normalizada] = header
             campos_destino_usados = set()
             avisos_confirmacao: list[str] = []
             mapeamento_final: dict[str, str] = {}
+
+            logger.debug(
+                "DEBUG_CONFIRM_RUNTIME: mapeamento_recebido=%s",
+                mapeamento_confirmado,
+            )
 
             for coluna_origem, campo_destino in mapeamento_confirmado.items():
                 coluna = (coluna_origem or "").strip()
@@ -1330,7 +1393,12 @@ class AtivosService:
                 if not coluna or not campo or campo == "__ignorar__":
                     continue
 
-                if coluna not in headers_validos:
+                coluna_real = _resolver_chave_original_csv(
+                    coluna,
+                    headers_por_chave_normalizada=headers_por_chave_normalizada,
+                )
+
+                if not coluna_real:
                     avisos_confirmacao.append(
                         f"Coluna '{coluna}' foi ignorada porque não existe no CSV confirmado."
                     )
@@ -1351,9 +1419,18 @@ class AtivosService:
                     continue
 
                 campos_destino_usados.add(campo_norm)
-                mapeamento_final[coluna] = campo_norm
+                mapeamento_final[coluna_real] = campo_norm
+
+            logger.debug(
+                "DEBUG_CONFIRM_RUNTIME: mapeamento_interpretado=%s",
+                mapeamento_final,
+            )
 
             campos_faltantes = CAMPOS_IMPORTACAO_OBRIGATORIOS_PREVIEW - set(mapeamento_final.values())
+            logger.debug(
+                "DEBUG_CONFIRM_RUNTIME: campos_obrigatorios_faltantes=%s",
+                sorted(campos_faltantes),
+            )
             if campos_faltantes:
                 logger.warning(
                     "importacao.confirmacao.mapeamento_incompleto user_id=%s faltantes=%s",
@@ -1372,8 +1449,12 @@ class AtivosService:
                     ],
                     "bloqueios_importacao": ["Mapeamento incompleto enviado pelo cliente."],
                     "colunas": {"exatas": [], "sugeridas": [], "ignoradas": []},
+                    "diagnostico_mapeamento": {
+                        "campos_obrigatorios_faltantes": sorted(campos_faltantes),
+                        "mapeamento_recebido": dict(mapeamento_confirmado),
+                        "mapeamento_interpretado": dict(mapeamento_final),
+                    },
                 }
-            avisos_confirmacao: list[str] = []
             classificacao = {"exatas": [], "sugeridas": [], "ignoradas": []}
             # Pular análise de colunas — ir direto para validação de linhas
             usar_mapeamento_confirmado = True
@@ -1527,9 +1608,16 @@ class AtivosService:
             for coluna, campo_destino in mapeamento_final.items()
             if campo_destino
         }
+        try:
+            usuarios_existentes_cache = AuditoriaImportacaoService.obter_usuarios_validos(
+                contexto.get("empresa_id")
+            )
+        except Exception:
+            usuarios_existentes_cache = set()
         validacao_lote = self._validador_lote_importacao.validar_lote(
             linhas=[dados for _, dados in linhas_ativas_revisadas],
             mapeamento_campos=mapeamento_para_validacao,
+            usuarios_existentes=usuarios_existentes_cache,
         )
 
         # ===== BLOQUEIOS CRÍTICOS: Interrompem imediatamente =====
@@ -1600,6 +1688,11 @@ class AtivosService:
             # Em ambos os casos, processa normalmente
             try:
                 ativos_validos.append(self._validar_linha_importacao(dados_mapeados, numero_linha))
+                if resultado_validacao.avisos:
+                    avisos_confirmacao.extend(
+                        f"Linha {numero_linha}: {mensagem}"
+                        for _tipo, mensagem in resultado_validacao.avisos
+                    )
                 # Diagnóstico: log de aceite
                 logger.debug(
                     "importacao.confirmacao.linha_aceita numero_linha=%s modo=%s tem_aviso=%s",

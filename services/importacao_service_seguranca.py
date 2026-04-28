@@ -8,6 +8,8 @@
 #
 
 import logging
+import re
+import unicodedata
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from types import SimpleNamespace
@@ -17,8 +19,10 @@ from services.auditoria_importacao_service import AuditoriaImportacaoService
 from utils.import_validators import (
     ValidadorLote,
     classificar_status_importacao,
+    normalizar_campo_importacao,
 )
 from utils.email_inference import aplicar_inferencia_email_em_dados
+from utils.normalizador_valores_importacao import normalizar_dados_importacao_valores  # ===== FIX (2026-04-28): normalizar valores antes de validar =====
 from utils.import_mapper import ResultadoMatch
 from utils.import_schema import CRITICIDADE_CAMPOS  # Para campos_destino_disponiveis
 
@@ -78,6 +82,9 @@ class ServicoImportacaoComSeguranca:
         Raises:
             ValueError se arquivo inválido
         """
+        logger.warning("DEBUG_IMPORT_RUNTIME: arquivo importacao_service_seguranca.py carregado")
+        logger.warning("DEBUG_IMPORT_RUNTIME: entrou em gerar_preview_seguro")
+
         # 1. Processar arquivo (código base existente)
         headers_originais, linhas, metadados = self.servico_base.processar_arquivo_csv(
             conteudo_csv, delimitador
@@ -103,14 +110,34 @@ class ServicoImportacaoComSeguranca:
         # 4. Converter linhas para formato de validação
         linhas_dict = []
         inferencia_por_linha = {}
+        primeira_linha_antes_normalizacao = None
+        primeira_linha_depois_normalizacao = None
         for _numero_linha, row in linhas:
             # Mapear usando resultado_mapeamento.matches
             linha_mapeada = self._mapear_linha(row, resultado_mapeamento.matches)
             # Aplica inferencia backend antes da validacao para que a pre-visualizacao
             # reflita os dados revisados que serao usados na confirmacao final.
             linha_revisada, metadados_inferencia = aplicar_inferencia_email_em_dados(linha_mapeada)
+            if primeira_linha_antes_normalizacao is None:
+                primeira_linha_antes_normalizacao = dict(linha_revisada)
+            # ===== FIX (2026-04-28): Normalizar valores antes de validar =====
+            # Exemplos: "rh" → "Rh", "mkt" → "Marketing"
+            # Isto garante que preview e confirmação validam com os mesmos valores normalizados.
+            # (Contrato: preview deve usar exatamente a mesma sequência de transformações que confirmação)
+            linha_revisada = normalizar_dados_importacao_valores(linha_revisada)
+            if primeira_linha_depois_normalizacao is None:
+                primeira_linha_depois_normalizacao = dict(linha_revisada)
             linhas_dict.append(linha_revisada)
             inferencia_por_linha[_numero_linha] = metadados_inferencia
+
+        logger.warning(
+            "DEBUG_IMPORT_RUNTIME: primeira linha antes normalizacao=%s",
+            primeira_linha_antes_normalizacao,
+        )
+        logger.warning(
+            "DEBUG_IMPORT_RUNTIME: primeira linha depois normalizacao=%s",
+            primeira_linha_depois_normalizacao,
+        )
 
         # 5. Validar lote (com detectores de duplicata)
         usuarios_cache = AuditoriaImportacaoService.obter_usuarios_validos(empresa_id)
@@ -159,13 +186,18 @@ class ServicoImportacaoComSeguranca:
         avisos_por_linha_seguro = []
         for idx, validacao in enumerate(validacao_lote.validacoes_por_linha):
             numero_linha = linhas[idx][0] if idx < len(linhas) else idx + 2
+            dados_linha = linhas_dict[idx] if idx < len(linhas_dict) else {}
             if validacao.erros:
                 # Cada erro é tupla (TipoErro, mensagem_str)
                 erros_por_linha_seguro.append({
                     "linha": numero_linha,
                     "mensagem": validacao.erros[0][1],  # Primeira mensagem
                     "erros": [
-                        {"tipo": e[0].name, "mensagem": e[1]}
+                        self._estruturar_erro_validacao(
+                            tipo_erro=e[0].name,
+                            mensagem=e[1],
+                            dados_linha=dados_linha,
+                        )
                         for e in validacao.erros
                     ],
                 })
@@ -231,6 +263,10 @@ class ServicoImportacaoComSeguranca:
             validacao_lote.bloqueios,
             validacao_lote.alertas
         )
+        linhas_validas_limpas = max(
+            validacao_lote.linhas_validas - validacao_lote.linhas_com_aviso,
+            0,
+        )
 
         # 7. Registrar preview em auditoria
         AuditoriaImportacaoService.registrar_preview_gerado(
@@ -265,6 +301,7 @@ class ServicoImportacaoComSeguranca:
             "validacao_detalhes": {
                 "total_linhas": validacao_lote.total_linhas,
                 "linhas_validas": validacao_lote.linhas_validas,
+                "linhas_validas_limpas": linhas_validas_limpas,
                 "linhas_com_erro": validacao_lote.linhas_com_erro,
                 "linhas_invalidas": validacao_lote.linhas_com_erro,
                 "linhas_com_aviso": validacao_lote.linhas_com_aviso,
@@ -289,7 +326,9 @@ class ServicoImportacaoComSeguranca:
         preview_enriquecido["resumo_analise"] = {
             "total_linhas": validacao_lote.total_linhas,
             "linhas_validas": validacao_lote.linhas_validas,
+            "linhas_validas_limpas": linhas_validas_limpas,
             "linhas_invalidas": validacao_lote.linhas_com_erro,
+            "linhas_com_aviso": validacao_lote.linhas_com_aviso,
             "colunas_reconhecidas_automaticamente": len(preview_base.get("colunas", {}).get("exatas", [])),
             "colunas_sugeridas": len(preview_base.get("colunas", {}).get("sugeridas", [])),
             "colunas_ignoradas": len(preview_base.get("colunas", {}).get("ignoradas", [])),
@@ -303,6 +342,26 @@ class ServicoImportacaoComSeguranca:
         preview_enriquecido["avisos_por_linha"] = avisos_por_linha_seguro
         preview_enriquecido["preview_linhas"] = amostra_gravacao
         preview_enriquecido["campos_destino_disponiveis"] = sorted(list(CRITICIDADE_CAMPOS.keys()))
+        preview_enriquecido["resumo_validacao"] = {
+            "total_linhas": validacao_lote.total_linhas,
+            "linhas_validas": validacao_lote.linhas_validas,
+            "linhas_validas_limpas": linhas_validas_limpas,
+            "linhas_invalidas": validacao_lote.linhas_com_erro,
+            "linhas_com_erro": validacao_lote.linhas_com_erro,
+            "linhas_com_aviso": validacao_lote.linhas_com_aviso,
+            "taxa_erro_percentual": round(validacao_lote.taxa_erro_percentual, 2),
+            "erros": list(dict.fromkeys(
+                item.get("mensagem", "")
+                for item in erros_por_linha_seguro
+                if item.get("mensagem")
+            )),
+            "avisos": list(dict.fromkeys(
+                mensagem
+                for item in avisos_por_linha_seguro
+                for mensagem in item.get("mensagens", [])
+                if mensagem
+            )),
+        }
 
         # ===== NOVO (Camada 4): Adicionar linhas_revisao completo ao preview =====
         # Grade de revisão contém TODAS as linhas para que o usuário possa editar/descartar
@@ -407,6 +466,11 @@ class ServicoImportacaoComSeguranca:
             KeyError: Nunca deve ocorrer (usa .get() defensivo)
         """
         linha_mapeada = {}
+        row_por_chave_normalizada = {}
+        for chave in row:
+            chave_normalizada = ServicoImportacaoComSeguranca._normalizar_chave_origem(chave)
+            if chave_normalizada and chave_normalizada not in row_por_chave_normalizada:
+                row_por_chave_normalizada[chave_normalizada] = chave
 
         for match in matches:
             # Validação defensiva: garante que match tem os atributos esperados
@@ -427,10 +491,143 @@ class ServicoImportacaoComSeguranca:
                 continue
 
             # Extrai valor original com tratamento defensivo
-            valor_original = row.get(match.coluna_origem, '').strip()
+            valor_bruto = row.get(match.coluna_origem, '')
+            if not valor_bruto:
+                chave_real = row_por_chave_normalizada.get(
+                    ServicoImportacaoComSeguranca._normalizar_chave_origem(match.coluna_origem)
+                )
+                if chave_real:
+                    valor_bruto = row.get(chave_real, '')
+            valor_original = str(valor_bruto or '').strip()
 
             # Aplica limpeza básica e mapeia para campo destino
             if valor_original:
                 linha_mapeada[match.campo_destino] = valor_original
 
         return linha_mapeada
+
+    @staticmethod
+    def _normalizar_chave_origem(valor: str | None) -> str:
+        texto = str(valor or "").strip()
+        if not texto:
+            return ""
+
+        sem_acentos = "".join(
+            caractere
+            for caractere in unicodedata.normalize("NFD", texto)
+            if unicodedata.category(caractere) != "Mn"
+        )
+        minusculo = sem_acentos.lower().replace("-", " ").replace("_", " ")
+        apenas_alfa_num = re.sub(r"[^a-z0-9 ]", "", minusculo)
+        return re.sub(r"\s+", " ", apenas_alfa_num).strip()
+
+    @staticmethod
+    def _estruturar_erro_validacao(
+        *,
+        tipo_erro: str,
+        mensagem: str,
+        dados_linha: Dict[str, str],
+    ) -> Dict[str, Optional[str]]:
+        detalhe = {
+            "tipo": tipo_erro,
+            "mensagem": mensagem,
+            "campo": None,
+            "valor_recebido": None,
+            "erro": mensagem,
+            "valor_esperado": None,
+        }
+        texto = (mensagem or "").strip()
+
+        match = re.match(r"^Campo obrigatório '([^']+)' está vazio$", texto)
+        if match:
+            campo = normalizar_campo_importacao(match.group(1))
+            detalhe["campo"] = campo
+            detalhe["valor_recebido"] = dados_linha.get(campo, "") if campo else ""
+            detalhe["erro"] = "Campo obrigatório está vazio"
+            detalhe["valor_esperado"] = "Valor preenchido"
+            return detalhe
+
+        match = re.match(r"^Campo '([^']+)' = '([^']+)' inválido\. Valores válidos: (.+)$", texto)
+        if match:
+            campo = normalizar_campo_importacao(match.group(1))
+            detalhe["campo"] = campo
+            detalhe["valor_recebido"] = match.group(2)
+            detalhe["erro"] = "Valor inválido para lista controlada"
+            detalhe["valor_esperado"] = match.group(3)
+            return detalhe
+
+        match = re.match(r"^([^ ]+) em formato inválido: '([^']+)' \(use ([^)]+)\)$", texto)
+        if match:
+            campo = normalizar_campo_importacao(match.group(1))
+            detalhe["campo"] = campo
+            detalhe["valor_recebido"] = match.group(2)
+            detalhe["erro"] = "Formato inválido"
+            detalhe["valor_esperado"] = match.group(3)
+            return detalhe
+
+        match = re.match(r"^([^ ]+) inválida: '([^']+)' \((.+)\)$", texto)
+        if match:
+            campo = normalizar_campo_importacao(match.group(1))
+            detalhe["campo"] = campo
+            detalhe["valor_recebido"] = match.group(2)
+            detalhe["erro"] = "Data inválida"
+            detalhe["valor_esperado"] = match.group(3)
+            return detalhe
+
+        match = re.match(r"^Email inválido: '([^']+)'$", texto)
+        if match:
+            detalhe["campo"] = "email_responsavel"
+            detalhe["valor_recebido"] = match.group(1)
+            detalhe["erro"] = "Email inválido"
+            detalhe["valor_esperado"] = "Email em formato válido"
+            return detalhe
+
+        match = re.match(r"^(.+?) inválido \(esperado número\): (.+)$", texto)
+        if match:
+            campo = normalizar_campo_importacao(match.group(1))
+            detalhe["campo"] = campo
+            detalhe["valor_recebido"] = match.group(2)
+            detalhe["erro"] = "Número inválido"
+            detalhe["valor_esperado"] = "Número válido"
+            return detalhe
+
+        match = re.match(r"^Campo '([^']+)' tem (\d+) chars \(máx (\d+)\)$", texto)
+        if match:
+            campo = normalizar_campo_importacao(match.group(1))
+            detalhe["campo"] = campo
+            detalhe["valor_recebido"] = dados_linha.get(campo)
+            detalhe["erro"] = f"Comprimento excedido ({match.group(2)} caracteres)"
+            detalhe["valor_esperado"] = f"Até {match.group(3)} caracteres"
+            return detalhe
+
+        match = re.match(r"^ID '([^']+)' tem (\d+) chars \(máx 20\)$", texto)
+        if match:
+            detalhe["campo"] = "id"
+            detalhe["valor_recebido"] = match.group(1)
+            detalhe["erro"] = f"Comprimento excedido ({match.group(2)} caracteres)"
+            detalhe["valor_esperado"] = "Até 20 caracteres"
+            return detalhe
+
+        match = re.match(r"^ID '([^']+)' contém caracteres inválidos\. Use: (.+)$", texto)
+        if match:
+            detalhe["campo"] = "id"
+            detalhe["valor_recebido"] = match.group(1)
+            detalhe["erro"] = "ID com caracteres inválidos"
+            detalhe["valor_esperado"] = match.group(2)
+            return detalhe
+
+        match = re.match(r"^ID '([^']+)' aparece mais de uma vez$", texto)
+        if match:
+            detalhe["campo"] = "id"
+            detalhe["valor_recebido"] = match.group(1)
+            detalhe["erro"] = "ID duplicado no CSV"
+            detalhe["valor_esperado"] = "ID único por linha"
+            return detalhe
+
+        match = re.search(r"'([^']+)'", texto)
+        if match:
+            campo = normalizar_campo_importacao(match.group(1))
+            detalhe["campo"] = campo
+            detalhe["valor_recebido"] = dados_linha.get(campo)
+
+        return detalhe

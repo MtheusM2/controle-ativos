@@ -420,11 +420,18 @@
 
     function renderSummary(preview) {
         const resumo = preview.validacao_detalhes || preview.resumo_validacao || preview.resumo_analise || {};
+        const linhasSemErro = Number(resumo.linhas_validas ?? 0);
+        const linhasComAviso = Number(resumo.linhas_com_aviso ?? 0);
+        const linhasValidasLimpas = Number(
+            resumo.linhas_validas_limpas ?? Math.max(linhasSemErro - linhasComAviso, 0)
+        );
+        const linhasInvalidas = Number(resumo.linhas_invalidas ?? resumo.linhas_com_erro ?? 0);
         importSummaryContainer.innerHTML = `
             <div class="import-summary-grid">
                 <div><strong>Total de linhas</strong><span>${resumo.total_linhas ?? 0}</span></div>
-                <div><strong>Linhas válidas</strong><span>${resumo.linhas_validas ?? 0}</span></div>
-                <div><strong>Linhas inválidas</strong><span>${resumo.linhas_invalidas ?? resumo.linhas_com_erro ?? 0}</span></div>
+                <div><strong>Válidas limpas</strong><span>${linhasValidasLimpas}</span></div>
+                <div><strong>Com aviso</strong><span>${linhasComAviso}</span></div>
+                <div><strong>Linhas inválidas</strong><span>${linhasInvalidas}</span></div>
                 <div><strong>Reconhecidas automaticamente</strong><span>${resumo.colunas_reconhecidas_automaticamente ?? (preview.colunas?.exatas || []).length}</span></div>
                 <div><strong>Sugestões com score</strong><span>${resumo.colunas_sugeridas ?? (preview.colunas?.sugeridas || []).length}</span></div>
                 <div><strong>Colunas ignoradas</strong><span>${resumo.colunas_ignoradas ?? (preview.colunas?.ignoradas || []).length}</span></div>
@@ -510,6 +517,31 @@
             "Nenhum erro por linha detectado.",
             (item) => `<strong>Linha ${escapeHtml(item.linha ?? "-")}</strong>: ${escapeHtml(item.mensagem || "Erro não especificado.")}`
         );
+
+        if (errosPorLinha.length) {
+            lineErrorsContainer.innerHTML = errosPorLinha.map((item) => {
+                const detalhes = item.erros || [];
+                const detalhesHtml = detalhes.length
+                    ? detalhes.map((erro) => {
+                        const valorRecebido = erro.valor_recebido === "" ? "(vazio)" : (erro.valor_recebido ?? "-");
+                        const partes = [
+                            erro.campo ? `<strong>Campo:</strong> ${escapeHtml(erro.campo)}` : "",
+                            `<strong>Valor recebido:</strong> ${escapeHtml(String(valorRecebido))}`,
+                            `<strong>Erro:</strong> ${escapeHtml(erro.erro || erro.mensagem || "Erro não especificado.")}`,
+                            erro.valor_esperado ? `<strong>Esperado:</strong> ${escapeHtml(String(erro.valor_esperado))}` : "",
+                        ].filter(Boolean);
+                        return `<div style="margin-top: 0.35rem;">${partes.join(" | ")}</div>`;
+                    }).join("")
+                    : `<div style="margin-top: 0.35rem;"><strong>Erro:</strong> ${escapeHtml(item.mensagem || "Erro não especificado.")}</div>`;
+
+                return `
+                    <div style="margin-bottom: 0.9rem; padding: 0.75rem; border: 1px solid rgba(160, 32, 32, 0.18); border-radius: 8px; background: rgba(160, 32, 32, 0.04);">
+                        <strong>Linha ${escapeHtml(item.linha ?? "-")}</strong>
+                        ${detalhesHtml}
+                    </div>
+                `;
+            }).join("");
+        }
 
         lineWarningsContainer.innerHTML = renderSimpleList(
             avisosPorLinha,

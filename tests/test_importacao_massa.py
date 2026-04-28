@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from types import SimpleNamespace
 
+from services.auditoria_importacao_service import AuditoriaImportacaoService
 from services.ativos_service import AtivoErro, AtivosService
 
 
@@ -83,6 +84,59 @@ def test_confirmar_importacao_aplica_sugestoes_confirmadas_teamviewer_anydesk():
     assert ativos_capturados[0].anydesk_id == "ABC-DEF-123"
     assert ativos_capturados[0].imei_1 is None
     assert ativos_capturados[0].imei_2 is None
+
+
+def test_confirmar_importacao_aceita_mapeamento_do_frontend_com_headers_normalizados(monkeypatch):
+    """
+    Regressao do fluxo web: frontend envia chaves normalizadas do preview
+    ("tipo ativo", "data entrada"), mas a confirmacao deve reconciliar isso
+    com os headers reais do CSV ("tipo_ativo", "data_entrada").
+    """
+    service = _service_admin()
+    ativos_capturados = []
+
+    monkeypatch.setattr(
+        AuditoriaImportacaoService,
+        "obter_usuarios_validos",
+        staticmethod(lambda empresa_id: {"Matheus"}),
+    )
+
+    def _criar_ativo_fake(ativo, _user_id):
+        ativos_capturados.append(ativo)
+        return f"OPU-{len(ativos_capturados):06d}"
+
+    service.criar_ativo = _criar_ativo_fake  # type: ignore[method-assign]
+
+    conteudo_csv = (
+        "tipo_ativo,marca,modelo,usuario_responsavel,setor,status,data_entrada\n"
+        "Monitor,Samsung,24POLEGADAS,Matheus,Rh,Em Uso,2026-04-06\n"
+    ).encode("utf-8")
+
+    resultado = service.confirmar_importacao_csv(
+        conteudo_csv,
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_tudo_ou_nada=False,
+        modo_importacao="validas_e_avisos",
+        mapeamento_confirmado={
+            "tipo ativo": "tipo_ativo",
+            "marca": "marca",
+            "modelo": "modelo",
+            "usuario responsavel": "usuario_responsavel",
+            "setor": "setor",
+            "status": "status",
+            "data entrada": "data_entrada",
+        },
+        linhas_descartadas=set(),
+        edicoes_por_linha={},
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert resultado["importados"] == 1
+    assert resultado["falhas"] == 0
+    assert len(ativos_capturados) == 1
+    assert ativos_capturados[0].tipo_ativo == "Monitor"
+    assert ativos_capturados[0].data_entrada == "2026-04-06"
 
 
 def test_confirmar_importacao_sem_confirmar_sugestao_mantem_schema_first():

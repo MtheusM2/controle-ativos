@@ -13,11 +13,6 @@ from services.storage_backend import S3StorageBackend, StorageBackendError
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
 from models.ativos import Ativo
 from services.ativos_arquivo_service import (
     ArquivoInvalido,
@@ -642,6 +637,13 @@ def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
     """
     Gera PDF tabular em memoria para exportacao de ativos.
     """
+    # Import tardio para nao acoplar inicializacao das rotas de importacao
+    # a dependencias opcionais/binarias usadas apenas na exportacao PDF.
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     pdf_buffer = io.BytesIO()
     documento = SimpleDocTemplate(
         pdf_buffer,
@@ -1871,6 +1873,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         Backward compatible: mantém preview_base (colunas, preview_linhas, etc)
         """
         try:
+            logger.warning("DEBUG_IMPORT_RUNTIME: rota de preview chamada")
             conteudo_csv = _ler_upload_csv_importacao()
 
             # Obter empresa_id da sessão
@@ -1878,6 +1881,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
             # NOVO: Usar serviço com segurança
             servico_seguro = ServicoImportacaoComSeguranca()
+            logger.warning("DEBUG_IMPORT_RUNTIME: service usado=%s", type(servico_seguro).__name__)
             id_lote, preview = servico_seguro.gerar_preview_seguro(
                 conteudo_csv=conteudo_csv,
                 usuario_id=user_id,
@@ -1933,6 +1937,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         - Permite reversão por 7 dias (admin)
         """
         try:
+            logger.debug(
+                "DEBUG_CONFIRM_RUNTIME: payload=%s",
+                request.form.to_dict(flat=False),
+            )
             # Obter dados da requisição (FormData, não JSON)
             id_lote = request.form.get('id_lote', '').strip()
             modo_duplicata = request.form.get('modo_duplicata', 'atualizar').strip()
@@ -1941,6 +1949,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             sugestoes_confirmadas = _ler_sugestoes_confirmadas()
             # Usa parser dedicado para garantir contrato estável do mapeamento consolidado.
             mapeamento_confirmado = _ler_mapeamento_confirmado()
+            logger.debug(
+                "DEBUG_CONFIRM_RUNTIME: mapeamento_recebido=%s",
+                mapeamento_confirmado,
+            )
 
             # Backend normaliza modo para evitar dependência de flags soltas do cliente.
             if modo_importacao not in {"validas_apenas", "validas_e_avisos", "tudo_ou_nada"}:
@@ -2038,6 +2050,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             if not resultado.get("ok_importacao", False):
                 erros = resultado.get('erros', []) or []
                 primeiro_erro = erros[0] if erros else resultado.get('mensagem_erro', 'Erro desconhecido')
+                logger.debug(
+                    "DEBUG_CONFIRM_RUNTIME: campos_obrigatorios_faltantes=%s",
+                    resultado.get('diagnostico_mapeamento', {}).get('campos_obrigatorios_faltantes', []),
+                )
                 logger.warning(
                     "importacao.confirmar.falha_validacao id_lote=%s falhas=%s importados=%s primeiro_erro=%s",
                     id_lote or '<vazio>',

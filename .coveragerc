@@ -1,0 +1,30 @@
+[run]
+source = .
+omit =
+    */venv/*
+    */venv3/*
+    .venv/*
+    */site-packages/*
+    tests/*
+    deploy/*
+    docs/*
+    scripts/*
+    database/migrations/*
+    web_app/templates/*
+    */__pycache__/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abc.abstractmethod
+    if 0:
+    if False:
+    if sys.version_info
+
+precision = 2

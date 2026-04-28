@@ -30,7 +30,6 @@ MAPEAMENTO_SETORES = {
 
     # T.I (Tecnologia da Informação)
     "tecnologiadainformacao": "T.I",
-    "tecnologia": "T.I",
     "ti": "T.I",
     "tinfo": "T.I",
     "sistemas": "T.I",
@@ -44,11 +43,11 @@ MAPEAMENTO_SETORES = {
     "administrativo": "Adm",
     "admtva": "Adm",
 
-    # Técnica (removidos acentos automaticamente durante busca)
+    # Técnica
     "tecnica": "Técnica",
     "tecnico": "Técnica",
     "tec": "Técnica",
-    "tecnica_operacional": "Técnica",
+    "tecnicaoperacional": "Técnica",
 
     # Financeiro
     "financeiro": "Financeiro",
@@ -78,6 +77,135 @@ MAPEAMENTO_SETORES = {
     "executivo": "Diretoria",
 }
 
+# ===== MAPEAMENTO DE STATUS (2026-04-28) =====
+# Normaliza variações de status para valores canônicos
+# NOTA: Chaves devem estar SEM espaços (função remove espaços para busca)
+MAPEAMENTO_STATUS = {
+    # Disponível
+    "disponivel": "Disponível",
+    "livre": "Disponível",
+    "emstock": "Disponível",
+
+    # Em Uso
+    "emuso": "Em Uso",
+    "usado": "Em Uso",
+    "alocado": "Em Uso",
+
+    # Em Manutenção
+    "emmanutencao": "Em Manutenção",
+    "manutencao": "Em Manutenção",
+    "reparo": "Em Manutenção",
+
+    # Reservado
+    "reservado": "Reservado",
+    "reserva": "Reservado",
+
+    # Baixado
+    "baixado": "Baixado",
+    "descontinuado": "Baixado",
+    "aposentado": "Baixado",
+    "sucateado": "Baixado",
+}
+
+# ===== MAPEAMENTO DE TIPOS DE ATIVO (2026-04-28) =====
+# Normaliza variações de tipo de ativo para valores canônicos
+# NOTA: Chaves devem estar SEM espaços (função remove espaços para busca)
+MAPEAMENTO_TIPOS_ATIVO = {
+    # Notebook
+    "notebook": "Notebook",
+    "computadorportatil": "Notebook",  # computador portátil (sem espaço, sem acento)
+    "laptop": "Notebook",
+    "note": "Notebook",
+    "ultrabook": "Notebook",
+
+    # Desktop
+    "desktop": "Desktop",
+    "computador": "Desktop",
+    "pc": "Desktop",
+    "computadordesktop": "Desktop",
+    "estacao": "Desktop",
+    "workstation": "Desktop",
+
+    # Celular
+    "celular": "Celular",
+    "smartphone": "Celular",
+    "telefone": "Celular",
+    "mobile": "Celular",
+    "phone": "Celular",
+
+    # Monitor
+    "monitor": "Monitor",
+    "tela": "Monitor",
+    "display": "Monitor",
+
+    # Mouse
+    "mouse": "Mouse",
+    "rato": "Mouse",
+
+    # Teclado
+    "teclado": "Teclado",
+    "keyboard": "Teclado",
+
+    # Headset
+    "headset": "Headset",
+    "fone": "Headset",
+    "headphone": "Headset",
+    "audio": "Headset",
+
+    # Adaptador
+    "adaptador": "Adaptador",
+    "conversor": "Adaptador",
+
+    # Cabo
+    "cabo": "Cabo",
+    "cordao": "Cabo",
+
+    # Carregador
+    "carregador": "Carregador",
+    "fonte": "Carregador",
+    "bateria": "Carregador",
+
+    # Outro
+    "outro": "Outro",
+    "diversos": "Outro",
+}
+
+
+def _normalizar_valor_generico(valor: Optional[str], mapa_valores: dict) -> Optional[str]:
+    """
+    Utilitário privado para normalizar valor contra um mapa de sinônimos.
+
+    Args:
+        valor: String bruta (pode conter espaços, acentos, maiúsculas)
+        mapa_valores: Dicionário {entrada_normalizada: valor_oficial}
+
+    Returns:
+        Valor normalizado ou original se não encontrado no mapa.
+    """
+    if not valor:
+        return None
+
+    # Limpar para busca
+    valor_limpo = (valor or "").strip()
+    if not valor_limpo:
+        return None
+
+    # Remover acentos para matching robusto
+    valor_sem_acento = ''.join(
+        c for c in unicodedata.normalize('NFD', valor_limpo)
+        if unicodedata.category(c) != 'Mn'
+    )
+
+    # Versão de busca: lowercase, sem espaços, sem pontos, sem underscores
+    valor_busca = valor_sem_acento.lower().replace(" ", "").replace(".", "").replace("_", "")
+
+    # Buscar no mapa
+    if valor_busca in mapa_valores:
+        return mapa_valores[valor_busca]
+
+    # Se não encontrar, retornar original (validador fará validação enum depois)
+    return valor_limpo
+
 
 def normalizar_valor_setor(valor: Optional[str]) -> Optional[str]:
     """
@@ -85,7 +213,7 @@ def normalizar_valor_setor(valor: Optional[str]) -> Optional[str]:
 
     Exemplos:
         "mkt" → "Marketing"
-        "RH" → "RH"
+        "RH" → "Rh"
         "t.i." → "T.I"
         "Técnico" → "Técnica"
         "" → None
@@ -96,44 +224,49 @@ def normalizar_valor_setor(valor: Optional[str]) -> Optional[str]:
 
     Returns:
         Valor normalizado (canônico do sistema) ou None se vazio.
-        Se não encontrar mapeamento, retorna o valor original normalizado.
-
-    Comportamento:
-        - Remove espaços, pontos, underscores
-        - Converte para lowercase para busca
-        - Preserva maiúsculas no valor de retorno (segue padrão oficial)
-        - Retorna valor original se não encontrar no mapeamento (sistema validará depois)
     """
-    if not valor:
-        return None
+    return _normalizar_valor_generico(valor, MAPEAMENTO_SETORES)
 
-    # ===== NORMALIZAR: limpar para busca =====
-    valor_limpo = (valor or "").strip()
-    if not valor_limpo:
-        return None
 
-    # ===== NOVO (2026-04-27): Remover acentos para matching mais robusto =====
-    # Exemplo: "Técnico" → "tecnico" (sem acento) → mapeado para "Técnica"
-    # Decompomos Unicode em base + combinadores, depois removemos combinadores
-    valor_sem_acento = ''.join(
-        c for c in unicodedata.normalize('NFD', valor_limpo)
-        if unicodedata.category(c) != 'Mn'  # Mn = Mark, Nonspacing (acentos)
-    )
+def normalizar_valor_status(valor: Optional[str]) -> Optional[str]:
+    """
+    Normaliza valor de status/situação do ativo.
 
-    # Criar versão de busca: lowercase, sem espaços, sem pontos, sem underscores
-    valor_busca = valor_sem_acento.lower().replace(" ", "").replace(".", "").replace("_", "")
+    Exemplos:
+        "disponível" → "Disponível"
+        "em uso" → "Em Uso"
+        "em manutenção" → "Em Manutenção"
+        "" → None
+        None → None
 
-    # ===== BUSCAR NO MAPEAMENTO =====
-    if valor_busca in MAPEAMENTO_SETORES:
-        valor_oficial = MAPEAMENTO_SETORES[valor_busca]
-        # Log para auditoria (útil para entender normalizações aplicadas)
-        # Comentário: log será feito no serviço que chamar esta função
-        return valor_oficial
+    Args:
+        valor: String bruta do status
 
-    # ===== SE NÃO ENCONTRAR MAPEAMENTO =====
-    # Retornar original (sistema aplicará validação de enum depois)
-    # Isso permite que erros de validação sejam claros
-    return valor_limpo
+    Returns:
+        Valor normalizado (canônico do sistema) ou None se vazio.
+    """
+    return _normalizar_valor_generico(valor, MAPEAMENTO_STATUS)
+
+
+def normalizar_valor_tipo_ativo(valor: Optional[str]) -> Optional[str]:
+    """
+    Normaliza valor de tipo de ativo (equipamento).
+
+    Exemplos:
+        "notebook" → "Notebook"
+        "computador portatil" → "Notebook"
+        "desktop" → "Desktop"
+        "celular" → "Celular"
+        "" → None
+        None → None
+
+    Args:
+        valor: String bruta do tipo de ativo
+
+    Returns:
+        Valor normalizado (canônico do sistema) ou None se vazio.
+    """
+    return _normalizar_valor_generico(valor, MAPEAMENTO_TIPOS_ATIVO)
 
 
 def normalizar_dados_importacao_valores(dados: dict) -> dict:
@@ -149,10 +282,18 @@ def normalizar_dados_importacao_valores(dados: dict) -> dict:
     Returns:
         Dict com valores normalizados conforme mapeamentos centralizados
 
-    Campos Normalizados:
+    Campos Normalizados (2026-04-28):
+        - tipo_ativo: aplica MAPEAMENTO_TIPOS_ATIVO
         - setor: aplica MAPEAMENTO_SETORES
+        - status: aplica MAPEAMENTO_STATUS
     """
     resultado = dict(dados)
+
+    # ===== NORMALIZAR TIPO_ATIVO (se presente) =====
+    if 'tipo_ativo' in resultado and resultado['tipo_ativo']:
+        valor_normalizado = normalizar_valor_tipo_ativo(resultado['tipo_ativo'])
+        if valor_normalizado:
+            resultado['tipo_ativo'] = valor_normalizado
 
     # ===== NORMALIZAR SETOR (se presente) =====
     if 'setor' in resultado and resultado['setor']:
@@ -160,11 +301,10 @@ def normalizar_dados_importacao_valores(dados: dict) -> dict:
         if valor_normalizado:
             resultado['setor'] = valor_normalizado
 
-    # ===== POSSO ADICIONAR MAIS NORMALIZAÇÕES AQUI =====
-    # Estrutura aberta para:
-    # - normalizar_valor_status()
-    # - normalizar_valor_condicao()
-    # - normalizar_valor_tipo_ativo()
-    # Por agora, apenas setor é crítico (mais usado em CSVs com abreviações)
+    # ===== NORMALIZAR STATUS (se presente) =====
+    if 'status' in resultado and resultado['status']:
+        valor_normalizado = normalizar_valor_status(resultado['status'])
+        if valor_normalizado:
+            resultado['status'] = valor_normalizado
 
     return resultado

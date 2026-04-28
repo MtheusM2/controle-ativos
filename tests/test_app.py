@@ -1753,9 +1753,7 @@ def test_attachment_delete_route_uses_correct_attachment_id():
     assert fake_arquivos.removed_ids == [7]
 
 
-def test_service_delete_keeps_db_cleanup_when_physical_file_is_missing(tmp_path):
-    # Mantém a assinatura do pytest para futura expansão do cenário de filesystem.
-    del tmp_path
+def test_service_delete_keeps_db_cleanup_when_physical_file_is_missing():
     from unittest.mock import MagicMock
     from services.ativos_arquivo_service import AtivosArquivoService
     from services.storage_backend import StorageBackendError
