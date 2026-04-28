@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # pyright: reportPrivateUsage=false
 
+import importlib
 from io import BytesIO
 import time
 from types import SimpleNamespace
@@ -11,11 +12,83 @@ from openpyxl import load_workbook
 from services.ativos_service import PermissaoNegada
 from web_app.app import create_app
 
+
+class FakeMySQLError(Exception):
+    """Erro falso com errno para validar a sanitizacao da resposta de health."""
+
+    def __init__(self, message: str, errno: int):
+        super().__init__(message)
+        self.errno = errno
+
+
 def test_healthcheck(http_client):
-    response = http_client.get("/health")
+    with patch("database.connection.verificar_conexao_mysql", return_value=None):
+        response = http_client.get("/health")
+
     assert response.status_code == 200
+    assert response.is_json
+    assert response.mimetype == "application/json"
     payload = response.get_json()
-    assert payload == {"ok": True, "status": "healthy"}
+    assert payload == {
+        "ok": True,
+        "status": "healthy",
+        "checks": {"database": {"ok": True, "status": "healthy"}},
+    }
+    assert not response.get_data(as_text=True).lstrip().startswith("<")
+
+
+def test_healthcheck_reports_degraded_database_without_leaking_details(http_client):
+    with patch(
+        "database.connection.verificar_conexao_mysql",
+        side_effect=FakeMySQLError("Access denied for user 'secret'@'10.0.0.1'", 1045),
+    ):
+        response = http_client.get("/health")
+
+    assert response.status_code == 503
+    assert response.is_json
+    payload = response.get_json()
+    assert payload["ok"] is False
+    assert payload["status"] == "degraded"
+    assert payload["checks"]["database"]["ok"] is False
+    assert payload["checks"]["database"]["status"] == "degraded"
+    assert payload["checks"]["database"]["error"] == "Credenciais de banco invalidas ou conexao recusada"
+    assert "secret" not in response.get_data(as_text=True)
+    assert "stack trace" not in response.get_data(as_text=True).lower()
+
+
+def test_config_accepts_mysql_aliases(monkeypatch):
+    for name in (
+        "DB_HOST",
+        "DB_PORT",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_NAME",
+        "FLASK_SECRET_KEY",
+        "APP_PEPPER",
+        "FLASK_DEBUG",
+        "SESSION_COOKIE_SECURE",
+        "ENVIRONMENT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("MYSQL_HOST", "192.168.1.20")
+    monkeypatch.setenv("MYSQL_PORT", "3307")
+    monkeypatch.setenv("MYSQL_USER", "app_user")
+    monkeypatch.setenv("MYSQL_PASSWORD", "app_password")
+    monkeypatch.setenv("MYSQL_DATABASE", "controle_ativos")
+    monkeypatch.setenv("FLASK_SECRET_KEY", "test-secret-key")
+    monkeypatch.setenv("APP_PEPPER", "test-pepper")
+
+    import config
+
+    reloaded = importlib.reload(config)
+
+    assert reloaded.DB_HOST == "192.168.1.20"
+    assert reloaded.DB_PORT == 3307
+    assert reloaded.DB_USER == "app_user"
+    assert reloaded.DB_PASSWORD == "app_password"
+    assert reloaded.DB_NAME == "controle_ativos"
 
 
 def test_dashboard_authenticated(authenticated_client):

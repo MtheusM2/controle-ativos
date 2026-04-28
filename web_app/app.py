@@ -44,6 +44,7 @@ from services.storage_backend import (  # noqa: E402
     S3StorageBackend,
     StorageBackendError,
 )
+import database.connection as db_connection  # noqa: E402
 from utils.csrf import gerar_token_csrf  # noqa: E402
 from utils.logging_config import configurar_logging  # noqa: E402
 from web_app.routes.ativos_routes import registrar_rotas_ativos  # noqa: E402
@@ -157,9 +158,35 @@ def create_app(
     @flask_app.get("/health")
     def health():
         """
-        Endpoint simples para smoke test e monitoramento local.
+        Endpoint de saúde com diagnóstico seguro.
+
+        O banco é verificado com uma consulta simples e qualquer falha é
+        convertida em resposta degradada sem expor stack trace ao cliente.
         """
-        return jsonify({"ok": True, "status": "healthy"})
+        checks: dict[str, dict[str, object]] = {}
+        overall_ok = True
+
+        if db_connection is not None:
+            try:
+                db_connection.verificar_conexao_mysql()
+                checks["database"] = {"ok": True, "status": "healthy"}
+            except Exception as error:
+                # O stack trace vai para o log local; o navegador recebe apenas um erro seguro.
+                flask_app.logger.exception("Falha ao validar a conexao com o banco no healthcheck.")
+                checks["database"] = {
+                    "ok": False,
+                    "status": "degraded",
+                    "error": db_connection.classificar_erro_conexao_mysql(error),
+                }
+                overall_ok = False
+
+        payload = {
+            "ok": overall_ok,
+            "status": "healthy" if overall_ok else "degraded",
+            "checks": checks,
+        }
+
+        return jsonify(payload), (200 if overall_ok else 503)
 
     @flask_app.get("/config-diagnostico")
     def config_diagnostico():

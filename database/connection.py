@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import mysql.connector
 
 # Importa configurações centralizadas já validadas no startup.
-from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
+from config import DB_CONNECTION_TIMEOUT, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
 
 
 def _db_config(com_database: bool = True) -> dict:
@@ -32,6 +32,7 @@ def _db_config(com_database: bool = True) -> dict:
         "port": port,
         "user": user,
         "password": password,
+        "connection_timeout": DB_CONNECTION_TIMEOUT,
     }
 
     if com_database:
@@ -75,3 +76,49 @@ def cursor_mysql(dictionary: bool = True):
             yield conn, cur
         finally:
             cur.close()
+
+
+def classificar_erro_conexao_mysql(error: Exception) -> str:
+    """
+    Converte erros MySQL em mensagens seguras para healthcheck e diagnósticos.
+
+    A resposta nunca inclui senha, string de conexão ou stack trace.
+    """
+    errno = getattr(error, "errno", None)
+    mensagem = str(error).strip().lower()
+
+    if errno in {1045} or "access denied" in mensagem:
+        return "Credenciais de banco invalidas ou conexao recusada"
+
+    if errno in {1049} or "unknown database" in mensagem:
+        return "Banco de dados nao encontrado ou inacessivel"
+
+    if errno in {2002, 2003, 2006, 2013, 2055}:
+        return "Banco de dados indisponivel ou conexao recusada"
+
+    if any(palavra in mensagem for palavra in ("can't connect", "connection refused", "timed out", "timeout")):
+        return "Banco de dados indisponivel ou conexao recusada"
+
+    return "Erro ao validar a conexao com o banco de dados"
+
+
+def verificar_conexao_mysql() -> None:
+    """
+    Executa uma consulta simples de healthcheck no MySQL.
+
+    A excecao original sobe para que a camada HTTP registre o stack trace e
+    traduza a falha em uma resposta segura.
+    """
+    conn = None
+    cursor = None
+
+    try:
+        conn = mysql.connector.connect(**_db_config(com_database=True))
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None and conn.is_connected():
+            conn.close()

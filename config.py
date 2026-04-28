@@ -50,6 +50,43 @@ def _get_required_str(name: str) -> str:
     return value.strip()
 
 
+def _get_first_str(*names: str, default: str | None = None, required: bool = False) -> str:
+    """
+    Lê a primeira variável de ambiente definida entre os nomes fornecidos.
+
+    Usado para manter compatibilidade entre os nomes documentados como `DB_*`
+    e aliases `MYSQL_*` em ambientes legados.
+    """
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value.strip() != "":
+            return value.strip()
+
+    if required:
+        raise ValueError(
+            "Nenhuma das variaveis obrigatorias foi definida: " + ", ".join(names)
+        )
+
+    return "" if default is None else default
+
+
+def _get_first_int(*names: str, default: int) -> int:
+    """
+    Lê a primeira variável inteira definida entre os nomes fornecidos.
+    """
+    for name in names:
+        raw = os.getenv(name)
+        if raw is None or raw.strip() == "":
+            continue
+
+        try:
+            return int(raw.strip())
+        except ValueError as exc:
+            raise ValueError(f"A variavel '{name}' deve ser um numero inteiro.") from exc
+
+    return default
+
+
 def _get_int(name: str, default: int) -> int:
     """
     Obtem inteiro do ambiente com fallback validado.
@@ -61,11 +98,11 @@ def _get_int(name: str, default: int) -> int:
         raise ValueError(f"A variavel '{name}' deve ser um numero inteiro.") from exc
 
 
-DB_HOST = os.getenv("DB_HOST", "localhost").strip()
-DB_PORT = _get_int("DB_PORT", 3306)
-DB_USER = _get_required_str("DB_USER")
-DB_PASSWORD = _get_required_str("DB_PASSWORD")
-DB_NAME = _get_required_str("DB_NAME")
+DB_HOST = _get_first_str("DB_HOST", "MYSQL_HOST", default="localhost")
+DB_PORT = _get_first_int("DB_PORT", "MYSQL_PORT", default=3306)
+DB_USER = _get_first_str("DB_USER", "MYSQL_USER", required=True)
+DB_PASSWORD = _get_first_str("DB_PASSWORD", "MYSQL_PASSWORD", required=True)
+DB_NAME = _get_first_str("DB_NAME", "MYSQL_DATABASE", required=True)
 
 FLASK_SECRET_KEY = _get_required_str("FLASK_SECRET_KEY")
 APP_PEPPER = _get_required_str("APP_PEPPER")
