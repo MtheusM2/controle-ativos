@@ -1,8 +1,10 @@
 # Opus Assets - Asset Management System
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-2.x-black?logo=flask)](https://flask.palletsprojects.com/)
-[![MySQL](https://img.shields.io/badge/MySQL-8.0+-orange?logo=mysql)](https://www.mysql.com/)
+[![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-2.3-black?logo=flask)](https://flask.palletsprojects.com/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-orange?logo=mysql)](https://www.mysql.com/)
+[![Tests](https://img.shields.io/badge/Tests-356_passing-green)]()
+[![Coverage](https://img.shields.io/badge/Coverage-60.88%25-yellowgreen)]()
 [![License](https://img.shields.io/badge/License-Proprietary-red)]()
 
 > **Internal platform for centralized asset management, user authentication, and operational traceability. Built with Python, Flask, and MySQL using a modular, production-oriented architecture.**
@@ -39,13 +41,23 @@
 - Dashboard and settings pages for operational visibility
 - Modular service layer with centralized validation and business rules
 
-### Current Status
+### Project Status
 
-- Stable Flask web application with active authentication and asset modules
-- Fases 1, 2 and 3 closed and validated for the asset flow
-- Current edit flow uses preview + confirmation before the final persistence of movement-related edits
-- Migrations and deploy artifacts maintained in repository
-- Production-ready WSGI path and local production simulation scripts available
+**Development Phase: Internal Testing & Validation** (NOT production-ready yet)
+
+- ✅ All core modules implemented and tested (authentication, assets, imports, exports)
+- ✅ CSV import/export with round-trip validation (fixed April 27-28, 2026)
+- ✅ 356 automated tests passing with 60.88% code coverage
+- ✅ Multi-tenant support with role-based access control
+- ✅ Comprehensive error handling and validation
+- ⏳ Security audit in progress (see `docs/audits/`)
+- ⏳ Performance and stress testing pending
+- ⏳ Production deployment testing scheduled
+
+Recent fixes (April 2026):
+- Fixed CSV export→import round-trip: export now uses canonical field names
+- Fixed value normalization in import preview: status, setor, tipo_ativo now properly normalized
+- Added comprehensive round-trip tests (test_roundtrip_preview_seguro.py)
 
 ### Product and Repository Naming
 
@@ -216,6 +228,28 @@ Notes:
 - `GET /ativos/export/csv|xlsx|pdf` - export filtered asset data
 - `POST /ativos/import/csv` - import CSV
 
+### Import and Export
+
+- `GET /ativos/export/csv` - export assets as CSV (canonical field names)
+- `GET /ativos/export/xlsx` - export assets as Excel
+- `GET /ativos/export/pdf` - export assets as PDF
+- `POST /importacao/upload-csv` - upload CSV for preview analysis
+- `GET /importacao/preview` - get import preview with validation results
+- `POST /importacao/confirmar` - confirm and process imported assets
+
+**Import Workflow:**
+1. Upload CSV file
+2. System detects headers and maps to canonical field names
+3. Values are normalized (e.g., "rh" → "Rh", "em uso" → "Em Uso")
+4. Preview shows validation results (valid, warnings, errors)
+5. Confirm to persist changes to database
+
+**Export Workflow:**
+1. Select filters (sector, status, date range, etc.)
+2. Choose format (CSV, XLSX, PDF)
+3. Download exported file with canonical field names
+4. Exported CSV can be re-imported using the import workflow
+
 ### Profiles and Permissions
 
 - `usuario` profile: restricted to assets from the authenticated company scope
@@ -245,12 +279,59 @@ Security operations reference:
 
 ## Development
 
-### Tests
+### Running Tests
 
+**Quick test run:**
 ```bash
 pytest
 pytest -v
 ```
+
+**Run specific test modules:**
+```bash
+# Import/export and round-trip validation
+pytest tests/test_roundtrip_preview_seguro.py -v
+pytest tests/test_importacao_exportacao_roundtrip.py -v
+pytest tests/test_importacao_massa.py -v
+
+# Authentication and permissions
+pytest tests/test_app.py -v
+pytest tests/test_permissions.py -v
+
+# Asset CRUD and validation
+pytest tests/test_ativos_crud.py -v
+pytest tests/test_ativos_validacao.py -v
+
+# Run all tests with detailed output
+pytest tests/ -v --tb=short
+```
+
+### Test Coverage
+
+**Generate coverage report:**
+```bash
+# Terminal report with missing lines
+pytest --cov=. --cov-report=term-missing
+
+# HTML report (opens in browser)
+pytest --cov=. --cov-report=html
+open htmlcov/index.html  # macOS
+start htmlcov/index.html # Windows PowerShell
+```
+
+**Current coverage:** 60.88% (356 tests, 4755 statements)
+
+**High-coverage modules** (>80%):
+- utils/import_validators.py (89.60%)
+- utils/csrf.py (95.83%)
+- utils/auth.py (90.91%)
+- utils/normalizador_valores_importacao.py (97.30%)
+
+**Areas for expansion** (<50%):
+- auth_service.py (17.67%) - tested via integration tests
+- auditoria_importacao_service.py (31.62%)
+- storage_backend.py (32.05%)
+- ativos_arquivo_service.py (51.52%)
 
 ### Migrations
 
@@ -270,7 +351,7 @@ $env:FLASK_DEBUG=1
 python web_app/app.py
 ```
 
-### Quality Guidelines
+### Code Quality Guidelines
 
 - Follow PEP 8 conventions
 - Keep services focused on business logic
@@ -278,6 +359,7 @@ python web_app/app.py
 - Preserve backward-compatible routes intentionally documented in route modules
 - Keep movement review logic in the backend as the source of truth
 - Keep modal editing limited to operational fields only
+- Always validate field contracts between layers (CSV mapping, normalization, validation)
 
 ---
 
@@ -360,4 +442,4 @@ This software is confidential and intended for authorized internal use. Unauthor
 
 ---
 
-**Last Updated:** April 14, 2026
+**Last Updated:** April 28, 2026 (Test Coverage Audit & Import Fix Validation)
