@@ -23,142 +23,157 @@
 
     <div class="panel-body">
         <form id="create-asset-form" class="form-grid asset-form-grid">
-            <div class="form-block-title">Cadastro base do ativo</div>
-            <!-- O ID continua automático no backend; o campo patrimonial é opcional e separado -->
+            <!-- SEÇÃO 1: Identificação do Ativo -->
+            <div class="form-section">
+                <h3 class="form-section-title">Identificação do ativo</h3>
 
-            <div class="field-group">
-                <label for="codigo_interno">Patrimônio / Código interno</label>
-                <input type="text" id="codigo_interno" name="codigo_interno" class="input-control" maxlength="50" autocomplete="off">
+                <div class="field-group">
+                    <label for="codigo_interno">Patrimônio / Código interno</label>
+                    <input type="text" id="codigo_interno" name="codigo_interno" class="input-control" maxlength="50" autocomplete="off">
+                </div>
+
+                <div class="field-group">
+                    <label for="tipo_ativo">Tipo de ativo</label>
+                    <select id="tipo_ativo" name="tipo_ativo" class="select-control" required>
+                        <option value="">Selecione o tipo</option>
+                        <option value="Notebook">Notebook</option>
+                        <option value="Desktop">Desktop</option>
+                        <option value="Celular">Celular</option>
+                        <option value="Monitor">Monitor</option>
+                        <option value="Mouse">Mouse</option>
+                        <option value="Teclado">Teclado</option>
+                        <option value="Headset">Headset</option>
+                        <option value="Adaptador">Adaptador</option>
+                        <option value="Cabo">Cabo</option>
+                        <option value="Carregador">Carregador</option>
+                        <option value="Outro">Outro</option>
+                    </select>
+                </div>
+
+                <div class="field-group">
+                    <label for="marca">Marca</label>
+                    <input type="text" id="marca" name="marca" class="input-control" required>
+                </div>
+
+                <div class="field-group">
+                    <label for="modelo">Modelo</label>
+                    <input type="text" id="modelo" name="modelo" class="input-control" required>
+                </div>
+
+                <div class="field-group">
+                    <label for="serial">Serial</label>
+                    <input type="text" id="serial" name="serial" class="input-control" maxlength="120" autocomplete="off">
+                </div>
             </div>
 
-            <!-- Removido em Fase 3 Round 2: descricao e categoria são auto-gerados no backend -->
-            <!-- <div class="field-group">
-                <label for="descricao">Descrição</label>
-                <input type="text" id="descricao" name="descricao" class="input-control" maxlength="255" required>
+            <!-- SEÇÃO 2: Localização e Responsável -->
+            <div class="form-section">
+                <h3 class="form-section-title">Localização e responsável</h3>
+
+                <div class="field-group">
+                    <label for="localizacao">Localização / Unidade</label>
+                    <select id="localizacao" name="localizacao" class="select-control" required>
+                        <option value="">Selecione uma unidade</option>
+                        {% for unidade in unidades_validas %}
+                            <option value="{{ unidade }}">{{ unidade }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="field-group">
+                    <label for="setor">Setor / Departamento</label>
+                    <select id="setor" name="setor" class="select-control" required>
+                        <option value="">Selecione um setor</option>
+                        {% for setor in setores_validos %}
+                            <option value="{{ setor }}">{{ setor }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="field-group">
+                    <label for="usuario_responsavel">Responsável</label>
+                    <input type="text" id="usuario_responsavel" name="usuario_responsavel" class="input-control">
+                </div>
+
+                <div class="field-group">
+                    <label for="email_responsavel">E-mail do responsável</label>
+                    <input type="email" id="email_responsavel" name="email_responsavel" class="input-control" maxlength="255">
+                </div>
             </div>
 
-            <div class="field-group">
-                <label for="categoria">Categoria</label>
-                <input type="text" id="categoria" name="categoria" class="input-control" maxlength="100" required>
-            </div> -->
+            <!-- SEÇÃO 3: Status e Condição -->
+            <div class="form-section">
+                <h3 class="form-section-title">Status e condição</h3>
 
-            <div class="field-group">
-                <label for="tipo_ativo">Tipo de ativo</label>
-                <select id="tipo_ativo" name="tipo_ativo" class="select-control" required>
-                    <option value="">Selecione o tipo</option>
-                    <option value="Notebook">Notebook</option>
-                    <option value="Desktop">Desktop</option>
-                    <option value="Celular">Celular</option>
-                    <option value="Monitor">Monitor</option>
-                    <option value="Mouse">Mouse</option>
-                    <option value="Teclado">Teclado</option>
-                    <option value="Headset">Headset</option>
-                    <option value="Adaptador">Adaptador</option>
-                    <option value="Cabo">Cabo</option>
-                    <option value="Carregador">Carregador</option>
-                    <option value="Outro">Outro</option>
-                </select>
+                <div class="field-group">
+                    <label for="status">Status</label>
+                    <select id="status" name="status" class="select-control" required>
+                        <option value="">Selecione um status</option>
+                        {% for status in status_validos %}
+                            <option value="{{ status }}">{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="field-group">
+                    <label for="condicao">Condição</label>
+                    <select id="condicao" name="condicao" class="select-control">
+                        <option value="">Selecione uma condição</option>
+                        {% for condicao in condicoes_validas %}
+                            <option value="{{ condicao }}">{{ condicao }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
-            <div class="field-group">
-                <label for="marca">Marca</label>
-                <input type="text" id="marca" name="marca" class="input-control" required>
+            <!-- SEÇÃO 4: Datas -->
+            <div class="form-section">
+                <h3 class="form-section-title">Datas e movimentação</h3>
+
+                <div class="field-group">
+                    <label for="data_entrada">Data de entrada no controle</label>
+                    <input type="date" id="data_entrada" name="data_entrada" class="input-control" required>
+                </div>
+
+                <div class="field-group">
+                    <label for="data_compra">Data da compra</label>
+                    <input type="date" id="data_compra" name="data_compra" class="input-control">
+                </div>
+
+                <div class="field-group">
+                    <label for="data_saida">Data de saída</label>
+                    <input type="date" id="data_saida" name="data_saida" class="input-control">
+                </div>
             </div>
 
-            <div class="field-group">
-                <label for="modelo">Modelo</label>
-                <input type="text" id="modelo" name="modelo" class="input-control" required>
+            <!-- SEÇÃO 5: Valor e Documentação -->
+            <div class="form-section">
+                <h3 class="form-section-title">Valor e documentação</h3>
+
+                <div class="field-group">
+                    <label for="valor">Valor</label>
+                    <input type="text" id="valor" name="valor" class="input-control" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off">
+                </div>
+
+                <div class="field-group">
+                    <label for="garantia">Garantia</label>
+                    <input type="text" id="garantia" name="garantia" class="input-control" placeholder="Ex.: 12 meses">
+                </div>
             </div>
 
-            <div class="field-group">
-                <label for="serial">Serial</label>
-                <input type="text" id="serial" name="serial" class="input-control" maxlength="120" autocomplete="off">
+            <!-- SEÇÃO 6: Observações -->
+            <div class="form-section">
+                <h3 class="form-section-title">Observações</h3>
+
+                <div class="field-group" style="grid-column: 1 / -1; margin: 0;">
+                    <label for="observacoes">Observações adicionais</label>
+                    <textarea id="observacoes" name="observacoes" class="input-control" rows="3" maxlength="5000" placeholder="Notas e detalhes adicionais sobre o ativo..."></textarea>
+                </div>
             </div>
 
-            <div class="field-group">
-                <label for="condicao">Condição</label>
-                <select id="condicao" name="condicao" class="select-control">
-                    <option value="">Selecione uma condição</option>
-                    {% for condicao in condicoes_validas %}
-                        <option value="{{ condicao }}">{{ condicao }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+            <div class="form-block-title">Especificações técnicas por tipo de ativo</div>
 
-            <div class="field-group">
-                <label for="status">Status</label>
-                <select id="status" name="status" class="select-control" required>
-                    <option value="">Selecione um status</option>
-                    {% for status in status_validos %}
-                        <option value="{{ status }}">{{ status }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- Fase 3 Round 2.1: Localização padronizada em select -->
-            <div class="field-group">
-                <label for="localizacao">Localização / Unidade</label>
-                <select id="localizacao" name="localizacao" class="select-control" required>
-                    <option value="">Selecione uma unidade</option>
-                    {% for unidade in unidades_validas %}
-                        <option value="{{ unidade }}">{{ unidade }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="field-group">
-                <label for="setor">Setor / Departamento</label>
-                <select id="setor" name="setor" class="select-control" required>
-                    <option value="">Selecione um setor</option>
-                    {% for setor in setores_validos %}
-                        <option value="{{ setor }}">{{ setor }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="field-group">
-                <label for="usuario_responsavel">Responsável</label>
-                <input type="text" id="usuario_responsavel" name="usuario_responsavel" class="input-control">
-            </div>
-
-            <div class="field-group">
-                <label for="email_responsavel">E-mail do responsável</label>
-                <input type="email" id="email_responsavel" name="email_responsavel" class="input-control" maxlength="255">
-            </div>
-
-            <div class="field-group">
-                <label for="data_compra">Data da compra</label>
-                <input type="date" id="data_compra" name="data_compra" class="input-control">
-            </div>
-
-            <div class="field-group">
-                <label for="garantia">Garantia</label>
-                <input type="text" id="garantia" name="garantia" class="input-control" placeholder="Ex.: 12 meses">
-            </div>
-
-            <div class="field-group">
-                <label for="valor">Valor</label>
-                <input type="text" id="valor" name="valor" class="input-control" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off">
-            </div>
-
-            <div class="field-group">
-                <label for="data_entrada">Data de entrada no controle</label>
-                <input type="date" id="data_entrada" name="data_entrada" class="input-control" required>
-            </div>
-
-            <div class="field-group">
-                <label for="data_saida">Data de saída</label>
-                <input type="date" id="data_saida" name="data_saida" class="input-control">
-            </div>
-
-            <div class="field-group" style="grid-column: 1 / -1;">
-                <label for="observacoes">Observações</label>
-                <textarea id="observacoes" name="observacoes" class="input-control" rows="3" maxlength="5000"></textarea>
-            </div>
-
-            <div class="form-block-title">Especificações por tipo</div>
-
-            <div id="specs-notebook" class="asset-specs-group" hidden>
+            <div id="specs-notebook" class="form-section" hidden style="margin-top: 0;">
                 <div class="field-group"><label for="processador">Processador</label><input type="text" id="processador" name="processador" class="input-control"></div>
                 <div class="field-group"><label for="ram">RAM</label><input type="text" id="ram" name="ram" class="input-control"></div>
                 <div class="field-group"><label for="armazenamento">Armazenamento</label><input type="text" id="armazenamento" name="armazenamento" class="input-control"></div>
@@ -169,7 +184,7 @@
                 <div class="field-group"><label for="nome_equipamento">Nome do equipamento</label><input type="text" id="nome_equipamento" name="nome_equipamento" class="input-control"></div>
             </div>
 
-            <div id="specs-desktop" class="asset-specs-group" hidden>
+            <div id="specs-desktop" class="form-section" hidden>
                 <div class="field-group"><label for="desktop_processador">Processador</label><input type="text" id="desktop_processador" data-field-alias="processador" class="input-control"></div>
                 <div class="field-group"><label for="desktop_ram">RAM</label><input type="text" id="desktop_ram" data-field-alias="ram" class="input-control"></div>
                 <div class="field-group"><label for="desktop_armazenamento">Armazenamento</label><input type="text" id="desktop_armazenamento" data-field-alias="armazenamento" class="input-control"></div>
@@ -180,7 +195,7 @@
             </div>
 
             <!-- Celular: campos simplificados sem IMEI (removido em Fase 3 Round 3). -->
-            <div id="specs-celular" class="asset-specs-group" hidden>
+            <div id="specs-celular" class="form-section" hidden>
                 <!-- Celular contém apenas: número de linha, operadora, conta vinculada e armazenamento. -->
                 <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" inputmode="tel" maxlength="19" autocomplete="off" placeholder="(11) 98765-4321"></div>
                 <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
@@ -188,12 +203,12 @@
                 <div class="field-group"><label for="celular_armazenamento">Armazenamento</label><input type="text" id="celular_armazenamento" data-field-alias="armazenamento" class="input-control"></div>
             </div>
 
-            <div id="specs-monitor" class="asset-specs-group" hidden>
+            <div id="specs-monitor" class="form-section" hidden>
                 <!-- Monitor simplificado: manter apenas medida principal usada no dia a dia. -->
                 <div class="field-group"><label for="polegadas">Polegadas</label><input type="text" id="polegadas" name="polegadas" class="input-control"></div>
             </div>
 
-            <div id="specs-simples" class="asset-specs-group" hidden>
+            <div id="specs-simples" class="form-section" hidden>
                 <div class="field-group" style="grid-column: 1 / -1;">
                     <label for="detalhes_tecnicos">Detalhes técnicos (tipos simples)</label>
                     <textarea id="detalhes_tecnicos" name="detalhes_tecnicos" class="input-control" rows="2" maxlength="255"></textarea>

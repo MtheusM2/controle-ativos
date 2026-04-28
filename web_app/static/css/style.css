@@ -121,13 +121,16 @@ body.app-body {
     border-radius: 8px;
     object-fit: contain;
     object-position: center;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 16px rgba(168, 25, 54, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 20px rgba(168, 25, 54, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    padding: 4px;
 }
 
 .brand-logo:hover {
     transform: scale(1.08);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 24px rgba(168, 25, 54, 0.32);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 0 28px rgba(168, 25, 54, 0.42);
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .brand-title {
@@ -759,16 +762,55 @@ body.app-body {
 
 .form-block-title {
     grid-column: 1 / -1;
-    margin: 4px 0 0;
-    padding: 8px 10px;
+    margin: 16px 0 8px;
+    padding: 12px 14px;
     border-radius: var(--radius-md);
     border: 1px solid var(--line-soft);
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--text-1);
-    font-size: 0.74rem;
-    letter-spacing: 0.06em;
+    background: linear-gradient(135deg, rgba(168, 25, 54, 0.08), rgba(122, 15, 37, 0.04));
+    border-left: 3px solid var(--wine-2);
+    color: var(--text-0);
+    font-size: 0.76rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.form-block-title:first-child {
+    margin-top: 0;
+}
+
+/* ===== SEÇÕES VISUAIS DE FORMULÁRIO (2026-04-28 Fase 4.1b) ===== */
+
+.form-section {
+    grid-column: 1 / -1;
+    padding: 16px 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    background: linear-gradient(165deg, rgba(28, 31, 40, 0.5), rgba(18, 20, 28, 0.3));
+    display: grid;
+    grid-template-columns: inherit;
+    gap: inherit;
+}
+
+.form-section + .form-section {
+    margin-top: 8px;
+}
+
+.form-section-title {
+    grid-column: 1 / -1;
+    margin: 0 0 12px;
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 0.8rem;
+    color: var(--wine-1);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.form-section > .field-group {
+    margin: 0;
 }
 
 .form-actions {
