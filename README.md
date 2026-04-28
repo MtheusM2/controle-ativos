@@ -1,318 +1,666 @@
-Opus Assets - Asset Management System
-Python Flask MySQL Tests Coverage License
+# Opus Assets — Asset Management System
 
-Internal platform for centralized asset management, user authentication, and operational traceability. Built with Python, Flask, and MySQL using a modular, production-oriented architecture.
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![Flask](https://img.shields.io/badge/Flask-2.x-black?logo=flask)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-orange?logo=mysql)
+![Tests](https://img.shields.io/badge/Tests-356%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-60.88%25-yellow)
+![Status](https://img.shields.io/badge/Status-Internal%20Testing-blue)
+![License](https://img.shields.io/badge/License-Proprietary-red)
 
-Table of Contents
-Features
-Architecture
-Quick Start
-Project Structure
-API Overview
-Security
-Development
-Deployment
-Contributing
-License and Internal Usage
-Features
-User authentication with login, registration, logout, and password recovery
-Asset lifecycle management (create, list, details, update, delete)
-Smart asset registration with base data plus dynamic technical specifications by asset type
-Automatic timestamps and movement traceability for operational edits
-Confirmation modal flow for asset movement review before final save
-Structured movement preview with backend-driven status suggestion
-Attachment workflow for invoice and warranty documents
-Asset export in CSV, XLSX, and PDF formats
-CSV import workflow for controlled batch updates
-Company-aware access scope with profile-based authorization
-Dashboard and settings pages for operational visibility
-Modular service layer with centralized validation and business rules
-Project Status
-Development Phase: Internal Testing & Validation (NOT production-ready yet)
+> Internal platform for centralized asset management, user authentication, operational traceability, document control, CSV import/export, and controlled validation workflows.
 
-✅ All core modules implemented and tested (authentication, assets, imports, exports)
-✅ CSV import/export with round-trip validation (fixed April 27-28, 2026)
-✅ 356 automated tests passing with 60.88% code coverage
-✅ Multi-tenant support with role-based access control
-✅ Comprehensive error handling and validation
-⏳ Security audit in progress (see docs/audits/)
-⏳ Performance and stress testing pending
-⏳ Production deployment testing scheduled
-Recent fixes (April 2026):
+---
 
-Fixed CSV export→import round-trip: export now uses canonical field names
-Fixed value normalization in import preview: status, setor, tipo_ativo now properly normalized
-Added comprehensive round-trip tests (test_roundtrip_preview_seguro.py)
-Product and Repository Naming
-Product name: Opus Assets
-Repository directory name: controle_ativos
-This distinction is intentional: product branding remains in English while repository naming preserves operational continuity.
-Architecture
-The project follows a layered architecture designed for maintainability and controlled growth:
+## Table of Contents
 
-Web Layer (Flask routes, templates, session handling)
-    -> Services Layer (business rules, authorization, orchestration)
-    -> Models Layer (domain entities)
-    -> Database Layer (schema, connection, migrations)
-    -> Utilities (crypto, validators, logging)
-Core Principles
-Separation of concerns across route, service, and persistence boundaries
-Authorization based on authenticated user profile and company scope
-Reusable validation and normalization rules in shared utility modules
-Compatibility routes preserved for legacy navigation without breaking clients
-Quick Start
-Prerequisites
-Python 3.8+ (recommended 3.9+)
-MySQL 8.0+
-pip
-Main Development Flow
-Clone and enter repository:
+- [Overview](#overview)
+- [Project Status](#project-status)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [Project Structure](#project-structure)
+- [Import and Export Workflow](#import-and-export-workflow)
+- [Testing](#testing)
+- [Coverage](#coverage)
+- [API Overview](#api-overview)
+- [Security](#security)
+- [Deployment](#deployment)
+- [Repository Organization](#repository-organization)
+- [Contributing](#contributing)
+- [License and Internal Usage](#license-and-internal-usage)
+
+---
+
+## Overview
+
+**Opus Assets** is an internal asset management system developed for operational control, traceability, and documentation of corporate assets.
+
+The system centralizes asset registration, lifecycle management, movement tracking, attachments, filtered exports, and controlled CSV import workflows.
+
+The application was built with a modular backend architecture using **Python**, **Flask**, and **MySQL**, with separated layers for routes, services, models, database access, validation, and utilities.
+
+---
+
+## Project Status
+
+Current phase: **Internal Testing and Validation**
+
+The system is under active internal validation and should not yet be considered a final production release.
+
+### Current validated state
+
+- Core asset CRUD implemented and tested
+- User authentication and session handling implemented
+- Role-based and company-aware access control implemented
+- CSV export and import workflow validated
+- CSV export → import round-trip fixed and tested
+- Import preview and confirmation flow validated
+- Asset movement preview and confirmation implemented
+- Attachments workflow implemented
+- Export formats available: CSV, XLSX, and PDF
+- Automated tests passing
+- Repository cleanup and documentation audit completed
+
+### Current metrics
+
+| Metric | Value |
+|---|---:|
+| Automated tests | 356 passing |
+| Skipped tests | 19 |
+| Test failures | 0 |
+| Coverage | 60.88% |
+| Python version used in audit | 3.11.9 |
+| Last validation date | 2026-04-28 |
+
+### Pending before final production use
+
+- Security review
+- Production deployment validation
+- Performance and stress testing
+- Final data governance review
+- Controlled homologation with real internal users
+
+---
+
+## Features
+
+### Authentication and access
+
+- Login and logout
+- User registration flow
+- Password recovery flow
+- Session validation
+- Profile-based access control
+- Company-aware data scope
+
+### Asset management
+
+- Asset creation
+- Asset listing
+- Asset detail view
+- Asset editing
+- Asset deletion
+- Dynamic asset fields by asset type
+- Status control
+- Sector and location control
+- Technical specifications by equipment type
+
+### Movement and traceability
+
+- Backend-driven movement preview
+- Confirmation flow before final persistence
+- Automatic timestamp handling
+- Movement-related status validation
+- Operational audit support
+
+### Attachments
+
+- Invoice attachment workflow
+- Warranty attachment workflow
+- Attachment listing
+- Attachment download
+- Attachment deletion
+
+### Import and export
+
+- CSV export
+- XLSX export
+- PDF export
+- CSV import preview
+- Column mapping
+- Value normalization
+- Validation by line
+- Import with warning control
+- Export → import round-trip support
+
+---
+
+## Architecture
+
+The project follows a layered architecture:
+
+```text
+Web Layer
+Flask routes, templates, sessions, request/response handling
+
+Services Layer
+Business rules, orchestration, authorization, import/export workflow
+
+Models Layer
+Domain entities and structured data objects
+
+Database Layer
+Connection, schema, migrations, persistence
+
+Utilities Layer
+Validators, normalization, permissions, security helpers, logging
+```
+
+### Core principles
+
+- Separation of concerns between route, service, model, and persistence layers
+- Business rules concentrated in services
+- Validation and normalization centralized in utility modules
+- Route layer focused on HTTP contracts
+- Import/export workflow protected by tests
+- Sensitive configuration excluded from version control
+
+---
+
+## Technology Stack
+
+| Area | Technology |
+|---|---|
+| Language | Python 3.11 |
+| Web framework | Flask |
+| Database | MySQL |
+| WSGI server | Waitress |
+| Frontend | HTML, CSS, Jinja2, JavaScript |
+| Tests | Pytest |
+| Coverage | pytest-cov |
+| Excel export | openpyxl |
+| PDF export | ReportLab |
+| Deployment target | Windows Server / IIS / NSSM / Waitress |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11 recommended
+- MySQL 8.0+
+- pip
+- Git
+
+### Clone repository
+
+```bash
 git clone <repository-url>
 cd controle_ativos
-Create and activate virtual environment:
-# Linux/macOS
-python -m venv .venv
-source .venv/bin/activate
+```
 
-# Windows PowerShell
+### Create virtual environment
+
+Windows PowerShell:
+
+```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-Install dependencies:
+```
+
+Linux/macOS:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+### Install dependencies
+
+```bash
 pip install -r requirements.txt
-Configure environment variables:
-# Linux/macOS
-cp .env.example .env
+```
 
-# Windows PowerShell
+### Configure environment
+
+Windows PowerShell:
+
+```powershell
 Copy-Item .env.example .env
-Initialize schema and migrations:
+```
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` with the correct local database and application settings.
+
+### Initialize database
+
+```bash
 python database/init_db.py
-Start the web application (primary development entrypoint):
+```
+
+### Run application locally
+
+```bash
 python web_app/app.py
-Entrypoints
-Primary local web entrypoint: python web_app/app.py
-Compatibility entrypoint: python app.py
-CLI workflow entrypoint: python main.py
-Production WSGI entrypoint: wsgi:application (alias wsgi:app)
-Essential Environment Variables
-Variable	Purpose
-DB_HOST	MySQL host
-DB_PORT	MySQL port
-DB_USER	Application database user
-DB_PASSWORD	Database password
-DB_NAME	Application database name
-FLASK_SECRET_KEY	Session and cookie signing secret
-APP_PEPPER	Additional secret for security flows
-FLASK_DEBUG	Local debug toggle (0 or 1)
-LOG_LEVEL	Runtime log level
-LOG_DIR	Log directory path
-Project Structure
+```
+
+Default local address:
+
+```text
+http://127.0.0.1:5000
+```
+
+---
+
+## Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `DB_HOST` | MySQL host |
+| `DB_PORT` | MySQL port |
+| `DB_USER` | Database user |
+| `DB_PASSWORD` | Database password |
+| `DB_NAME` | Database name |
+| `FLASK_SECRET_KEY` | Flask session secret |
+| `APP_PEPPER` | Additional application secret |
+| `FLASK_DEBUG` | Debug mode flag |
+| `LOG_LEVEL` | Application log level |
+| `LOG_DIR` | Log directory path |
+
+`.env` must never be committed.
+
+`.env.example` must remain versioned with safe placeholder values only.
+
+---
+
+## Project Structure
+
+```text
 controle_ativos/
-|-- app.py
-|-- main.py
-|-- wsgi.py
-|-- config.py
-|-- requirements.txt
-|-- pytest.ini
-|-- .env.example
-|-- .gitignore
-|-- README.md
-|-- database/
-|   |-- connection.py
-|   |-- init_db.py
-|   |-- schema.sql
-|   |-- migrations/
-|   `-- security/
-|-- models/
-|-- services/
-|-- utils/
-|-- web_app/
-|   |-- app.py
-|   |-- routes/
-|   |-- templates/
-|   `-- static/
-|-- tests/
-|-- scripts/
-|-- deploy/
-`-- docs/
-Notes:
+├── app.py
+├── config.py
+├── main.py
+├── requirements.txt
+├── pytest.ini
+├── .coveragerc
+├── .env.example
+├── .gitignore
+├── README.md
+├── wsgi.py
+├── waitress_conf.py
+│
+├── database/
+│   ├── connection.py
+│   ├── init_db.py
+│   ├── schema.sql
+│   ├── migrations/
+│   └── security/
+│
+├── deploy/
+│   ├── iis/
+│   └── nssm/
+│
+├── docs/
+│   ├── audits/
+│   ├── guides/
+│   └── security/
+│
+├── models/
+├── scripts/
+├── services/
+├── tests/
+├── utils/
+└── web_app/
+    ├── app.py
+    ├── routes/
+    ├── static/
+    └── templates/
+```
 
-Internal private notes are kept in local-only docs_interno_local/, ignored by Git.
-Runtime-generated files (uploads, logs, cache, virtualenv) are excluded by .gitignore.
-API Overview
-Authentication and Session
-GET /, GET /login - login page
-POST /login - authenticate user
-GET /register, POST /register - registration flow
-GET /recovery, POST /forgot-password - password recovery flow
-POST /logout, GET /logout - session termination
-GET /session - active session context
-Assets
-GET /dashboard - authenticated dashboard
-GET /ativos - asset list
-POST /ativos - create asset
-GET /ativos/<id_ativo> - asset details
-PUT /ativos/<id_ativo> - update asset
-POST /ativos/<id_ativo>/movimentacao/preview - preview movement without persisting
-POST /ativos/<id_ativo>/movimentacao/confirmar - confirm movement and persist final edit
-DELETE /ativos/<id_ativo> - delete asset
-Attachments and Export
-POST /ativos/<id_ativo>/anexos - upload attachment
-GET /ativos/<id_ativo>/anexos - list attachments by asset
-GET /anexos/<arquivo_id>/download - download attachment
-DELETE /anexos/<arquivo_id> - remove attachment
-GET /ativos/export/csv|xlsx|pdf - export filtered asset data
-POST /ativos/import/csv - import CSV
-Import and Export
-GET /ativos/export/csv - export assets as CSV (canonical field names)
-GET /ativos/export/xlsx - export assets as Excel
-GET /ativos/export/pdf - export assets as PDF
-POST /importacao/upload-csv - upload CSV for preview analysis
-GET /importacao/preview - get import preview with validation results
-POST /importacao/confirmar - confirm and process imported assets
-Import Workflow:
+---
 
-Upload CSV file
-System detects headers and maps to canonical field names
-Values are normalized (e.g., "rh" → "Rh", "em uso" → "Em Uso")
-Preview shows validation results (valid, warnings, errors)
-Confirm to persist changes to database
-Export Workflow:
+## Import and Export Workflow
 
-Select filters (sector, status, date range, etc.)
-Choose format (CSV, XLSX, PDF)
-Download exported file with canonical field names
-Exported CSV can be re-imported using the import workflow
-Profiles and Permissions
-usuario profile: restricted to assets from the authenticated company scope
-adm and admin profiles: broader visibility and administrative configuration capabilities
-Access checks are enforced in services and applied consistently across list/detail/update/delete and attachment operations
-For deeper endpoint and deployment details, see docs/DEPLOYMENT.md.
+### Export workflow
 
-Security
-Implemented controls:
+The system can export asset data in:
 
-Password hashing with PBKDF2-SHA256
-Recovery answer hashing and verification
-Session hardening with HTTPOnly and SameSite cookies
-Company-aware authorization and permission checks
-Centralized input validation and controlled data normalization
-Environment-based secrets with .env excluded from repository
-Security operations reference:
+- CSV
+- XLSX
+- PDF
 
-docs/SECURITY_DB_ROTATION_GUIDE.md
-database/security/001_create_opus_app.sql
-Development
-Running Tests
-Quick test run:
+CSV export uses canonical field names to improve compatibility with the import workflow.
 
-pytest
+### Import workflow
+
+The CSV import process follows these steps:
+
+1. Upload CSV file
+2. Detect and map columns
+3. Normalize values
+4. Validate each line
+5. Show preview with errors and warnings
+6. Confirm import mode
+7. Persist valid records
+
+### Supported import behaviors
+
+- Automatic column recognition
+- Canonical field mapping
+- `tipo` → `tipo_ativo`
+- `departamento` → `setor`
+- Status normalization
+- Sector normalization
+- Asset type normalization
+- Warnings separated from blocking errors
+- Import of valid lines with warnings when allowed
+
+### Validated round-trip
+
+The system now supports:
+
+```text
+Export CSV → Import same CSV → Validate → Confirm import
+```
+
+This flow is covered by automated tests.
+
+---
+
+## Testing
+
+### Run all tests
+
+```bash
 pytest -v
-Run specific test modules:
+```
 
-# Import/export and round-trip validation
-pytest tests/test_roundtrip_preview_seguro.py -v
-pytest tests/test_importacao_exportacao_roundtrip.py -v
+Expected result from the latest audit:
+
+```text
+356 passed, 19 skipped
+```
+
+### Run import/export tests
+
+```bash
 pytest tests/test_importacao_massa.py -v
+pytest tests/test_importacao_exportacao_roundtrip.py -v
+pytest tests/test_roundtrip_preview_seguro.py -v
+pytest tests/test_importacao_confirmacao_mapeamento.py -v
+pytest tests/test_importacao_preview_rota_real.py -v
+```
 
-# Authentication and permissions
-pytest tests/test_app.py -v
-pytest tests/test_permissions.py -v
+### Run asset tests
 
-# Asset CRUD and validation
+```bash
 pytest tests/test_ativos_crud.py -v
 pytest tests/test_ativos_validacao.py -v
+pytest tests/test_ativos_arquivo.py -v
+```
 
-# Run all tests with detailed output
-pytest tests/ -v --tb=short
-Test Coverage
-Generate coverage report:
+### Run authentication and permissions tests
 
-# Terminal report with missing lines
+```bash
+pytest tests/test_app.py -v
+pytest tests/test_permissions.py -v
+pytest tests/test_csrf_hardening.py -v
+```
+
+---
+
+## Coverage
+
+### Generate terminal coverage report
+
+```bash
 pytest --cov=. --cov-report=term-missing
+```
 
-# HTML report (opens in browser)
+### Generate HTML coverage report
+
+```bash
 pytest --cov=. --cov-report=html
-open htmlcov/index.html  # macOS
-start htmlcov/index.html # Windows PowerShell
-Current coverage: 60.88% (356 tests, 4755 statements)
+```
 
-High-coverage modules (>80%):
+Open the generated report:
 
-utils/import_validators.py (89.60%)
-utils/csrf.py (95.83%)
-utils/auth.py (90.91%)
-utils/normalizador_valores_importacao.py (97.30%)
-Areas for expansion (<50%):
+Windows PowerShell:
 
-auth_service.py (17.67%) - tested via integration tests
-auditoria_importacao_service.py (31.62%)
-storage_backend.py (32.05%)
-ativos_arquivo_service.py (51.52%)
-Migrations
-python database/init_db.py
-Local Debug
-# Linux/macOS
-export FLASK_DEBUG=1
-python web_app/app.py
+```powershell
+start htmlcov/index.html
+```
 
-# Windows PowerShell
-$env:FLASK_DEBUG=1
-python web_app/app.py
-Code Quality Guidelines
-Follow PEP 8 conventions
-Keep services focused on business logic
-Keep HTTP serialization concerns in route layer
-Preserve backward-compatible routes intentionally documented in route modules
-Keep movement review logic in the backend as the source of truth
-Keep modal editing limited to operational fields only
-Always validate field contracts between layers (CSV mapping, normalization, validation)
-Deployment
-Production Stack
-Component	Technology
-OS	Windows Server 2019+
-WSGI Server	Waitress 3.0
-Windows Service	NSSM (Non-Sucking Service Manager)
-Reverse Proxy	IIS (URL Rewrite + Application Request Routing)
-Database	MySQL 8
-TLS	Managed by IIS
-Main Production Flow (Windows Server)
-Clone repository to C:\controle_ativos
-Run bootstrap as Administrator:
-.\scripts\setup_server.ps1
-Fill in .env with real credentials and secrets
-Apply database schema:
-mysql -u root -p < database\schema.sql
-Install Windows service (as Administrator):
-.\deploy\nssm\install_service.ps1 -ProjectDir "C:\controle_ativos"
-Configure IIS as reverse proxy using deploy\iis\web.config
-Verify: Invoke-WebRequest http://127.0.0.1:8000/health
-Local Production Simulation
-# Runs Waitress on port 8001 without debug mode
+Linux/macOS:
+
+```bash
+open htmlcov/index.html
+```
+
+### Latest measured coverage
+
+| Metric | Value |
+|---|---:|
+| Total coverage | 60.88% |
+| Covered statements | 2,895 |
+| Total statements | 4,755 |
+| Missing statements | 1,860 |
+
+### High-coverage modules
+
+| Module | Coverage |
+|---|---:|
+| `utils/email_inference.py` | 100% |
+| `utils/normalizador_valores_importacao.py` | 97.30% |
+| `utils/csrf.py` | 95.83% |
+| `utils/auth.py` | 90.91% |
+| `utils/import_validators.py` | 89.60% |
+| `models/ativos.py` | 100% |
+
+### Areas for future test expansion
+
+| Module | Current coverage | Priority |
+|---|---:|---|
+| `services/auth_service.py` | 17.67% | High |
+| `services/storage_backend.py` | 32.05% | Medium |
+| `services/auditoria_importacao_service.py` | 31.62% | Medium |
+| `services/ativos_arquivo_service.py` | 51.52% | Medium |
+
+---
+
+## API Overview
+
+### Authentication
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/` | Redirect/login entry |
+| GET | `/login` | Login page |
+| POST | `/login` | Authenticate user |
+| GET | `/register` | Registration page |
+| POST | `/register` | Register user |
+| GET | `/recovery` | Recovery page |
+| POST | `/forgot-password` | Password recovery |
+| GET/POST | `/logout` | End session |
+| GET | `/session` | Session context |
+
+### Assets
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/dashboard` | Dashboard |
+| GET | `/ativos` | Asset list |
+| POST | `/ativos` | Create asset |
+| GET | `/ativos/<id_ativo>` | Asset detail |
+| PUT | `/ativos/<id_ativo>` | Update asset |
+| DELETE | `/ativos/<id_ativo>` | Delete asset |
+| POST | `/ativos/<id_ativo>/movimentacao/preview` | Movement preview |
+| POST | `/ativos/<id_ativo>/movimentacao/confirmar` | Confirm movement |
+
+### Attachments
+
+| Method | Route | Description |
+|---|---|---|
+| POST | `/ativos/<id_ativo>/anexos` | Upload attachment |
+| GET | `/ativos/<id_ativo>/anexos` | List attachments |
+| GET | `/anexos/<arquivo_id>/download` | Download attachment |
+| DELETE | `/anexos/<arquivo_id>` | Delete attachment |
+
+### Export and import
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/ativos/export/csv` | Export CSV |
+| GET | `/ativos/export/xlsx` | Export XLSX |
+| GET | `/ativos/export/pdf` | Export PDF |
+| GET | `/ativos/importacao` | Import page |
+| POST | `/ativos/importar/preview` | Import preview |
+| POST | `/ativos/importar/confirmar` | Confirm import |
+
+---
+
+## Security
+
+Implemented controls:
+
+- Password hashing with PBKDF2-SHA256
+- Recovery answer hashing
+- Session cookies with HTTPOnly and SameSite controls
+- CSRF hardening for protected operations
+- Profile-based permission checks
+- Company-aware access scope
+- Centralized input validation
+- CSV import validation and normalization
+- Environment-based secrets
+- `.env` excluded from version control
+
+Security references:
+
+```text
+docs/SECURITY_DB_ROTATION_GUIDE.md
+database/security/001_create_opus_app.sql
+```
+
+### Important security note
+
+If any real password, token, certificate, private key, or sensitive company data is accidentally committed, it must be rotated immediately.
+
+Removing the file from the current branch does not automatically remove it from Git history.
+
+---
+
+## Deployment
+
+### Production-oriented stack
+
+| Component | Technology |
+|---|---|
+| Operating system | Windows Server |
+| WSGI server | Waitress |
+| Service manager | NSSM |
+| Reverse proxy | IIS |
+| Database | MySQL |
+| TLS | IIS certificate binding |
+
+### WSGI entrypoint
+
+```text
+wsgi:application
+```
+
+### Main deployment references
+
+```text
+deploy/iis/
+deploy/nssm/
+docs/DEPLOYMENT.md
+docs/SETUP_SERVIDOR_ZERADO.md
+```
+
+### Local production simulation
+
+```powershell
 scripts\simulate_production.ps1
-Deployment Artifacts
-wsgi.py — WSGI entrypoint (wsgi:application)
-waitress_conf.py — Waitress configuration (threads, limits, identity)
-deploy/iis/web.config — IIS reverse proxy + security headers
-deploy/nssm/install_service.ps1 — Windows service installer
-scripts/setup_server.ps1 — Bootstrap for new Windows Server
-docs/DEPLOYMENT.md — Full step-by-step deployment guide
-docs/SETUP_SERVIDOR_ZERADO.md — Complete guide from zero to HTTPS
-Contributing
-This is a proprietary internal system for Opus Medical.
+```
 
-Internal contribution flow:
+---
 
-Create branch:
+## Repository Organization
+
+The repository was cleaned and reorganized to separate source code, tests, deployment files, and documentation.
+
+### Documentation folders
+
+```text
+docs/audits/   Technical audit reports
+docs/guides/   Operational guides
+docs/security/ Security and database hardening notes
+```
+
+### Ignored local artifacts
+
+The `.gitignore` excludes:
+
+- Virtual environments
+- `.env` files
+- Logs
+- CSV exports
+- Upload folders
+- Cache folders
+- Temporary debug files
+- Local Claude configuration
+- Certificates and private keys
+- Database dumps
+
+---
+
+## Contributing
+
+This is a proprietary internal system.
+
+Recommended internal flow:
+
+```bash
 git checkout -b feature/short-description
-Commit with objective messages:
+git add .
 git commit -m "feat: describe change"
-Open pull request and require review before merge.
-External public contributions are not accepted.
+git push origin feature/short-description
+```
 
-License and Internal Usage
-Status: Proprietary - All rights reserved.
+Then open a pull request for review before merging into `main`.
 
-This software is confidential and intended for authorized internal use. Unauthorized distribution or reproduction is prohibited.
+### Commit message examples
 
-Last Updated: April 28, 2026 (Test Coverage Audit & Import Fix Validation)
+```text
+feat: adiciona nova funcionalidade
+fix: corrige falha de validação
+test: adiciona cobertura automatizada
+docs: atualiza documentação
+chore: organiza estrutura do repositório
+refactor: melhora arquitetura sem alterar comportamento
+```
+
+---
+
+## License and Internal Usage
+
+Status: **Proprietary — All rights reserved**
+
+This software is confidential and intended for authorized internal use only.
+
+Unauthorized distribution, publication, or reproduction is prohibited.
+
+---
+
+## Last Updated
+
+2026-04-28 — Test coverage audit, import/export validation, README review, and repository cleanup.
