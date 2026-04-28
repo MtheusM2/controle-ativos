@@ -173,6 +173,7 @@
 
             <div class="form-block-title">Especificações técnicas por tipo de ativo</div>
 
+            <!-- Notebook: campos de especificação técnica -->
             <div id="specs-notebook" class="form-section" hidden style="margin-top: 0;">
                 <div class="field-group"><label for="processador">Processador</label><input type="text" id="processador" name="processador" class="input-control"></div>
                 <div class="field-group"><label for="ram">RAM</label><input type="text" id="ram" name="ram" class="input-control"></div>
@@ -184,23 +185,23 @@
                 <div class="field-group"><label for="nome_equipamento">Nome do equipamento</label><input type="text" id="nome_equipamento" name="nome_equipamento" class="input-control"></div>
             </div>
 
+            <!-- Desktop: campos de especificação técnica (fields divididos por tipo para melhor UX, mas mesmo backend) -->
             <div id="specs-desktop" class="form-section" hidden>
-                <div class="field-group"><label for="desktop_processador">Processador</label><input type="text" id="desktop_processador" data-field-alias="processador" class="input-control"></div>
-                <div class="field-group"><label for="desktop_ram">RAM</label><input type="text" id="desktop_ram" data-field-alias="ram" class="input-control"></div>
-                <div class="field-group"><label for="desktop_armazenamento">Armazenamento</label><input type="text" id="desktop_armazenamento" data-field-alias="armazenamento" class="input-control"></div>
-                <div class="field-group"><label for="desktop_sistema_operacional">Sistema operacional</label><input type="text" id="desktop_sistema_operacional" data-field-alias="sistema_operacional" class="input-control"></div>
+                <div class="field-group"><label>Processador</label><input type="text" name="processador" class="input-control" data-shared-with="notebook"></div>
+                <div class="field-group"><label>RAM</label><input type="text" name="ram" class="input-control" data-shared-with="notebook"></div>
+                <div class="field-group"><label>Armazenamento</label><input type="text" name="armazenamento" class="input-control" data-shared-with="notebook"></div>
+                <div class="field-group"><label>Sistema operacional</label><input type="text" name="sistema_operacional" class="input-control" data-shared-with="notebook"></div>
                 <div class="field-group"><label for="hostname">Hostname / Nome equipamento</label><input type="text" id="hostname" name="hostname" class="input-control"></div>
-                <div class="field-group"><label for="desktop_teamviewer_id">TeamViewer ID</label><input type="text" id="desktop_teamviewer_id" data-field-alias="teamviewer_id" class="input-control"></div>
-                <div class="field-group"><label for="desktop_anydesk_id">AnyDesk ID</label><input type="text" id="desktop_anydesk_id" data-field-alias="anydesk_id" class="input-control"></div>
+                <div class="field-group"><label>TeamViewer ID</label><input type="text" name="teamviewer_id" class="input-control" data-shared-with="notebook"></div>
+                <div class="field-group"><label>AnyDesk ID</label><input type="text" name="anydesk_id" class="input-control" data-shared-with="notebook"></div>
             </div>
 
-            <!-- Celular: campos simplificados sem IMEI (removido em Fase 3 Round 3). -->
+            <!-- Celular: campos simplificados (removido IMEI em Fase 3 Round 3) -->
             <div id="specs-celular" class="form-section" hidden>
-                <!-- Celular contém apenas: número de linha, operadora, conta vinculada e armazenamento. -->
                 <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" inputmode="tel" maxlength="19" autocomplete="off" placeholder="(11) 98765-4321"></div>
                 <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
                 <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control"></div>
-                <div class="field-group"><label for="celular_armazenamento">Armazenamento</label><input type="text" id="celular_armazenamento" data-field-alias="armazenamento" class="input-control"></div>
+                <div class="field-group"><label>Armazenamento</label><input type="text" name="armazenamento" class="input-control" data-shared-with="notebook"></div>
             </div>
 
             <div id="specs-monitor" class="form-section" hidden>
@@ -313,11 +314,25 @@
     }
 
     function syncAliasedSpecFieldsToBody(body) {
-        // Consolida aliases (desktop/celular) para o payload canônico do backend.
-        document.querySelectorAll("[data-field-alias]").forEach((input) => {
-            const alias = input.getAttribute("data-field-alias");
+        // MELHORADO (Fase 4.2): Sincroniza campos compartilhados entre tipos
+        // Campos com data-shared-with indicam que devem ser sincronizados com outro tipo
+        // Ex: processador em specs-desktop usa o mesmo name "processador" do specs-notebook
+
+        // Os campos agora estão com mesmo name, então FormData já coleta corretamente
+        // Esta função fica para compatibilidade, mas agora apenas garante que
+        // valores dos campos ativos sejam propagados se houver duplicação
+
+        // Sincronizar campos compartilhados (se existirem)
+        document.querySelectorAll("[data-shared-with]").forEach((input) => {
+            const fieldName = input.getAttribute("name");
+            const sharedWith = input.getAttribute("data-shared-with");
             const value = String(input.value || "").trim();
-            if (value) body[alias] = value;
+
+            // Se o campo está visível e tem valor, usá-lo no payload
+            const parentSection = input.closest('.form-section');
+            if (parentSection && !parentSection.hidden && value) {
+                body[fieldName] = value;
+            }
         });
     }
 
@@ -326,7 +341,7 @@
         const activeGroups = TYPE_GROUPS[normalizedType] || [];
         const showSimple = SIMPLE_TYPES.has(normalizedType);
 
-        // FIXED (Fase 4.1c): Determinar se alguma seção de especificações deve ser mostrada
+        // MELHORADO (Fase 4.2): Determinar se alguma seção de especificações deve ser mostrada
         const shouldShowAnySpecs = activeGroups.length > 0 || showSimple;
 
         ["notebook", "desktop", "celular", "monitor", "simples"].forEach((groupKey) => {
@@ -336,9 +351,13 @@
             group.hidden = !shouldShow;
 
             // Desabilita campos de grupos ocultos para evitar envio de lixo técnico.
+            // MELHORADO (Fase 4.2): Sincronizar dados antes de limpar campos ocultos
             group.querySelectorAll("input, textarea, select").forEach((field) => {
                 field.disabled = !shouldShow;
-                if (!shouldShow) field.value = "";
+                // Limpar valor apenas se o grupo está oculto
+                if (!shouldShow) {
+                    field.value = "";
+                }
             });
         });
 
@@ -346,6 +365,31 @@
         const specsTitle = document.querySelector('.form-grid > .form-block-title');
         if (specsTitle) {
             specsTitle.hidden = !shouldShowAnySpecs;
+        }
+
+        // NOVO (Fase 4.2): Sincronizar campos compartilhados após mudar visibilidade
+        // Se houver campos compartilhados entre types (mesmo name), sincronizá-los
+        const visibleGroup = activeGroups[0] || (showSimple ? 'simples' : null);
+        if (visibleGroup) {
+            const visibleGroupElement = document.getElementById(`specs-${visibleGroup}`);
+            if (visibleGroupElement && !visibleGroupElement.hidden) {
+                // Coletar valores visíveis e aplicá-los a campos ocultos com mesmo name
+                const visibleInputs = visibleGroupElement.querySelectorAll('input, textarea, select');
+                visibleInputs.forEach((visibleField) => {
+                    const fieldName = visibleField.getAttribute('name');
+                    if (!fieldName) return;
+
+                    // Encontrar campos ocultos com mesmo name
+                    document.querySelectorAll(`[name="${fieldName}"]`).forEach((hiddenField) => {
+                        const hiddenGroupKey = hiddenField.closest('.form-section')?.id?.replace('specs-', '');
+                        if (hiddenGroupKey && hiddenGroupKey !== visibleGroup) {
+                            // Sincronizar valor do campo visível para oculto (para futura submissão)
+                            // Mas manter o campo oculto desabilitado
+                            hiddenField.value = visibleField.value;
+                        }
+                    });
+                });
+            }
         }
     }
 
@@ -486,6 +530,8 @@
     function collectTypeSpecificSpecificationRows(data) {
         const normalizedType = normalizeType(data.tipo_ativo || data.tipo);
 
+        // MELHORADO (Fase 4.2): Agora os campos compartilhados (processador, ram, etc)
+        // estão unificados no DOM, então usamos os mesmos dados para todos os tipos
         const fieldsByType = {
             notebook: [
                 ["Processador", data.processador],
@@ -498,6 +544,7 @@
                 ["Nome do equipamento", data.nome_equipamento],
             ],
             desktop: [
+                // Desktop agora usa os MESMOS campos compartilhados: processador, ram, armazenamento, etc.
                 ["Processador", data.processador],
                 ["RAM", data.ram],
                 ["Armazenamento", data.armazenamento],
@@ -507,10 +554,10 @@
                 ["AnyDesk ID", data.anydesk_id],
             ],
             celular: [
-                // IMEI removido em Fase 3 Round 3
                 ["Número da linha", data.numero_linha],
                 ["Operadora", data.operadora],
                 ["Conta vinculada", data.conta_vinculada],
+                // Celular também usa o campo compartilhado "armazenamento"
                 ["Armazenamento", data.armazenamento],
             ],
             monitor: [

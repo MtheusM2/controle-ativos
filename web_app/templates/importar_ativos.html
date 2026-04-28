@@ -195,51 +195,55 @@
             </div>
         </div>
 
-        <!-- Erros e avisos gerais -->
-        <div class="field-group">
-            <h4>Erros por linha</h4>
-            <div id="line-errors-container"></div>
-        </div>
-
-        <div class="field-group">
-            <h4>Avisos por linha</h4>
-            <div id="line-warnings-container"></div>
-        </div>
-
-        <div class="field-group">
-            <h4>Bloqueios de importação</h4>
-            <div id="import-blockers-container"></div>
-        </div>
-
-        <div class="field-group">
-            <h4>Mensagens gerais</h4>
-            <div id="validation-messages-container"></div>
-        </div>
-
         <!-- =============================== -->
-        <!-- BLOCO D: Confirmação Final (refactor existente) -->
+        <!-- SEÇÃO DE DETALHES E AVISOS (painel colapsável com scroll interno) -->
         <!-- =============================== -->
         <div class="field-group">
-            <h4>Bloco D — Confirmação Final</h4>
-            <p class="field-help">Confirme que reviu os dados e está autorizado a prosseguir com a importação.</p>
+            <h4>Detalhes da validação</h4>
+            <p class="field-help">Expanda abaixo para revisar todos os avisos e erros detectados.</p>
 
-            <div class="checkboxes-confirmacao">
-                <label class="checkbox-label">
-                    <input type="checkbox" name="revisor_dados" id="revisor-dados" class="checkbox-obrigatorio">
-                    Revisei os dados e confirmo que estão corretos
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" name="confirma_duplicatas" id="confirma-duplicatas" class="checkbox-obrigatorio">
-                    Estou ciente de possíveis duplicatas e confirmo o modo de tratamento
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" name="aceita_avisos" id="aceita-avisos" class="checkbox-obrigatorio">
-                    Aceito os avisos e possíveis limitações listados acima
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" name="autoriza_importacao" id="autoriza-importacao" class="checkbox-obrigatorio">
-                    Autorizo a importação dos ativos selecionados
-                </label>
+            <!-- Painel colapsável com botão para expandir/colapsar -->
+            <div class="validation-details-panel">
+                <button type="button" class="btn btn-link validation-panel-toggle" id="toggle-validation-details">
+                    <span class="toggle-icon">▼</span> Expandir detalhes da validação
+                </button>
+
+                <!-- Container com scroll interno (altura limitada) -->
+                <div id="validation-details-container" class="validation-details-content" hidden>
+                    <!-- Erros por linha -->
+                    <div class="validation-subsection">
+                        <h5 class="validation-subsection-title">Erros por linha</h5>
+                        <div id="line-errors-container" class="validation-scrollable"></div>
+                    </div>
+
+                    <!-- Avisos por linha -->
+                    <div class="validation-subsection">
+                        <h5 class="validation-subsection-title">Avisos por linha</h5>
+                        <div id="line-warnings-container" class="validation-scrollable"></div>
+                    </div>
+
+                    <!-- Bloqueios de importação -->
+                    <div class="validation-subsection">
+                        <h5 class="validation-subsection-title">Bloqueios de importação</h5>
+                        <div id="import-blockers-container" class="validation-scrollable"></div>
+                    </div>
+
+                    <!-- Mensagens gerais -->
+                    <div class="validation-subsection">
+                        <h5 class="validation-subsection-title">Mensagens gerais</h5>
+                        <div id="validation-messages-container" class="validation-scrollable"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botão para baixar relatório de validação -->
+            <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-mini" id="download-validation-report-btn">
+                    📥 Baixar relatório de validação
+                </button>
+                <small class="field-help" style="flex-basis: 100%; margin-top: 0;">
+                    Gera um arquivo com todos os avisos e erros para análise posterior.
+                </small>
             </div>
         </div>
 
@@ -295,6 +299,83 @@
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-close-modal="edit-line-modal">Cancelar</button>
             <button type="button" class="btn btn-primary" id="edit-line-save-btn">Confirmar edição</button>
+        </div>
+    </div>
+</div>
+
+<!-- NOVO: Modal de confirmação final (abre ao clicar "Confirmar importação" no sticky footer) -->
+<div id="final-confirmation-modal" class="modal" hidden>
+    <div class="modal-content modal-content-medium">
+        <div class="modal-header">
+            <h3>Confirmar importação de ativos</h3>
+            <button type="button" class="btn btn-close" data-close-modal="final-confirmation-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <p style="margin-bottom: 1.5rem; color: #999;">
+                Revise o resumo abaixo e confirme que está pronto para importar os ativos.
+            </p>
+
+            <!-- Resumo da importação -->
+            <div class="final-confirmation-summary">
+                <div class="confirmation-summary-item">
+                    <span>Total de linhas</span>
+                    <strong id="final-summary-total">0</strong>
+                </div>
+                <div class="confirmation-summary-item">
+                    <span>Válidas</span>
+                    <strong id="final-summary-valid" style="color: #8ae5c3;">0</strong>
+                </div>
+                <div class="confirmation-summary-item">
+                    <span>Com aviso</span>
+                    <strong id="final-summary-warning" style="color: #bb7a1b;">0</strong>
+                </div>
+                <div class="confirmation-summary-item">
+                    <span>Com erro</span>
+                    <strong id="final-summary-error" style="color: #b32647;">0</strong>
+                </div>
+                <div class="confirmation-summary-item">
+                    <span>Serão importadas</span>
+                    <strong id="final-summary-to-import" style="color: #8ae5c3;">0</strong>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(168, 25, 54, 0.08); border-radius: 8px; border-left: 3px solid #a81936;">
+                <p style="margin: 0; font-size: 0.9rem; color: var(--text-1);">
+                    <strong>Modo de importação:</strong> <span id="final-mode-display">—</span>
+                </p>
+            </div>
+
+            <!-- Checkboxes de confirmação obrigatórios -->
+            <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line-soft);">
+                <p style="margin: 0 0 1rem; font-weight: 600; color: var(--text-0);">
+                    Confirme os itens abaixo para prosseguir:
+                </p>
+
+                <div class="checkboxes-confirmacao">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="revisor_dados" id="revisor-dados" class="checkbox-obrigatorio">
+                        Revisei os dados e confirmo que estão corretos
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="confirma_duplicatas" id="confirma-duplicatas" class="checkbox-obrigatorio">
+                        Estou ciente de possíveis duplicatas e confirmo o modo de tratamento
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="aceita_avisos" id="aceita-avisos" class="checkbox-obrigatorio">
+                        Aceito os avisos e possíveis limitações listados acima
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="autoriza_importacao" id="autoriza-importacao" class="checkbox-obrigatorio">
+                        Autorizo a importação dos ativos selecionados
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal="final-confirmation-modal">Voltar para revisão</button>
+            <button type="button" class="btn btn-primary" id="final-confirm-button">Confirmar e importar</button>
         </div>
     </div>
 </div>
@@ -1503,6 +1584,128 @@
         }
     }
 
+    // ===== NOVO (Fase 4.2): Funções para painel colapsável e relatório =====
+
+    function toggleValidationDetails() {
+        const container = document.getElementById('validation-details-container');
+        const btn = document.getElementById('toggle-validation-details');
+        if (!container || !btn) return;
+
+        const isHidden = container.hidden;
+        container.hidden = !isHidden;
+        btn.textContent = isHidden
+            ? '▲ Ocultar detalhes da validação'
+            : '▼ Expandir detalhes da validação';
+    }
+
+    function downloadValidationReport() {
+        // Gera arquivo CSV/texto com todos os avisos e erros
+        if (!estadoRevisao.preview) {
+            alert('Nenhuma pré-visualização disponível para gerar relatório.');
+            return;
+        }
+
+        const linhas = estadoRevisao.linhas || [];
+        const erros = [];
+        const avisos = [];
+
+        // Coletar erros e avisos por linha
+        for (const linha of linhas) {
+            if (linha.erros && linha.erros.length > 0) {
+                for (const erro of linha.erros) {
+                    erros.push({
+                        linha: linha.linha,
+                        tipo: 'ERRO',
+                        mensagem: erro.mensagem || 'Erro não especificado'
+                    });
+                }
+            }
+            if (linha.avisos && linha.avisos.length > 0) {
+                for (const aviso of linha.avisos) {
+                    avisos.push({
+                        linha: linha.linha,
+                        tipo: 'AVISO',
+                        mensagem: aviso.mensagem || 'Aviso não especificado'
+                    });
+                }
+            }
+        }
+
+        // Montar conteúdo do relatório em formato simples (CSV)
+        let reportLines = [];
+        reportLines.push('RELATÓRIO DE VALIDAÇÃO DE IMPORTAÇÃO');
+        reportLines.push(`Data/Hora: ${new Date().toLocaleString('pt-BR')}`);
+        reportLines.push(`Total de linhas: ${linhas.length}`);
+        reportLines.push(`Linhas com erro: ${erros.length}`);
+        reportLines.push(`Linhas com aviso: ${avisos.length}`);
+        reportLines.push('');
+        reportLines.push('---');
+        reportLines.push('');
+
+        if (erros.length > 0) {
+            reportLines.push('ERROS:');
+            reportLines.push('');
+            for (const erro of erros) {
+                reportLines.push(`Linha ${erro.linha}: ${erro.mensagem}`);
+            }
+            reportLines.push('');
+        }
+
+        if (avisos.length > 0) {
+            reportLines.push('AVISOS:');
+            reportLines.push('');
+            for (const aviso of avisos) {
+                reportLines.push(`Linha ${aviso.linha}: ${aviso.mensagem}`);
+            }
+            reportLines.push('');
+        }
+
+        const reportContent = reportLines.join('\n');
+        const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `relatorio-validacao-${new Date().getTime()}.txt`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
+    function abrirModalConfirmacaoFinal() {
+        // Abre modal de confirmação final com resumo
+        const modal = document.getElementById('final-confirmation-modal');
+        if (!modal) return;
+
+        // Preencher resumo no modal
+        const t = estadoRevisao.totais;
+        document.getElementById('final-summary-total').textContent = t.total;
+        document.getElementById('final-summary-valid').textContent = t.validas;
+        document.getElementById('final-summary-warning').textContent = t.avisos;
+        document.getElementById('final-summary-error').textContent = t.erros;
+        document.getElementById('final-summary-to-import').textContent = t.aImportar;
+
+        // Mostrar modo de importação
+        const modoTextos = {
+            'validas_apenas': 'Importar apenas linhas válidas',
+            'validas_e_avisos': 'Importar válidas + linhas com aviso',
+            'tudo_ou_nada': 'Tentar importar tudo (modo tudo-ou-nada)'
+        };
+        const modoDisplay = modoTextos[estadoRevisao.modoImportacao] || estadoRevisao.modoImportacao;
+        document.getElementById('final-mode-display').textContent = modoDisplay;
+
+        // Limpar checkboxes (para começar fresh)
+        document.querySelectorAll('#final-confirmation-modal .checkbox-obrigatorio').forEach(cb => {
+            cb.checked = false;
+        });
+
+        modal.hidden = false;
+    }
+
+    function fecharModalConfirmacaoFinal() {
+        const modal = document.getElementById('final-confirmation-modal');
+        if (modal) {
+            modal.hidden = true;
+        }
+    }
+
     // ===== EVENT LISTENERS =====
 
     fileInput.addEventListener("change", () => {
@@ -1514,6 +1717,23 @@
         confirmButton.disabled = true;
         confirmRequirementsHint.textContent = "Analise o CSV para habilitar a continuidade da importação.";
     });
+
+    // NOVO (Fase 4.2): Event listeners para painel colapsável e modal de confirmação
+    const toggleValidationBtn = document.getElementById('toggle-validation-details');
+    if (toggleValidationBtn) {
+        toggleValidationBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleValidationDetails();
+        });
+    }
+
+    const downloadReportBtn = document.getElementById('download-validation-report-btn');
+    if (downloadReportBtn) {
+        downloadReportBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            downloadValidationReport();
+        });
+    }
 
     document.querySelectorAll(".checkbox-obrigatorio").forEach((checkbox) => {
         checkbox.addEventListener("change", atualizarEstadoConfirmacao);
@@ -1558,7 +1778,8 @@
     });
 
     previewButton.addEventListener("click", executarPreview);
-    confirmButton.addEventListener("click", executarConfirmacao);
+    // MODIFICADO (Fase 4.2): Botão de confirmação agora abre modal ao invés de importar diretamente
+    confirmButton.addEventListener("click", abrirModalConfirmacaoFinal);
 
     // FIXED (Fase 4.1c): Event listener para botão de cancelar na sticky bar
     const stickyCancelBtn = document.getElementById('sticky-cancel-import-btn');
@@ -1566,6 +1787,44 @@
         stickyCancelBtn.addEventListener('click', () => {
             if (window.confirm('Deseja cancelar a importação e voltar à listagem de ativos?')) {
                 window.location.href = "{{ url_for('listar_ativos_html') }}";
+            }
+        });
+    }
+
+    // NOVO (Fase 4.2): Event listeners do modal de confirmação final
+    const finalConfirmBtn = document.getElementById('final-confirm-button');
+    if (finalConfirmBtn) {
+        finalConfirmBtn.addEventListener('click', async () => {
+            // Validar checkboxes primeiro
+            const todosCheckados = Array.from(
+                document.querySelectorAll('#final-confirmation-modal .checkbox-obrigatorio')
+            ).every(cb => cb.checked);
+
+            if (!todosCheckados) {
+                alert('Marque todos os itens de confirmação para prosseguir.');
+                return;
+            }
+
+            // Chamar a função de importação original
+            await executarConfirmacao();
+
+            // Se importação foi bem-sucedida (função não lança erro), fechar modal
+            // (A função redireciona, mas para fins de lógica, fechar o modal também)
+            fecharModalConfirmacaoFinal();
+        });
+    }
+
+    // Fechar modal ao clicar no botão de voltar
+    document.querySelectorAll('[data-close-modal="final-confirmation-modal"]').forEach(btn => {
+        btn.addEventListener('click', fecharModalConfirmacaoFinal);
+    });
+
+    // Fechar modal ao clicar fora do conteúdo
+    const finalConfirmModal = document.getElementById('final-confirmation-modal');
+    if (finalConfirmModal) {
+        finalConfirmModal.addEventListener('click', (e) => {
+            if (e.target === finalConfirmModal) {
+                fecharModalConfirmacaoFinal();
             }
         });
     }

@@ -20,6 +20,9 @@
 
 <div id="assets-feedback" class="flash-stack" hidden></div>
 
+<!-- NOVO (Fase 4.2): Chips mostrando filtros aplicados -->
+<div id="active-filters-chips" class="active-filters-container"></div>
+
 <section class="panel list-panel">
     <div class="panel-header panel-header-split">
         <h3 class="title-section">Ativos cadastrados</h3>
@@ -994,6 +997,94 @@
         });
     });
 
+    // ===== NOVO (Fase 4.2): Funções para chips de filtros e contador =====
+
+    function countActiveFilters(filters) {
+        // Conta quantos filtros têm valores (não vazios)
+        return Object.values(filters || {}).filter(value => value && String(value).trim()).length;
+    }
+
+    function updateFilterCounter() {
+        // Atualiza badge contador no botão "Filtrar"
+        const openFilterBtn = document.getElementById("open-filter-modal");
+        if (!openFilterBtn) return;
+
+        // Remover badge existente se houver
+        const existingBadge = openFilterBtn.querySelector('.filter-counter-badge');
+        if (existingBadge) existingBadge.remove();
+
+        const count = countActiveFilters(currentFilters);
+        if (count > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'filter-counter-badge';
+            badge.textContent = count;
+            openFilterBtn.appendChild(badge);
+        }
+    }
+
+    function renderActiveFilterChips() {
+        // Renderiza chips visuais dos filtros aplicados
+        const container = document.getElementById("active-filters-chips");
+        if (!container) return;
+
+        container.innerHTML = "";
+
+        const filterLabels = {
+            id_ativo: "ID",
+            tipo: "Tipo",
+            marca: "Marca",
+            modelo: "Modelo",
+            usuario_responsavel: "Responsável",
+            departamento: "Setor",
+            localizacao: "Localidade",
+            status: "Status",
+            tem_garantia: "Garantia",
+            tem_nota_fiscal: "Nota Fiscal",
+            data_entrada_inicial: "Data entrada",
+            data_saida_inicial: "Data saída"
+        };
+
+        for (const [key, value] of Object.entries(currentFilters || {})) {
+            if (!value || !String(value).trim()) continue;
+
+            const label = filterLabels[key] || key;
+            const chip = document.createElement('div');
+            chip.className = 'filter-chip';
+            chip.dataset.filterKey = key;
+
+            const chipLabel = document.createElement('span');
+            chipLabel.className = 'filter-chip-label';
+            chipLabel.innerHTML = `<strong>${label}:</strong> <span>${escapeHtml(String(value))}</span>`;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'filter-chip-remove';
+            removeBtn.type = 'button';
+            removeBtn.textContent = '✕';
+            removeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                // Limpar o valor do filtro no modal
+                const filterFieldId = `filter-${key === 'id_ativo' ? 'id' : key}`;
+                const field = document.getElementById(filterFieldId);
+                if (field) {
+                    field.value = '';
+                }
+                // Re-aplicar sem esse filtro
+                applyFiltersWithoutKey(key);
+            });
+
+            chip.appendChild(chipLabel);
+            chip.appendChild(removeBtn);
+            container.appendChild(chip);
+        }
+    }
+
+    function applyFiltersWithoutKey(keyToRemove) {
+        // Remove um filtro específico e re-aplica
+        delete currentFilters[keyToRemove];
+        renderActiveFilterChips();
+        updateFilterCounter();
+    }
+
     // Fecha modal por tecla ESC sem afetar fluxo principal.
     document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
@@ -1002,13 +1093,19 @@
     });
 
     document.getElementById("apply-filters").addEventListener("click", async () => {
-        await loadAssets(collectFiltersFromModal());
+        currentFilters = collectFiltersFromModal();
+        await loadAssets(currentFilters);
+        renderActiveFilterChips();
+        updateFilterCounter();
         closeModal("filter-modal");
     });
 
     document.getElementById("reset-filters").addEventListener("click", async () => {
         document.getElementById("filter-form").reset();
+        currentFilters = {};
         await loadAssets({});
+        renderActiveFilterChips();
+        updateFilterCounter();
     });
 
     document.querySelectorAll("[data-export-format]").forEach((button) => {
