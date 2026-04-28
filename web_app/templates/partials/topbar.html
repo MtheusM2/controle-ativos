@@ -1,8 +1,15 @@
 <!-- Barra superior com contexto de usuário e identificação do ambiente -->
 <header class="topbar-panel">
-    <div class="topbar-title-group">
-        <h1 class="topbar-title">Plataforma de Gestão de Ativos</h1>
-        <p class="topbar-subtitle">Monitoramento operacional, rastreabilidade e documentação técnica</p>
+    <div class="topbar-brand-group">
+        <img
+            src="{{ url_for('static', filename='images/logo-opus-horizontal.png') }}"
+            alt="Opus Assets"
+            class="topbar-brand-logo"
+        >
+        <div class="topbar-title-group">
+            <h1 class="topbar-title">Opus Assets</h1>
+            <p class="topbar-subtitle">Gestão Centralizada de Ativos e Documentação Técnica</p>
+        </div>
     </div>
 
     <!-- Informações do usuário autenticado usando variáveis já existentes -->

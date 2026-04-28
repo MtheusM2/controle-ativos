@@ -115,6 +115,21 @@ body.app-body {
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 20px var(--wine-glow);
 }
 
+.brand-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: contain;
+    object-position: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 16px rgba(168, 25, 54, 0.2);
+}
+
+.brand-logo:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 24px rgba(168, 25, 54, 0.32);
+}
+
 .brand-title {
     margin: 0;
     font-size: 0.92rem;
@@ -197,15 +212,42 @@ body.app-body {
     justify-content: space-between;
     align-items: center;
     gap: 20px;
-    padding: 20px 28px;
+    padding: 16px 28px;
     border-bottom: 1px solid var(--line-soft);
     background: linear-gradient(180deg, rgba(10, 12, 17, 0.95), rgba(10, 12, 17, 0.86));
     backdrop-filter: blur(10px);
 }
 
+.topbar-brand-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+}
+
+.topbar-brand-logo {
+    height: 32px;
+    width: auto;
+    object-fit: contain;
+    object-position: left;
+    opacity: 0.85;
+    transition: opacity 0.2s ease;
+    flex-shrink: 0;
+}
+
+.topbar-brand-logo:hover {
+    opacity: 1;
+}
+
+.topbar-title-group {
+    flex: 1;
+    min-width: 0;
+}
+
 .topbar-title {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
 }
@@ -213,7 +255,10 @@ body.app-body {
 .topbar-subtitle {
     margin: 4px 0 0;
     color: var(--text-2);
-    font-size: 0.78rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .topbar-user {

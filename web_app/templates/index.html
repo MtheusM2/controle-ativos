@@ -4,7 +4,12 @@
 
 {% block content %}
 <section class="auth-card panel">
-    <div class="panel-header auth-header">
+    <div class="panel-header auth-header" style="text-align: center; padding-bottom: 24px;">
+        <img
+            src="{{ url_for('static', filename='images/logo-opus-full.png') }}"
+            alt="Opus Assets"
+            style="max-width: 160px; height: auto; margin-bottom: 16px;"
+        >
         <h2 class="title-section">Acesso ao Sistema</h2>
         <p class="text-muted">Entre com suas credenciais para acessar o dashboard de ativos.</p>
     </div>

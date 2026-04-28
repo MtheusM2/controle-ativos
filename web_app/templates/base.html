@@ -6,7 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Token CSRF global para requisições fetch/JSON/multipart no frontend. -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}Sistema de Controle de Ativos{% endblock %}</title>
+    <title>{% block title %}Opus Assets — Gestão de Ativos{% endblock %}</title>
+
+    <!-- Favicon com logo Opus -->
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo-opus-square.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/logo-opus-square.png') }}">
 
     <!-- Folha de estilo global reutilizável da interface Flask/Jinja -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
