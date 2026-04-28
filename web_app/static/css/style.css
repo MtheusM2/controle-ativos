@@ -122,15 +122,16 @@ body.app-body {
     object-fit: contain;
     object-position: center;
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 20px rgba(168, 25, 54, 0.3);
-    background: rgba(255, 255, 255, 0.08);
+    /* FIXED (Fase 4.1c): Aumentar background opacity para melhor contraste em dark mode */
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 20px rgba(168, 25, 54, 0.35);
+    background: rgba(255, 255, 255, 0.14);
     padding: 4px;
 }
 
 .brand-logo:hover {
     transform: scale(1.08);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 0 28px rgba(168, 25, 54, 0.42);
-    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 28px rgba(168, 25, 54, 0.48);
+    background: rgba(255, 255, 255, 0.18);
 }
 
 .brand-title {
@@ -803,7 +804,8 @@ body.app-body {
     padding: 0 0 8px;
     border-bottom: 1px solid var(--line-soft);
     font-size: 0.8rem;
-    color: var(--wine-1);
+    /* FIXED (Fase 4.1c): Usar cor mais clara para melhor contraste no dark mode (#ffc7d4 é o tom do --status-em-uso) */
+    color: #ffc7d4;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     font-weight: 700;
@@ -1429,7 +1431,7 @@ body.app-body {
 }
 
 .table-aligned col.col-status {
-    width: 90px;   /* 100 → 90 */
+    width: 135px;  /* FIXED (Fase 4.1c): 90 → 135 para acomodar "EM MANUTENÇÃO" completo */
 }
 
 .table-aligned col.col-date {
@@ -2156,10 +2158,14 @@ body.app-body {
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--text-2);
-    padding: 12px 0 8px 0;
-    margin-bottom: 4px;
-    border-bottom: 1px solid var(--line-soft);
+    /* FIXED (Fase 4.1c): Melhorar aparência do header de filtro */
+    color: #ffc7d4;
+    padding: 14px 12px;
+    margin-bottom: 8px;
+    border: none;
+    border-bottom: 2px solid #a81936;
+    background: linear-gradient(90deg, rgba(168, 25, 54, 0.06), transparent);
+    border-radius: 6px;
 }
 
 /* Subtítulos para agrupar campos relacionados */
@@ -2169,17 +2175,31 @@ body.app-body {
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-2);
-    padding: 10px 0 6px 0;
-    margin-top: 8px;
-    margin-bottom: 4px;
+    /* FIXED (Fase 4.1c): Melhorar contraste e visibilidade dos subtítulos */
+    color: #ffc7d4;
+    padding: 12px 0 8px 0;
+    margin-top: 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line-soft);
 }
 
 /* Container para toggle de filtros avançados */
 .filter-section-toggle {
     grid-column: 1 / -1;
-    padding: 8px 0;
-    margin: 4px 0;
+    padding: 12px 0;
+    margin: 8px 0;
+}
+
+/* FIXED (Fase 4.1c): Melhorar espaçamento e aparência dos campos dentro do filtro */
+.modal-grid .field-group {
+    margin-bottom: 12px;
+}
+
+.modal-grid .field-group label {
+    color: var(--text-0);
+    font-weight: 500;
+    margin-bottom: 6px;
+    display: block;
 }
 
 /* Botão de link para toggle com comportamento clean e responsivo */
@@ -2694,6 +2714,57 @@ body.app-body {
     color: var(--text-2);
     font-size: 0.75rem;
     margin-top: 2px;
+}
+
+/* FIXED (Fase 4.1c): Barra de ação fixa para importação (botão sempre acessível) */
+.import-action-bar-sticky {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 16px 28px;
+    background: linear-gradient(180deg, rgba(15, 17, 23, 0.98), rgba(8, 9, 11, 0.99));
+    border-top: 1px solid var(--line-soft);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    /* Adiciona padding-bottom ao painel de preview para evitar que conteúdo seja coberto */
+}
+
+.import-action-bar-sticky .import-status-summary {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: var(--text-1);
+}
+
+.import-action-bar-sticky .import-status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+}
+
+.import-action-bar-sticky .import-status-item strong {
+    color: var(--text-0);
+    font-weight: 600;
+}
+
+.import-action-bar-sticky .import-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Quando a barra sticky está visível, adicionar padding ao painel para não cobrir conteúdo */
+#import-preview-panel:has(~ .import-action-bar-sticky:not([hidden])) {
+    padding-bottom: 100px;
 }
 
 /* =============================== */

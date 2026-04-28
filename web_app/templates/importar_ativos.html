@@ -243,13 +243,44 @@
             </div>
         </div>
 
-        <!-- Botões de ação -->
-        <div class="field-group">
-            <button type="button" class="btn btn-primary" id="confirm-import-btn" disabled>Confirmar importação</button>
-            <small id="confirm-requirements-hint" class="field-help"></small>
-        </div>
+        <!-- Placeholder para a barra de ação fixa (conteúdo movido para sticky bar abaixo) -->
+        <div id="confirm-requirements-hint-placeholder" style="height: 4px;"></div>
     </div>
 </section>
+
+<!-- FIXED (Fase 4.1c): Barra de ação fixa para manter botão e resumo sempre visível -->
+<div class="import-action-bar-sticky" id="import-action-bar-sticky" hidden>
+    <!-- Resumo de contadores na barra sticky -->
+    <div class="import-status-summary">
+        <div class="import-status-item">
+            <strong id="sticky-summary-total">0</strong>
+            <span>total</span>
+        </div>
+        <div class="import-status-item">
+            <strong id="sticky-summary-valid">0</strong>
+            <span>válidas</span>
+        </div>
+        <div class="import-status-item">
+            <strong id="sticky-summary-warning">0</strong>
+            <span>avisos</span>
+        </div>
+        <div class="import-status-item">
+            <strong id="sticky-summary-error">0</strong>
+            <span>erros</span>
+        </div>
+        <div class="import-status-item" style="color: #8ae5c3; border-left: 1px solid var(--line-soft); padding-left: 16px;">
+            <strong id="sticky-summary-to-import">0</strong>
+            <span>a importar</span>
+        </div>
+    </div>
+
+    <!-- Botões de ação -->
+    <div class="import-action-buttons">
+        <button type="button" class="btn btn-secondary" id="sticky-cancel-import-btn">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="confirm-import-btn" disabled>Confirmar importação</button>
+        <small id="confirm-requirements-hint" class="field-help" style="position: absolute; bottom: -20px; right: 28px; white-space: nowrap;"></small>
+    </div>
+</div>
 
 <!-- Modal de edição de linha (NOVO para Bloco B) -->
 <div id="edit-line-modal" class="modal edit-line-modal" hidden>
@@ -1109,6 +1140,15 @@
         document.getElementById('summary-error').textContent = t.erros;
         document.getElementById('summary-discarded').textContent = t.descartadas;
         document.getElementById('summary-to-import').textContent = t.aImportar;
+
+        // FIXED (Fase 4.1c): Sincronizar sticky action bar com os totais atualizados
+        if (document.getElementById('sticky-summary-total')) {
+            document.getElementById('sticky-summary-total').textContent = t.total;
+            document.getElementById('sticky-summary-valid').textContent = t.validas;
+            document.getElementById('sticky-summary-warning').textContent = t.avisos;
+            document.getElementById('sticky-summary-error').textContent = t.erros;
+            document.getElementById('sticky-summary-to-import').textContent = t.aImportar;
+        }
     }
 
     function construirMapaErrosPorCampo(linha) {
@@ -1353,6 +1393,12 @@
             estadoRevisao.preview = payload.preview;
             previewPanel.hidden = false;
 
+            // FIXED (Fase 4.1c): Mostrar sticky action bar quando preview é exibido
+            const actionBar = document.getElementById('import-action-bar-sticky');
+            if (actionBar) {
+                actionBar.hidden = false;
+            }
+
             // Renderizar seções
             renderSummary(payload.preview);
             renderColumns(payload.preview);
@@ -1513,5 +1559,15 @@
 
     previewButton.addEventListener("click", executarPreview);
     confirmButton.addEventListener("click", executarConfirmacao);
+
+    // FIXED (Fase 4.1c): Event listener para botão de cancelar na sticky bar
+    const stickyCancelBtn = document.getElementById('sticky-cancel-import-btn');
+    if (stickyCancelBtn) {
+        stickyCancelBtn.addEventListener('click', () => {
+            if (window.confirm('Deseja cancelar a importação e voltar à listagem de ativos?')) {
+                window.location.href = "{{ url_for('listar_ativos_html') }}";
+            }
+        });
+    }
 </script>
 {% endblock %}
