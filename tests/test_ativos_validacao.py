@@ -302,7 +302,7 @@ def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
     cursor = FakeCursor()
 
     # Pré-popular cache de colunas para evitar SELECT INFORMATION_SCHEMA no FakeCursor.
-    # Inclui todas as colunas esperadas pelo schema persistência (45 campos + empresa_id).
+    # Inclui todas as colunas esperadas pelo schema persistência (46 campos + empresa_id).
     expected_columns = {
         "id", "codigo_interno", "tipo", "marca", "modelo", "serial",
         "descricao", "categoria", "tipo_ativo", "condicao", "localizacao",
@@ -313,7 +313,7 @@ def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
         "carregador", "teamviewer_id", "anydesk_id", "nome_equipamento",
         "hostname", "imei_1", "imei_2", "numero_linha", "operadora",
         "conta_vinculada", "polegadas", "resolucao", "tipo_painel",
-        "entrada_video", "fonte_ou_cabo", "criado_por", "empresa_id"
+        "entrada_video", "fonte_ou_cabo", "data_ultima_movimentacao", "criado_por", "empresa_id"
     }
     monkeypatch.setattr(ativos_service_module, "_ATIVOS_COLUNAS_CACHE", expected_columns)
 
@@ -357,7 +357,7 @@ def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
     # Garante que o INSERT continua com a mesma quantidade de colunas e valores.
     insert_statements = [item for item in cursor.statements if "INSERT INTO ativos" in item[0]]
     assert insert_statements
-    assert len(insert_statements[0][1]) == 45
+    assert len(insert_statements[0][1]) == 46
 
 
 @pytest.mark.parametrize(
@@ -462,12 +462,70 @@ def test_atualizar_ativo_simple_nao_altera_movimentacao(monkeypatch):
     assert "data_ultima_movimentacao" not in update_sql
 
 
+def test_atualizar_ativo_com_movimentacao_e_schema_parcial_ignora_timestamp(monkeypatch, caplog):
+    """
+    Quando a coluna de timestamp ainda não existe, a atualização não deve quebrar.
+    """
+    service = AtivosService()
+    cursor = FakeCursor()
+    caplog.set_level("WARNING")
+
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")
+    atualizado = _atualizar_fechas_ativo(atual, usuario_responsavel="Ana Silva", status="Disponível")
+    cursor.fetchone_queue = [
+        _row_db_from_ativo(atual, created_at="2026-04-01 10:00:00", updated_at="2026-04-01 10:00:00", data_ultima_movimentacao=None),
+        _row_db_from_ativo(atualizado, created_at="2026-04-01 10:00:00", updated_at="2026-04-14 11:00:00", data_ultima_movimentacao=None),
+    ]
+
+    parcial_columns = {
+        "id", "codigo_interno", "tipo", "marca", "modelo", "serial",
+        "descricao", "categoria", "tipo_ativo", "condicao", "localizacao",
+        "setor", "usuario_responsavel", "email_responsavel", "departamento",
+        "nota_fiscal", "garantia", "status", "data_entrada", "data_saida",
+        "data_compra", "valor", "observacoes", "detalhes_tecnicos",
+        "processador", "ram", "armazenamento", "sistema_operacional",
+        "carregador", "teamviewer_id", "anydesk_id", "nome_equipamento",
+        "hostname", "imei_1", "imei_2", "numero_linha", "operadora",
+        "conta_vinculada", "polegadas", "resolucao", "tipo_painel",
+        "entrada_video", "fonte_ou_cabo", "criado_por", "empresa_id"
+    }
+
+    monkeypatch.setattr(ativos_service_module, "_ATIVOS_COLUNAS_CACHE", parcial_columns)
+    monkeypatch.setattr(
+        service,
+        "_obter_contexto_acesso",
+        lambda _user_id: {"empresa_id": 1, "perfil": "usuario"},
+    )
+    monkeypatch.setattr(ativos_service_module, "cursor_mysql", lambda dictionary=True: FakeCursorContext(cursor))
+
+    resultado = service.atualizar_ativo(atual.id_ativo, {"usuario_responsavel": "Ana Silva", "status": "Disponível"}, user_id=1)
+
+    assert resultado.resumo_movimentacao["tipo_movimentacao"] == "entrega_para_colaborador"
+    assert resultado.resumo_movimentacao["atualizar_data_ultima_movimentacao"] is False
+    update_sql = next(sql for sql, _params in cursor.statements if sql.strip().upper().startswith("UPDATE"))
+    assert "data_ultima_movimentacao" not in update_sql
+    assert any("data_ultima_movimentacao ausente" in record.message for record in caplog.records)
+
+
 def test_atualizar_ativo_preenche_responsavel_sugere_em_uso(monkeypatch):
     """
     Ao preencher responsável em um ativo disponível, o backend sugere Em Uso.
     """
     service = AtivosService()
     cursor = FakeCursor()
+
+    full_columns = {
+        "id", "codigo_interno", "tipo", "marca", "modelo", "serial",
+        "descricao", "categoria", "tipo_ativo", "condicao", "localizacao",
+        "setor", "usuario_responsavel", "email_responsavel", "departamento",
+        "nota_fiscal", "garantia", "status", "data_entrada", "data_saida",
+        "data_compra", "valor", "observacoes", "detalhes_tecnicos",
+        "processador", "ram", "armazenamento", "sistema_operacional",
+        "carregador", "teamviewer_id", "anydesk_id", "nome_equipamento",
+        "hostname", "imei_1", "imei_2", "numero_linha", "operadora",
+        "conta_vinculada", "polegadas", "resolucao", "tipo_painel",
+        "entrada_video", "fonte_ou_cabo", "data_ultima_movimentacao", "criado_por", "empresa_id"
+    }
 
     atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")  # Fase 3 Round 2.1: unidade válida
     cursor.fetchone_queue = [
@@ -485,13 +543,17 @@ def test_atualizar_ativo_preenche_responsavel_sugere_em_uso(monkeypatch):
         "_obter_contexto_acesso",
         lambda _user_id: {"empresa_id": 1, "perfil": "usuario"},
     )
+    monkeypatch.setattr(ativos_service_module, "_ATIVOS_COLUNAS_CACHE", full_columns)
     monkeypatch.setattr(ativos_service_module, "cursor_mysql", lambda dictionary=True: FakeCursorContext(cursor))
 
     resultado = service.atualizar_ativo(atual.id_ativo, {"usuario_responsavel": "Ana Silva", "status": "Disponível"}, user_id=1)
 
     assert resultado.resumo_movimentacao["tipo_movimentacao"] == "entrega_para_colaborador"
     assert resultado.resumo_movimentacao["status_sugerido"] == "Em Uso"
+    assert resultado.resumo_movimentacao["atualizar_data_ultima_movimentacao"] is True
     assert resultado.data_ultima_movimentacao == "2026-04-14 11:00:00"
+    update_sql = next(sql for sql, _params in cursor.statements if sql.strip().upper().startswith("UPDATE"))
+    assert "data_ultima_movimentacao = NOW()" in update_sql
 
 
 def test_preparar_dados_confirmacao_movimentacao_nao_exige_campos_cadastrais():

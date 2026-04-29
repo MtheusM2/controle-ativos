@@ -88,6 +88,7 @@ _ATIVOS_COLUNAS_SELECAO = (
     "tipo_painel",
     "entrada_video",
     "fonte_ou_cabo",
+    "data_ultima_movimentacao",
     "criado_por",
     "criado_em",
     "atualizado_em",
@@ -139,6 +140,7 @@ _ATIVOS_COLUNAS_PERSISTENCIA = (
     "tipo_painel",
     "entrada_video",
     "fonte_ou_cabo",
+    "data_ultima_movimentacao",
     "criado_por",
     "empresa_id",
 )
@@ -216,6 +218,8 @@ def _selecionar_colunas_ativos(colunas_disponiveis: set[str]) -> str:
 def _filtrar_campos_ativos_persistencia(
     campos: list[tuple[str, object]],
     colunas_disponiveis: set[str],
+    *,
+    contexto_operacao: str = "persistência",
 ) -> list[tuple[str, object]]:
     """
     Remove campos que não existem na tabela atual antes de montar INSERT/UPDATE.
@@ -223,11 +227,25 @@ def _filtrar_campos_ativos_persistencia(
     Mantém a compatibilidade com bancos legados sem colunas opcionais como
     `codigo_interno`, evitando 500 por schema parcial.
     """
-    return [
+    campos_filtrados = [
         (campo, valor)
         for campo, valor in campos
         if campo in colunas_disponiveis and campo in _ATIVOS_COLUNAS_PERSISTENCIA
     ]
+
+    campos_ignorados = [
+        campo
+        for campo, _valor in campos
+        if campo in _ATIVOS_COLUNAS_PERSISTENCIA and campo not in colunas_disponiveis
+    ]
+    if campos_ignorados:
+        logger.warning(
+            "Schema parcial em %s: ignorando colunas ausentes na tabela ativos: %s",
+            contexto_operacao,
+            ", ".join(campos_ignorados[:10]) + ("..." if len(campos_ignorados) > 10 else ""),
+        )
+
+    return campos_filtrados
 
 
 def diagnosticar_schema_ativos() -> dict[str, bool]:
@@ -2333,10 +2351,12 @@ class AtivosService:
                     ("tipo_painel", ativo_norm.tipo_painel),
                     ("entrada_video", ativo_norm.entrada_video),
                     ("fonte_ou_cabo", ativo_norm.fonte_ou_cabo),
+                    ("data_ultima_movimentacao", ativo_norm.data_ultima_movimentacao),
                     ("criado_por", user_id),
                     ("empresa_id", empresa_id),
                 ],
                 colunas_disponiveis,
+                contexto_operacao="INSERT ativo",
             )
 
             colunas_sql = ", ".join(campo for campo, _valor in campos_insert)
@@ -2595,6 +2615,7 @@ class AtivosService:
         resumo_movimentacao = self.analisar_movimentacao_ativo(atual, novo_norm)
 
         # O SET é montado dinamicamente para manter a mesma lógica para admin e usuário comum.
+        # Campos ausentes no schema são filtrados para evitar 500 em ambientes com schema parcial.
         campos_update = [
             ("codigo_interno", novo_norm.codigo_interno),
             ("tipo", novo_norm.tipo),
@@ -2640,29 +2661,43 @@ class AtivosService:
             ("fonte_ou_cabo", novo_norm.fonte_ou_cabo),
         ]
 
-        set_clausulas = [f"{campo} = %s" for campo, _valor in campos_update]
-        params_update = [valor for _campo, valor in campos_update]
-
-        if resumo_movimentacao["atualizar_data_ultima_movimentacao"]:
-            set_clausulas.append("data_ultima_movimentacao = NOW()")
-
-        where_clause = "WHERE id = %s"
-        if not self._usuario_eh_admin(contexto):
-            where_clause = "WHERE id = %s AND empresa_id = %s"
-
-        sql = f"UPDATE ativos SET {', '.join(set_clausulas)} {where_clause}"
-        params_execucao = list(params_update)
-        params_execucao.append(novo_norm.id_ativo)
-        if not self._usuario_eh_admin(contexto):
-            params_execucao.append(int(contexto["empresa_id"]))
-
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            colunas_disponiveis = _carregar_colunas_ativos(cur)
+
+            campos_update_filtrados = _filtrar_campos_ativos_persistencia(
+                campos_update,
+                colunas_disponiveis,
+                contexto_operacao="UPDATE ativo",
+            )
+
+            set_clausulas = [f"{campo} = %s" for campo, _valor in campos_update_filtrados]
+            params_execucao = [valor for _campo, valor in campos_update_filtrados]
+
+            pode_atualizar_movimentacao = "data_ultima_movimentacao" in colunas_disponiveis
+            if resumo_movimentacao["atualizar_data_ultima_movimentacao"] and pode_atualizar_movimentacao:
+                set_clausulas.append("data_ultima_movimentacao = NOW()")
+            elif resumo_movimentacao["atualizar_data_ultima_movimentacao"] and not pode_atualizar_movimentacao:
+                logger.warning(
+                    "Schema parcial em UPDATE ativo: coluna data_ultima_movimentacao ausente; "
+                    "movimentação do ativo %s será persistida sem esse timestamp.",
+                    novo_norm.id_ativo,
+                )
+
+            where_clause = "WHERE id = %s"
+            if not self._usuario_eh_admin(contexto):
+                where_clause = "WHERE id = %s AND empresa_id = %s"
+
+            sql = f"UPDATE ativos SET {', '.join(set_clausulas)} {where_clause}"
             cur.execute(sql, tuple(params_execucao))
 
             if cur.rowcount == 0:
                 raise AtivoNaoEncontrado("Não foi possível atualizar o ativo.")
 
         ativo_atualizado = self.buscar_ativo(id_ativo=id_ativo, user_id=user_id)
+        if resumo_movimentacao["atualizar_data_ultima_movimentacao"] and not pode_atualizar_movimentacao:
+            resumo_movimentacao = dict(resumo_movimentacao)
+            resumo_movimentacao["atualizar_data_ultima_movimentacao"] = False
+
         ativo_atualizado.resumo_movimentacao = resumo_movimentacao
         return ativo_atualizado
 
