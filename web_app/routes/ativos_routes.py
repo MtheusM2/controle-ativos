@@ -982,6 +982,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             "total_baixado": 0,
         }
         ativos_preview: list[dict] = []
+        dashboard_erro: str | None = None
         try:
             ativos = service.listar_ativos(user_id)
             indicadores["total_ativos"] = len(ativos)
@@ -996,16 +997,18 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 reverse=True,
             )
             ativos_preview = [_serializar_ativo(ativo) for ativo in ativos_ordenados[:5]]
-        except AtivoErro:
-            # Em caso de falha de leitura, preserva renderização do dashboard sem interromper UX.
-            pass
+        except (AtivoErro, PermissaoNegada, ValueError, TypeError, KeyError) as erro:
+            # Registra a falha com stack trace e mantém a tela segura com dados vazios.
+            logger.exception("Falha ao montar dashboard para user_id=%s: %s", user_id, erro)
+            dashboard_erro = "Não foi possível carregar os dados do dashboard agora."
 
         return render_template(
             "dashboard.html",
-            usuario_email=session.get("user_email"),
+            usuario_email=session.get("user_email") or "",
             status_validos=STATUS_VALIDOS,
             indicadores=indicadores,
             ativos_preview=ativos_preview,
+            dashboard_erro=dashboard_erro,
             show_chrome=True,
         )
 
@@ -1916,9 +1919,16 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         except (AtivoErro, PermissaoNegada) as erro:
             return _json_error(str(erro), status=400)
-        except (OSError, UnicodeError, ValueError, TypeError, KeyError) as erro:
+        except Exception as erro:
+            # Registra stack trace completo para auditoria e debug.
+            logger.exception(
+                "importacao.preview.erro_nao_esperado user_id=%s erro=%s",
+                user_id,
+                type(erro).__name__
+            )
+            # Retorna mensagem segura sem expor detalhes técnicos.
             return _json_error(
-                f"Erro ao processar arquivo: {str(erro)}",
+                "Erro ao analisar arquivo. Verifique se o arquivo está em formato CSV válido.",
                 status=400
             )
 
@@ -2110,9 +2120,17 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         except (AtivoErro, PermissaoNegada) as erro:
             return _json_error(str(erro), status=400)
-        except (OSError, UnicodeError, ValueError, TypeError, KeyError) as erro:
+        except Exception as erro:
+            # Registra stack trace completo para auditoria e debug.
+            logger.exception(
+                "importacao.confirmar.erro_nao_esperado id_lote=%s user_id=%s erro=%s",
+                id_lote or '<vazio>',
+                user_id,
+                type(erro).__name__
+            )
+            # Retorna mensagem segura sem expor detalhes técnicos.
             return _json_error(
-                f"Erro ao processar importação: {str(erro)}",
+                "Erro ao processar importação. Verifique se o arquivo e os campos estão corretos.",
                 status=500
             )
 
@@ -2148,5 +2166,15 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             )
         except (AtivoErro, PermissaoNegada) as erro:
             return _json_error(str(erro), status=400)
-        except (OSError, UnicodeError, ValueError, TypeError, KeyError):
-            return _json_error("Erro inesperado ao processar arquivo CSV.", status=500)
+        except Exception as erro:
+            # Registra stack trace completo para auditoria e debug.
+            logger.exception(
+                "importacao.csv_legado.erro_nao_esperado user_id=%s erro=%s",
+                user_id,
+                type(erro).__name__
+            )
+            # Retorna mensagem segura sem expor detalhes técnicos.
+            return _json_error(
+                "Erro ao importar arquivo CSV. Verifique o formato e conteúdo.",
+                status=500
+            )

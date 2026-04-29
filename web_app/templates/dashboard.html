@@ -15,6 +15,14 @@
     </div>
 </section>
 
+{% if dashboard_erro %}
+<section class="panel list-panel" role="status" aria-live="polite">
+    <div class="panel-body">
+        <p class="text-muted">{{ dashboard_erro }}</p>
+    </div>
+</section>
+{% endif %}
+
 <section class="kpi-grid">
     <article class="panel kpi-card">
         <div class="panel-header">

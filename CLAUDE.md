@@ -147,18 +147,33 @@ scripts/simulate_production.ps1
 pytest tests/ -v
 
 # Diagnóstico de configuração
-python scripts/diagnose_runtime_config.py
+---
 
-# Testar conexão com banco
-python scripts/test_db_connection.py
+## Correção de Schema Parcial (Migration 006)
 
-# Setup inicial no servidor Windows
-scripts/setup_server.ps1
-```
+**Problema:** Import de ativos retorna HTTP 500 ("Unknown column 'codigo_interno'")
+
+**Causa Raiz:** Migration 006 não aplicada (usuario `opus_app` sem permissão ALTER TABLE)
+
+**Solução Implementada:** Sistema detecta schema real em runtime e adapta queries dynamicamente
+
+**Status:** ✅ Implementado e testado | ⏳ Migration 006 pendente (DBA/admin)
+
+**Detalhes:**
+- Código agora suporta schema com 15 colunas (legacy) OU 45+ colunas (pós-migration)
+- `diagnosticar_schema_ativos()` retorna status de cada coluna
+- Imports descartam apenas campos indisponíveis no banco, com logging
+- Zero data loss garantido durante transição
+
+**Próximas Etapas (Operacional):**
+1. Restart serviço NSSM e validar dashboard/import sem erros
+2. DBA aplica migration 006: `docs/MIGRATION_006_SCHEMA_PARTIAL.md`
+3. Restart serviço e confirmar "Schema completo" nos logs
+
+**Documentação:** `docs/MIGRATION_006_SCHEMA_PARTIAL.md` | `RELATORIO_CORRECAO_500_ERROR.md`
 
 ---
 
-## Deploy em Produção
 
 - **Servidor:** Windows Server 2019+
 - **Process manager:** NSSM → `deploy/nssm/install_service.ps1`

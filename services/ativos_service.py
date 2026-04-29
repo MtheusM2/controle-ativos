@@ -10,6 +10,7 @@ import csv
 import io
 import logging
 import re
+import threading
 import unicodedata
 from difflib import get_close_matches
 
@@ -37,6 +38,231 @@ from utils.validators import (
 
 
 logger = logging.getLogger(__name__)
+
+_ATIVOS_COLUNAS_CACHE: set[str] | None = None
+_ATIVOS_COLUNAS_CACHE_LOCK = threading.Lock()
+
+_ATIVOS_COLUNAS_SELECAO = (
+    # Lista completa de colunas esperadas (pode haver fallback se coluna não existe no banco).
+    # A seleção dinâmica em _selecionar_colunas_ativos() usa as colunas reais do banco.
+    "id",
+    "codigo_interno",
+    "tipo",
+    "marca",
+    "modelo",
+    "serial",
+    "descricao",
+    "categoria",
+    "tipo_ativo",
+    "condicao",
+    "localizacao",
+    "setor",
+    "usuario_responsavel",
+    "email_responsavel",
+    "departamento",
+    "nota_fiscal",
+    "garantia",
+    "status",
+    "data_entrada",
+    "data_saida",
+    "data_compra",
+    "valor",
+    "observacoes",
+    "detalhes_tecnicos",
+    "processador",
+    "ram",
+    "armazenamento",
+    "sistema_operacional",
+    "carregador",
+    "teamviewer_id",
+    "anydesk_id",
+    "nome_equipamento",
+    "hostname",
+    "imei_1",
+    "imei_2",
+    "numero_linha",
+    "operadora",
+    "conta_vinculada",
+    "polegadas",
+    "resolucao",
+    "tipo_painel",
+    "entrada_video",
+    "fonte_ou_cabo",
+    "criado_por",
+    "criado_em",
+    "atualizado_em",
+)
+
+_ATIVOS_COLUNAS_PERSISTENCIA = (
+    # Lista completa de colunas que podem ser persistidas (INSERT/UPDATE).
+    # A filtragem em _filtrar_campos_ativos_persistencia() remove campos inexistentes no banco.
+    "id",
+    "codigo_interno",
+    "tipo",
+    "marca",
+    "modelo",
+    "serial",
+    "descricao",
+    "categoria",
+    "tipo_ativo",
+    "condicao",
+    "localizacao",
+    "setor",
+    "usuario_responsavel",
+    "email_responsavel",
+    "departamento",
+    "nota_fiscal",
+    "garantia",
+    "status",
+    "data_entrada",
+    "data_saida",
+    "data_compra",
+    "valor",
+    "observacoes",
+    "detalhes_tecnicos",
+    "processador",
+    "ram",
+    "armazenamento",
+    "sistema_operacional",
+    "carregador",
+    "teamviewer_id",
+    "anydesk_id",
+    "nome_equipamento",
+    "hostname",
+    "imei_1",
+    "imei_2",
+    "numero_linha",
+    "operadora",
+    "conta_vinculada",
+    "polegadas",
+    "resolucao",
+    "tipo_painel",
+    "entrada_video",
+    "fonte_ou_cabo",
+    "criado_por",
+    "empresa_id",
+)
+
+
+def _carregar_colunas_ativos(cur) -> set[str]:
+    """
+    Lê as colunas reais da tabela de ativos e guarda o resultado em cache.
+
+    O cache evita consultas repetidas ao INFORMATION_SCHEMA em cada request e
+    permite fallback retrocompatível quando o banco ainda não possui uma coluna
+    opcional esperada pelo código atual.
+    """
+    global _ATIVOS_COLUNAS_CACHE
+
+    if _ATIVOS_COLUNAS_CACHE is not None:
+        return _ATIVOS_COLUNAS_CACHE
+
+    with _ATIVOS_COLUNAS_CACHE_LOCK:
+        if _ATIVOS_COLUNAS_CACHE is None:
+            cur.execute(
+                """
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'ativos'
+                """
+            )
+            rows = cur.fetchall() or []
+            _ATIVOS_COLUNAS_CACHE = {
+                str(row.get("COLUMN_NAME") if isinstance(row, dict) else row[0])
+                for row in rows
+                if row
+            }
+
+            # Detecta quais colunas esperadas estão faltando no banco
+            colunas_faltantes = [
+                coluna for coluna in _ATIVOS_COLUNAS_SELECAO
+                if coluna not in _ATIVOS_COLUNAS_CACHE
+            ]
+            
+            total_colunas = len(_ATIVOS_COLUNAS_CACHE)
+            esperadas = len(_ATIVOS_COLUNAS_SELECAO)
+            
+            if colunas_faltantes:
+                logger.warning(
+                    f"Schema parcial detectado: {total_colunas}/{esperadas} colunas disponíveis. "
+                    f"Faltam {len(colunas_faltantes)} colunas opcionais (migration 006 não aplicada?): "
+                    f"{', '.join(colunas_faltantes[:10])}{'...' if len(colunas_faltantes) > 10 else ''}. "
+                    f"Sistema usando fallback retrocompatível com NULL AS para colunas ausentes."
+                )
+            else:
+                logger.info(f"Schema completo: todas as {esperadas} colunas disponíveis")
+
+    return _ATIVOS_COLUNAS_CACHE
+
+
+
+def _coluna_sql_ativos(nome_coluna: str, colunas_disponiveis: set[str]) -> str:
+    """
+    Retorna a expressão SQL para uma coluna, com fallback nulo quando ausente.
+    """
+    if nome_coluna in colunas_disponiveis:
+        return nome_coluna
+    return f"NULL AS {nome_coluna}"
+
+
+def _selecionar_colunas_ativos(colunas_disponiveis: set[str]) -> str:
+    """
+    Monta o SELECT de ativos de forma retrocompatível com o schema do banco.
+    """
+    return ", ".join(_coluna_sql_ativos(coluna, colunas_disponiveis) for coluna in _ATIVOS_COLUNAS_SELECAO)
+
+
+def _filtrar_campos_ativos_persistencia(
+    campos: list[tuple[str, object]],
+    colunas_disponiveis: set[str],
+) -> list[tuple[str, object]]:
+    """
+    Remove campos que não existem na tabela atual antes de montar INSERT/UPDATE.
+
+    Mantém a compatibilidade com bancos legados sem colunas opcionais como
+    `codigo_interno`, evitando 500 por schema parcial.
+    """
+    return [
+        (campo, valor)
+        for campo, valor in campos
+        if campo in colunas_disponiveis and campo in _ATIVOS_COLUNAS_PERSISTENCIA
+    ]
+
+
+def diagnosticar_schema_ativos() -> dict[str, bool]:
+    """
+    Retorna um diagnóstico do schema da tabela de ativos.
+    
+    Compara as colunas esperadas (definidas no código) com as colunas reais do banco.
+    Útil para:
+    - Validar se a migration 006 foi aplicada
+    - Identificar qual schema parcial está em uso
+    - Informar ao usuário sobre campos indisponíveis na importação
+    
+    Retorna:
+        dict: Mapeamento {nome_coluna: existe_no_banco}
+              - True: coluna existe
+              - False: coluna faltando
+    """
+    global _ATIVOS_COLUNAS_CACHE
+    
+    with _ATIVOS_COLUNAS_CACHE_LOCK:
+        if _ATIVOS_COLUNAS_CACHE is None:
+            try:
+                with cursor_mysql() as cur:
+                    _carregar_colunas_ativos(cur)
+            except Exception as e:
+                logger.warning(f"Não foi possível carregar schema: {e}")
+                # Retorna um diagnóstico seguro baseado nas colunas conhecidas do banco antigo
+                return {col: col in ('id', 'tipo', 'marca', 'modelo', 'usuario_responsavel', 
+                                     'departamento', 'nota_fiscal', 'garantia', 'status',
+                                     'data_entrada', 'data_saida', 'criado_por', 'criado_em', 
+                                     'atualizado_em', 'empresa_id') for col in _ATIVOS_COLUNAS_SELECAO}
+    
+    # Retorna o diagnóstico comparando todas as colunas esperadas
+    return {col: col in _ATIVOS_COLUNAS_CACHE for col in _ATIVOS_COLUNAS_SELECAO}
+
 
 
 class AtivoErro(Exception):
@@ -72,10 +298,10 @@ def _row_para_ativo(row: dict) -> Ativo:
     Converte uma linha do banco em objeto Ativo.
     """
     return Ativo(
-        id_ativo=row["id"],
-        tipo=row["tipo"],
-        marca=row["marca"],
-        modelo=row["modelo"],
+        id_ativo=row.get("id"),
+        tipo=row.get("tipo") or row.get("tipo_ativo") or "",
+        marca=row.get("marca") or "",
+        modelo=row.get("modelo") or "",
         serial=row.get("serial"),
         codigo_interno=row.get("codigo_interno"),
         descricao=row.get("descricao"),
@@ -84,14 +310,14 @@ def _row_para_ativo(row: dict) -> Ativo:
         condicao=row.get("condicao"),
         localizacao=row.get("localizacao"),
         setor=row.get("setor") or row.get("departamento"),
-        usuario_responsavel=row["usuario_responsavel"],
+        usuario_responsavel=row.get("usuario_responsavel") or "",
         email_responsavel=row.get("email_responsavel"),
-        departamento=row["departamento"],
+        departamento=row.get("departamento") or row.get("setor") or "",
         nota_fiscal=row.get("nota_fiscal"),
         # Faz o mapeamento da coluna documental renomeada para o domínio.
         garantia=row.get("garantia"),
-        status=row["status"],
-        data_entrada=str(row["data_entrada"]),
+        status=row.get("status") or "",
+        data_entrada=str(row["data_entrada"]) if row.get("data_entrada") else "",
         data_saida=str(row["data_saida"]) if row["data_saida"] else None,
         data_compra=str(row["data_compra"]) if row.get("data_compra") else None,
         valor=str(row["valor"]) if row.get("valor") is not None else None,
@@ -119,7 +345,7 @@ def _row_para_ativo(row: dict) -> Ativo:
         created_at=row.get("created_at") or row.get("criado_em"),
         updated_at=row.get("updated_at") or row.get("atualizado_em"),
         data_ultima_movimentacao=row.get("data_ultima_movimentacao"),
-        criado_por=row["criado_por"]
+        criado_por=row.get("criado_por")
     )
 
 
@@ -2055,116 +2281,71 @@ class AtivosService:
             raise AtivoErro(str(erro)) from erro
 
         with cursor_mysql(dictionary=True) as (conn, cur):
+            colunas_disponiveis = _carregar_colunas_ativos(cur)
+
             # Gera o ID dentro da mesma transação do INSERT — atomicidade garantida.
             # Se o INSERT falhar, o rollback automático desfaz também o incremento.
             id_gerado = self._gerar_id_sequencial(empresa_id, conn, cur)
             ativo_norm.id_ativo = id_gerado
 
+            campos_insert = _filtrar_campos_ativos_persistencia(
+                [
+                    ("id", ativo_norm.id_ativo),
+                    ("codigo_interno", ativo_norm.codigo_interno),
+                    ("tipo", ativo_norm.tipo),
+                    ("marca", ativo_norm.marca),
+                    ("modelo", ativo_norm.modelo),
+                    ("serial", ativo_norm.serial),
+                    ("descricao", ativo_norm.descricao),
+                    ("categoria", ativo_norm.categoria),
+                    ("tipo_ativo", ativo_norm.tipo_ativo),
+                    ("condicao", ativo_norm.condicao),
+                    ("localizacao", ativo_norm.localizacao),
+                    ("setor", ativo_norm.setor),
+                    ("usuario_responsavel", ativo_norm.usuario_responsavel),
+                    ("email_responsavel", ativo_norm.email_responsavel),
+                    ("departamento", ativo_norm.departamento),
+                    ("nota_fiscal", ativo_norm.nota_fiscal),
+                    ("garantia", ativo_norm.garantia),
+                    ("status", ativo_norm.status),
+                    ("data_entrada", ativo_norm.data_entrada),
+                    ("data_saida", ativo_norm.data_saida),
+                    ("data_compra", ativo_norm.data_compra),
+                    ("valor", ativo_norm.valor),
+                    ("observacoes", ativo_norm.observacoes),
+                    ("detalhes_tecnicos", ativo_norm.detalhes_tecnicos),
+                    ("processador", ativo_norm.processador),
+                    ("ram", ativo_norm.ram),
+                    ("armazenamento", ativo_norm.armazenamento),
+                    ("sistema_operacional", ativo_norm.sistema_operacional),
+                    ("carregador", ativo_norm.carregador),
+                    ("teamviewer_id", ativo_norm.teamviewer_id),
+                    ("anydesk_id", ativo_norm.anydesk_id),
+                    ("nome_equipamento", ativo_norm.nome_equipamento),
+                    ("hostname", ativo_norm.hostname),
+                    ("imei_1", ativo_norm.imei_1),
+                    ("imei_2", ativo_norm.imei_2),
+                    ("numero_linha", ativo_norm.numero_linha),
+                    ("operadora", ativo_norm.operadora),
+                    ("conta_vinculada", ativo_norm.conta_vinculada),
+                    ("polegadas", ativo_norm.polegadas),
+                    ("resolucao", ativo_norm.resolucao),
+                    ("tipo_painel", ativo_norm.tipo_painel),
+                    ("entrada_video", ativo_norm.entrada_video),
+                    ("fonte_ou_cabo", ativo_norm.fonte_ou_cabo),
+                    ("criado_por", user_id),
+                    ("empresa_id", empresa_id),
+                ],
+                colunas_disponiveis,
+            )
+
+            colunas_sql = ", ".join(campo for campo, _valor in campos_insert)
+            placeholders = ", ".join(["%s"] * len(campos_insert))
+            valores_insert = tuple(valor for _campo, valor in campos_insert)
+
             cur.execute(
-                """
-                INSERT INTO ativos (
-                    id,
-                    codigo_interno,
-                    tipo,
-                    marca,
-                    modelo,
-                    serial,
-                    descricao,
-                    categoria,
-                    tipo_ativo,
-                    condicao,
-                    localizacao,
-                    setor,
-                    usuario_responsavel,
-                    email_responsavel,
-                    departamento,
-                    nota_fiscal,
-                    garantia,
-                    status,
-                    data_entrada,
-                    data_saida,
-                    data_compra,
-                    valor,
-                    observacoes,
-                    detalhes_tecnicos,
-                    processador,
-                    ram,
-                    armazenamento,
-                    sistema_operacional,
-                    carregador,
-                    teamviewer_id,
-                    anydesk_id,
-                    nome_equipamento,
-                    hostname,
-                    imei_1,
-                    imei_2,
-                    numero_linha,
-                    operadora,
-                    conta_vinculada,
-                    polegadas,
-                    resolucao,
-                    tipo_painel,
-                    entrada_video,
-                    fonte_ou_cabo,
-                    criado_por,
-                    empresa_id
-                )
-                VALUES (
-                    # A lista de placeholders precisa manter 1:1 com as colunas acima.
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s
-                )
-                """,
-                (
-                    ativo_norm.id_ativo,
-                    ativo_norm.codigo_interno,
-                    ativo_norm.tipo,
-                    ativo_norm.marca,
-                    ativo_norm.modelo,
-                    ativo_norm.serial,
-                    ativo_norm.descricao,
-                    ativo_norm.categoria,
-                    ativo_norm.tipo_ativo,
-                    ativo_norm.condicao,
-                    ativo_norm.localizacao,
-                    ativo_norm.setor,
-                    ativo_norm.usuario_responsavel,
-                    ativo_norm.email_responsavel,
-                    ativo_norm.departamento,
-                    ativo_norm.nota_fiscal,
-                    ativo_norm.garantia,
-                    ativo_norm.status,
-                    ativo_norm.data_entrada,
-                    ativo_norm.data_saida,
-                    ativo_norm.data_compra,
-                    ativo_norm.valor,
-                    ativo_norm.observacoes,
-                    ativo_norm.detalhes_tecnicos,
-                    ativo_norm.processador,
-                    ativo_norm.ram,
-                    ativo_norm.armazenamento,
-                    ativo_norm.sistema_operacional,
-                    ativo_norm.carregador,
-                    ativo_norm.teamviewer_id,
-                    ativo_norm.anydesk_id,
-                    ativo_norm.nome_equipamento,
-                    ativo_norm.hostname,
-                    ativo_norm.imei_1,
-                    ativo_norm.imei_2,
-                    ativo_norm.numero_linha,
-                    ativo_norm.operadora,
-                    ativo_norm.conta_vinculada,
-                    ativo_norm.polegadas,
-                    ativo_norm.resolucao,
-                    ativo_norm.tipo_painel,
-                    ativo_norm.entrada_video,
-                    ativo_norm.fonte_ou_cabo,
-                    user_id,
-                    empresa_id,
-                )
+                f"INSERT INTO ativos ({colunas_sql}) VALUES ({placeholders})",
+                valores_insert,
             )
 
         return id_gerado
@@ -2178,38 +2359,21 @@ class AtivosService:
         contexto = self._obter_contexto_acesso(user_id)
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            colunas_disponiveis = _carregar_colunas_ativos(cur)
+            select_colunas = _selecionar_colunas_ativos(colunas_disponiveis)
+
             if self._usuario_eh_admin(contexto):
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                           conta_vinculada, polegadas, resolucao, tipo_painel,
-                           entrada_video, fonte_ou_cabo, criado_por,
-                           created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                          SELECT {select_colunas}
                     FROM ativos
                     ORDER BY id
                     """
                 )
             else:
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                              conta_vinculada, polegadas, resolucao, tipo_painel,
-                              entrada_video, fonte_ou_cabo, criado_por,
-                              created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                          SELECT {select_colunas}
                     FROM ativos
                     WHERE empresa_id = %s
                     ORDER BY id
@@ -2237,21 +2401,14 @@ class AtivosService:
         contexto = self._obter_contexto_acesso(user_id)
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            colunas_disponiveis = _carregar_colunas_ativos(cur)
+            select_colunas = _selecionar_colunas_ativos(colunas_disponiveis)
+
             if self._usuario_eh_admin(contexto):
                 # Admin: busca sem restrição de empresa.
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                              conta_vinculada, polegadas, resolucao, tipo_painel,
-                              entrada_video, fonte_ou_cabo, criado_por, empresa_id,
-                              created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                          SELECT {select_colunas}
                     FROM ativos
                     WHERE id = %s
                     """,
@@ -2262,18 +2419,8 @@ class AtivosService:
                 # Não diferencia "inexistente" de "pertence a outra empresa" para
                 # evitar enumeração de IDs entre unidades.
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                              conta_vinculada, polegadas, resolucao, tipo_painel,
-                              entrada_video, fonte_ou_cabo, criado_por, empresa_id,
-                              created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                          SELECT {select_colunas}
                     FROM ativos
                     WHERE id = %s AND empresa_id = %s
                     """,
@@ -2414,24 +2561,17 @@ class AtivosService:
             where.append("data_saida <= %s")
             params.append(filtros["data_saida_final"].strip())
 
-        sql = f"""
-                             SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                                     categoria, tipo_ativo, condicao, localizacao, setor,
-                                     usuario_responsavel, email_responsavel, departamento,
-                                     nota_fiscal, garantia, status, data_entrada, data_saida,
-                                     data_compra, valor, observacoes, detalhes_tecnicos,
-                                     processador, ram, armazenamento, sistema_operacional,
-                                     carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                                     hostname, imei_1, imei_2, numero_linha, operadora,
-                                     conta_vinculada, polegadas, resolucao, tipo_painel,
-                                     entrada_video, fonte_ou_cabo, criado_por,
-                                     created_at, updated_at, data_ultima_movimentacao
+        with cursor_mysql(dictionary=True) as (_conn, cur):
+            colunas_disponiveis = _carregar_colunas_ativos(cur)
+            select_colunas = _selecionar_colunas_ativos(colunas_disponiveis)
+
+            sql = f"""
+                             SELECT {select_colunas}
             FROM ativos
             WHERE {" AND ".join(where)}
             ORDER BY {campos_ordenacao[ordenar_por]} {ordem_sql}
         """
 
-        with cursor_mysql(dictionary=True) as (_conn, cur):
             cur.execute(sql, tuple(params))
             rows = cur.fetchall()
 

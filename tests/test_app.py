@@ -94,10 +94,81 @@ def test_config_accepts_mysql_aliases(monkeypatch):
 def test_dashboard_authenticated(authenticated_client):
     response = authenticated_client.get("/dashboard")
     assert response.status_code == 200
+    assert not response.is_json
     html = response.get_data(as_text=True)
     assert "Dashboard de Ativos" in html
     assert "table-dashboard-preview" in html
     assert "panel-header-split" in html
+
+
+def test_dashboard_unauthenticated_redirects_to_home(http_client):
+    response = http_client.get("/dashboard", follow_redirects=False)
+
+    assert response.status_code in {301, 302, 303, 307, 308}
+    assert response.headers["Location"] == "/"
+
+
+def test_dashboard_authenticated_falls_back_to_html_when_listagem_fails():
+    from tests.conftest import FakeAuthService, FakeEmpresaService
+
+    class FailingAtivosService:
+        def listar_ativos(self, _user_id):
+            raise ValueError("falha simulada ao carregar ativos")
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FailingAtivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+        session_data["user_perfil"] = "usuario"
+        session_data["user_empresa_id"] = 10
+        session_data["user_empresa_nome"] = "Empresa Demo"
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert not response.is_json
+    html = response.get_data(as_text=True)
+    assert "Dashboard de Ativos" in html
+    assert "Não foi possível carregar os dados do dashboard agora." in html
+
+
+def test_dashboard_with_empty_data_renders_without_breaking():
+    from tests.conftest import FakeAuthService, FakeEmpresaService
+
+    class EmptyAtivosService:
+        def listar_ativos(self, _user_id):
+            return []
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": EmptyAtivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+        session_data["user_perfil"] = "usuario"
+        session_data["user_empresa_id"] = 10
+        session_data["user_empresa_nome"] = "Empresa Demo"
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Dashboard de Ativos" in html
+    assert "Nenhum ativo disponível para pré-visualização." in html
 
 
 def test_assets_listing_page_authenticated(authenticated_client):

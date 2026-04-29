@@ -301,6 +301,22 @@ def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
     service = AtivosService()
     cursor = FakeCursor()
 
+    # Pré-popular cache de colunas para evitar SELECT INFORMATION_SCHEMA no FakeCursor.
+    # Inclui todas as colunas esperadas pelo schema persistência (45 campos + empresa_id).
+    expected_columns = {
+        "id", "codigo_interno", "tipo", "marca", "modelo", "serial",
+        "descricao", "categoria", "tipo_ativo", "condicao", "localizacao",
+        "setor", "usuario_responsavel", "email_responsavel", "departamento",
+        "nota_fiscal", "garantia", "status", "data_entrada", "data_saida",
+        "data_compra", "valor", "observacoes", "detalhes_tecnicos",
+        "processador", "ram", "armazenamento", "sistema_operacional",
+        "carregador", "teamviewer_id", "anydesk_id", "nome_equipamento",
+        "hostname", "imei_1", "imei_2", "numero_linha", "operadora",
+        "conta_vinculada", "polegadas", "resolucao", "tipo_painel",
+        "entrada_video", "fonte_ou_cabo", "criado_por", "empresa_id"
+    }
+    monkeypatch.setattr(ativos_service_module, "_ATIVOS_COLUNAS_CACHE", expected_columns)
+
     # Simula contexto de usuário sem tocar no banco real.
     monkeypatch.setattr(
         service,
@@ -768,6 +784,22 @@ def test_criar_ativo_preserva_teamviewer_anydesk_normalizados(monkeypatch):
     """
     service = AtivosService()
     cursor = FakeCursor()
+
+    # Pré-popular cache de colunas para evitar SELECT INFORMATION_SCHEMA no FakeCursor.
+    # Inclui todas as colunas esperadas pelo schema persistência.
+    expected_columns = {
+        "id", "codigo_interno", "tipo", "marca", "modelo", "serial",
+        "descricao", "categoria", "tipo_ativo", "condicao", "localizacao",
+        "setor", "usuario_responsavel", "email_responsavel", "departamento",
+        "nota_fiscal", "garantia", "status", "data_entrada", "data_saida",
+        "data_compra", "valor", "observacoes", "detalhes_tecnicos",
+        "processador", "ram", "armazenamento", "sistema_operacional",
+        "carregador", "teamviewer_id", "anydesk_id", "nome_equipamento",
+        "hostname", "imei_1", "imei_2", "numero_linha", "operadora",
+        "conta_vinculada", "polegadas", "resolucao", "tipo_painel",
+        "entrada_video", "fonte_ou_cabo", "criado_por", "empresa_id"
+    }
+    monkeypatch.setattr(ativos_service_module, "_ATIVOS_COLUNAS_CACHE", expected_columns)
 
     monkeypatch.setattr(
         service,
