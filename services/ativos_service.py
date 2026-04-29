@@ -2673,6 +2673,11 @@ class AtivosService:
             set_clausulas = [f"{campo} = %s" for campo, _valor in campos_update_filtrados]
             params_execucao = [valor for _campo, valor in campos_update_filtrados]
 
+            if not set_clausulas:
+                raise AtivoErro(
+                    "Nenhum campo atualizável disponível no schema atual para salvar o ativo."
+                )
+
             pode_atualizar_movimentacao = "data_ultima_movimentacao" in colunas_disponiveis
             if resumo_movimentacao["atualizar_data_ultima_movimentacao"] and pode_atualizar_movimentacao:
                 set_clausulas.append("data_ultima_movimentacao = NOW()")
@@ -2684,11 +2689,13 @@ class AtivosService:
                 )
 
             where_clause = "WHERE id = %s"
+            params_where = [id_ativo.strip()]
             if not self._usuario_eh_admin(contexto):
                 where_clause = "WHERE id = %s AND empresa_id = %s"
+                params_where.append(int(contexto["empresa_id"]))
 
             sql = f"UPDATE ativos SET {', '.join(set_clausulas)} {where_clause}"
-            cur.execute(sql, tuple(params_execucao))
+            cur.execute(sql, tuple(params_execucao + params_where))
 
             if cur.rowcount == 0:
                 raise AtivoNaoEncontrado("Não foi possível atualizar o ativo.")

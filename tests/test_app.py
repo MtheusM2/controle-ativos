@@ -1271,6 +1271,74 @@ def test_asset_confirm_route_applies_operational_adjustments():
     assert "[Movimentação]" in service.recebido["observacoes"]
 
 
+def test_asset_confirm_route_returns_safe_message_on_sql_error():
+    from mysql.connector.errors import ProgrammingError
+
+    class FailingSqlAtivosService:
+        def preparar_dados_confirmacao_movimentacao(self, dados, ajustes):
+            dados_finais = dict(dados)
+            dados_finais.update({
+                "status": ajustes.get("status_final") or dados_finais.get("status"),
+                "usuario_responsavel": ajustes.get("usuario_responsavel"),
+                "setor": ajustes.get("setor"),
+                "departamento": ajustes.get("setor"),
+                "localizacao": ajustes.get("localizacao"),
+            })
+            return dados_finais
+
+        def atualizar_ativo(self, *_args, **_kwargs):
+            raise ProgrammingError(1064, "Not enough parameters for the SQL statement")
+
+    from tests.conftest import (
+        FakeArquivosService as _FakeArquivosService,
+        FakeAuthService,
+        FakeEmpresaService,
+        aplicar_headers_csrf_no_client_teste,
+    )
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FailingSqlAtivosService(),
+            "ativos_arquivo_service": _FakeArquivosService(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+    aplicar_headers_csrf_no_client_teste(client, app, user_id=1)
+
+    response = client.post(
+        "/ativos/OPU-000999/movimentacao/confirmar",
+        json={
+            "dados_formulario": {
+                "tipo_ativo": "Notebook",
+                "marca": "Dell",
+                "modelo": "XPS",
+                "status": "Disponível",
+                "data_entrada": "2026-04-14",
+                "setor": "TI",
+                "localizacao": "Matriz",
+            },
+            "ajustes_movimentacao": {
+                "status_final": "Em Uso",
+                "usuario_responsavel": "Beatriz Souza",
+                "setor": "Logística",
+                "localizacao": "CD-01",
+            },
+        },
+    )
+
+    assert response.status_code == 500
+    payload = response.get_json()
+    assert payload["ok"] is False
+    assert "schema do banco" in payload["erro"].lower()
+    assert "Erro interno do servidor" not in payload["erro"]
+
+
 def test_asset_confirm_route_accepts_sparse_form_payload_without_cadastro_fields():
     class ConfirmSparsePayloadAtivosService:
         def preparar_dados_confirmacao_movimentacao(self, dados, ajustes):

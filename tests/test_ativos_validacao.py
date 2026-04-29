@@ -452,6 +452,22 @@ def test_atualizar_ativo_simple_nao_altera_movimentacao(monkeypatch):
         "_obter_contexto_acesso",
         lambda _user_id: {"empresa_id": 1, "perfil": "usuario"},
     )
+    monkeypatch.setattr(
+        ativos_service_module,
+        "_ATIVOS_COLUNAS_CACHE",
+        {
+            "id", "codigo_interno", "tipo", "marca", "modelo", "serial",
+            "descricao", "categoria", "tipo_ativo", "condicao", "localizacao",
+            "setor", "usuario_responsavel", "email_responsavel", "departamento",
+            "nota_fiscal", "garantia", "status", "data_entrada", "data_saida",
+            "data_compra", "valor", "observacoes", "detalhes_tecnicos",
+            "processador", "ram", "armazenamento", "sistema_operacional",
+            "carregador", "teamviewer_id", "anydesk_id", "nome_equipamento",
+            "hostname", "imei_1", "imei_2", "numero_linha", "operadora",
+            "conta_vinculada", "polegadas", "resolucao", "tipo_painel",
+            "entrada_video", "fonte_ou_cabo", "data_ultima_movimentacao", "criado_por", "empresa_id"
+        },
+    )
     monkeypatch.setattr(ativos_service_module, "cursor_mysql", lambda dictionary=True: FakeCursorContext(cursor))
 
     resultado = service.atualizar_ativo(atual.id_ativo, {"processador": "Intel Core i7"}, user_id=1)
@@ -460,6 +476,48 @@ def test_atualizar_ativo_simple_nao_altera_movimentacao(monkeypatch):
     assert resultado.resumo_movimentacao["atualizar_data_ultima_movimentacao"] is False
     update_sql = next(sql for sql, _params in cursor.statements if sql.strip().upper().startswith("UPDATE"))
     assert "data_ultima_movimentacao" not in update_sql
+
+
+def test_atualizar_ativo_inclui_parametros_do_where(monkeypatch):
+    """
+    O UPDATE precisa enviar os parâmetros do WHERE na mesma ordem do SQL.
+    """
+    service = AtivosService()
+    cursor = FakeCursor()
+
+    atual = make_valid_ativo(status="Disponível", usuario_responsavel=None, setor="T.I", localizacao="Opus Medical")
+    atualizado = _atualizar_fechas_ativo(atual, processador="Intel Core i7")
+    cursor.fetchone_queue = [
+        _row_db_from_ativo(atual, created_at="2026-04-01 10:00:00", updated_at="2026-04-01 10:00:00", data_ultima_movimentacao=None),
+        _row_db_from_ativo(atualizado, created_at="2026-04-01 10:00:00", updated_at="2026-04-14 11:00:00", data_ultima_movimentacao=None),
+    ]
+
+    full_columns = {
+        "id", "codigo_interno", "tipo", "marca", "modelo", "serial",
+        "descricao", "categoria", "tipo_ativo", "condicao", "localizacao",
+        "setor", "usuario_responsavel", "email_responsavel", "departamento",
+        "nota_fiscal", "garantia", "status", "data_entrada", "data_saida",
+        "data_compra", "valor", "observacoes", "detalhes_tecnicos",
+        "processador", "ram", "armazenamento", "sistema_operacional",
+        "carregador", "teamviewer_id", "anydesk_id", "nome_equipamento",
+        "hostname", "imei_1", "imei_2", "numero_linha", "operadora",
+        "conta_vinculada", "polegadas", "resolucao", "tipo_painel",
+        "entrada_video", "fonte_ou_cabo", "data_ultima_movimentacao", "criado_por", "empresa_id"
+    }
+
+    monkeypatch.setattr(ativos_service_module, "_ATIVOS_COLUNAS_CACHE", full_columns)
+    monkeypatch.setattr(
+        service,
+        "_obter_contexto_acesso",
+        lambda _user_id: {"empresa_id": 1, "perfil": "usuario"},
+    )
+    monkeypatch.setattr(ativos_service_module, "cursor_mysql", lambda dictionary=True: FakeCursorContext(cursor))
+
+    service.atualizar_ativo(atual.id_ativo, {"processador": "Intel Core i7"}, user_id=1)
+
+    update_sql, params = next((sql, params) for sql, params in cursor.statements if sql.strip().upper().startswith("UPDATE"))
+    assert "WHERE id = %s AND empresa_id = %s" in update_sql
+    assert params[-2:] == (atual.id_ativo, 1)
 
 
 def test_atualizar_ativo_com_movimentacao_e_schema_parcial_ignora_timestamp(monkeypatch, caplog):

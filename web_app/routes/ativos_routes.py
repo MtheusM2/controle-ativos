@@ -8,6 +8,7 @@ import logging
 import time
 from datetime import datetime
 
+import mysql.connector
 from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from services.storage_backend import S3StorageBackend, StorageBackendError
 from openpyxl import Workbook
@@ -1151,6 +1152,18 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=400)
         except (KeyError, TypeError):
             return _json_error("Erro inesperado ao atualizar ativo.", status=500)
+        except mysql.connector.Error:
+            logger.exception("Erro SQL ao atualizar ativo %s", id_ativo)
+            return _json_error(
+                "Não foi possível salvar o ativo. O schema do banco pode estar incompleto para este campo.",
+                status=500,
+            )
+        except Exception:
+            logger.exception("Erro inesperado ao atualizar ativo %s", id_ativo)
+            return _json_error(
+                "Não foi possível salvar o ativo. Verifique os campos obrigatórios e tente novamente.",
+                status=500,
+            )
 
     @app.post("/ativos/<id_ativo>/movimentacao/preview")
     # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
@@ -1219,6 +1232,18 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=400)
         except (ValueError, KeyError, TypeError):
             return _json_error("Erro inesperado ao confirmar movimentação.", status=500)
+        except mysql.connector.Error:
+            logger.exception("Erro SQL ao confirmar movimentação do ativo %s", id_ativo)
+            return _json_error(
+                "Não foi possível salvar o ativo. O schema do banco pode estar incompleto para este campo.",
+                status=500,
+            )
+        except Exception:
+            logger.exception("Erro inesperado ao confirmar movimentação do ativo %s", id_ativo)
+            return _json_error(
+                "Não foi possível salvar o ativo. Verifique os campos obrigatórios e tente novamente.",
+                status=500,
+            )
 
     @app.delete("/ativos/<id_ativo>")
     # Ordem de segurança: autenticação primeiro (401), CSRF depois (403).
