@@ -781,6 +781,11 @@ body.app-body {
     margin-top: 0;
 }
 
+/* NOVO (Fase 4.2): Garantir que form-block-title hidden desaparece — previne flash visual */
+.form-block-title[hidden] {
+    display: none !important;
+}
+
 /* ===== SEÇÕES VISUAIS DE FORMULÁRIO (2026-04-28 Fase 4.1b) ===== */
 
 .form-section {
@@ -977,6 +982,32 @@ body.app-body {
     font-size: 0.86rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+}
+
+/* NOVO (Fase 4.2): Header do modal de filtros com subtítulo */
+.filter-modal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding-bottom: 12px;
+    position: relative;
+}
+
+.filter-modal-header .btn-close {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+}
+
+.filter-modal-title-group {
+    flex: 1;
+}
+
+.filter-modal-desc {
+    font-size: 0.8rem;
+    color: var(--text-2);
+    margin: 4px 0 0;
+    font-weight: 400;
 }
 
 /* Fase 3 Round 2.1: Correção de overflow do modal */
@@ -2753,6 +2784,47 @@ body.app-body {
 
 .revisao-sumario-card.to-import span {
     color: #8ae5c3;
+}
+
+/* NOVO (Fase 4.2): Resumo executivo do upload de CSV — classes .import-summary-grid */
+.import-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin: 0 0 16px;
+}
+
+.import-summary-grid > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    text-align: center;
+    gap: 4px;
+}
+
+.import-summary-grid > div strong {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.import-summary-grid > div span {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-0);
+    line-height: 1;
+}
+
+/* NOVO (Fase 4.2): Grade de revisão por linha — scroll interno para não dominar página */
+#review-lines-container .table-wrapper {
+    max-height: 420px;
+    overflow-y: auto;
 }
 
 /* Opções de modo de importação */

@@ -531,6 +531,7 @@
     // ===== FUNÇÕES DE RENDERIZAÇÃO =====
 
     function renderSummary(preview) {
+        // FIXED (Fase 4.2): Resumo executivo usando classes .revisao-sumario/.revisao-sumario-card
         const resumo = preview.validacao_detalhes || preview.resumo_validacao || preview.resumo_analise || {};
         const linhasSemErro = Number(resumo.linhas_validas ?? 0);
         const linhasComAviso = Number(resumo.linhas_com_aviso ?? 0);
@@ -538,15 +539,19 @@
             resumo.linhas_validas_limpas ?? Math.max(linhasSemErro - linhasComAviso, 0)
         );
         const linhasInvalidas = Number(resumo.linhas_invalidas ?? resumo.linhas_com_erro ?? 0);
+        const reconhecidas = resumo.colunas_reconhecidas_automaticamente ?? (preview.colunas?.exatas || []).length;
+        const sugeridas = resumo.colunas_sugeridas ?? (preview.colunas?.sugeridas || []).length;
+        const ignoradas = resumo.colunas_ignoradas ?? (preview.colunas?.ignoradas || []).length;
+
         importSummaryContainer.innerHTML = `
-            <div class="import-summary-grid">
-                <div><strong>Total de linhas</strong><span>${resumo.total_linhas ?? 0}</span></div>
-                <div><strong>Válidas limpas</strong><span>${linhasValidasLimpas}</span></div>
-                <div><strong>Com aviso</strong><span>${linhasComAviso}</span></div>
-                <div><strong>Linhas inválidas</strong><span>${linhasInvalidas}</span></div>
-                <div><strong>Reconhecidas automaticamente</strong><span>${resumo.colunas_reconhecidas_automaticamente ?? (preview.colunas?.exatas || []).length}</span></div>
-                <div><strong>Sugestões com score</strong><span>${resumo.colunas_sugeridas ?? (preview.colunas?.sugeridas || []).length}</span></div>
-                <div><strong>Colunas ignoradas</strong><span>${resumo.colunas_ignoradas ?? (preview.colunas?.ignoradas || []).length}</span></div>
+            <div class="revisao-sumario">
+                <div class="revisao-sumario-card"><strong>Total de linhas</strong><span>${resumo.total_linhas ?? 0}</span></div>
+                <div class="revisao-sumario-card"><strong>Válidas limpas</strong><span>${linhasValidasLimpas}</span></div>
+                <div class="revisao-sumario-card"><strong>Com aviso</strong><span>${linhasComAviso}</span></div>
+                <div class="revisao-sumario-card"><strong>Linhas inválidas</strong><span>${linhasInvalidas}</span></div>
+                <div class="revisao-sumario-card"><strong>Reconhecidas</strong><span>${reconhecidas}</span></div>
+                <div class="revisao-sumario-card"><strong>Sugestões</strong><span>${sugeridas}</span></div>
+                <div class="revisao-sumario-card"><strong>Ignoradas</strong><span>${ignoradas}</span></div>
             </div>
         `;
     }
@@ -1401,14 +1406,11 @@
             destinoJaEscolhido.add(destino);
         }
 
-        // Validar checkboxes
-        const checkboxesObrigatorios = [
-            'revisor-dados',
-            'confirma-duplicatas',
-            'aceita-avisos',
-            'autoriza-importacao'
-        ];
-        const checkboxesDesmarcados = checkboxesObrigatorios.filter(id => !document.getElementById(id).checked);
+        // FIXED (Fase 4.2): Checkboxes são validados exclusivamente no modal de confirmação final.
+        // Remover a verificação aqui previne ciclo vicioso: botão estava disabled porque
+        // checkboxes no modal (oculto) estavam desmarcados, impedindo abrir o modal.
+        // O botão sticky habilita quando mapeamentos/dados estão OK → clica → abre modal →
+        // usuário marca checkboxes → confirma (validação no #final-confirm-button).
 
         const motivos = [];
         if (decisoes.pendentes > 0) {
@@ -1419,9 +1421,6 @@
         }
         if (camposObrigatoriosFaltantes.length > 0) {
             motivos.push(`Campos obrigatórios sem destino confirmado: ${camposObrigatoriosFaltantes.join(", ")}.`);
-        }
-        if (checkboxesDesmarcados.length > 0) {
-            motivos.push(`Você deve marcar todas as 4 confirmações obrigatórias para prosseguir.`);
         }
 
         // Regra explícita para tudo-ou-nada: somente linhas ativas com erro bloqueiam.
@@ -1735,9 +1734,9 @@
         });
     }
 
-    document.querySelectorAll(".checkbox-obrigatorio").forEach((checkbox) => {
-        checkbox.addEventListener("change", atualizarEstadoConfirmacao);
-    });
+    // REMOVED (Fase 4.2): Event listener para checkboxes não tem mais função.
+    // Checkboxes são validados exclusivamente no modal de confirmação final.
+    // O botão sticky não precisa re-calcular estado quando checkboxes mudam.
 
     document.querySelectorAll('input[name="modo_importacao"]').forEach((radio) => {
         radio.addEventListener("change", () => {
