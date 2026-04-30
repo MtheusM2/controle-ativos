@@ -505,17 +505,6 @@
         return `<span class="status-badge ${cssClass}">${status || ""}</span>`;
     }
 
-    function renderGarantiaBadge(garantiaResumo, garantiaInfo) {
-        const statusGarantia = garantiaInfo?.status_garantia || "sem_garantia";
-        const cssMap = {
-            ativa: "badge badge-ok",
-            vencendo_em_breve: "badge badge-warning",
-            vencida: "badge badge-danger",
-            sem_garantia: "badge",
-        };
-        return `<span class="${cssMap[statusGarantia] || "badge"}">${escapeHtml(garantiaResumo || "Sem garantia")}</span>`;
-    }
-
     // Sanitiza texto simples para exibição segura como texto em células da tabela.
     function escapeHtml(text) {
         const div = document.createElement("div");

@@ -1352,7 +1352,7 @@ class AtivosService:
 
         except Exception as e:
             # Comentário: FALLBACK — se motor novo falha, usa antigo
-            print(f"⚠️ Motor inteligente falhou ({e}), usando motor antigo.")
+            logger.warning(f"Motor inteligente falhou ({e}), usando motor antigo.")
             # Rethrow para ser capturado em gerar_preview_importacao_csv()
             raise
 
@@ -1391,7 +1391,7 @@ class AtivosService:
             usando_motor_novo = True
         except (AttributeError, KeyError, TypeError, ValueError) as e:
             # Comentário: Fallback para motor antigo se novo falhar
-            print(f"Fallback para motor antigo: {e}")
+            logger.warning(f"Fallback para motor antigo: {e}")
             classificacao = _classificar_colunas_importacao(headers)
             usando_motor_novo = False
 
@@ -1673,7 +1673,7 @@ class AtivosService:
                 usando_motor_novo = True
             except (AttributeError, KeyError, TypeError, ValueError) as e:
                 # Comentário: Fallback para motor antigo se novo falhar
-                print(f"Fallback para motor antigo em confirmar_importacao_csv: {e}")
+                logger.warning(f"Fallback para motor antigo em confirmar_importacao_csv: {e}")
                 classificacao = _classificar_colunas_importacao(headers)
                 usando_motor_novo = False
 
