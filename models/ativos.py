@@ -208,8 +208,8 @@ class Ativo:
             "nome_equipamento": self.nome_equipamento or "",
             "mac_address": self.mac_address or "",
             "hostname": self.hostname or "",
-            "imei_1": self.imei_1 or "",
-            "imei_2": self.imei_2 or "",
+            # IMEI é bloqueado (Fase 3 Round 3): nunca deve ser preenchido, importado ou exposto publicamente
+            # Manter apenas em _row_para_ativo para compatibilidade com coluna legada do banco
             "numero_linha": self.numero_linha or "",
             "operadora": self.operadora or "",
             "conta_vinculada": self.conta_vinculada or "",
