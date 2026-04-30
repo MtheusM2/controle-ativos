@@ -424,10 +424,10 @@ def test_asset_import_template_has_functional_review_filters_and_error_driven_ed
     assert "function filtrarLinhasRevisao(linhas, filtro)" in html
     assert "// TODO: implementar filtro dinâmico" not in html
 
-    # Modal orientado a erro com mapeamento por campo.
+    # Modal orientado a erro com mapeamento por campo (Fase 4.3: refatorado com seções por tipo).
     assert "function construirMapaErrosPorCampo(linha)" in html
-    assert "Campos críticos para correção" in html
-    assert "Campos opcionais" in html
+    assert "Campos críticos (sempre visíveis)" in html or "Campos críticos" in html
+    assert "Identificação e responsabilidade" in html or "Especificações técnicas" in html
 
 
 def test_asset_import_template_uses_select_for_controlled_fields_in_edit_modal(authenticated_client):

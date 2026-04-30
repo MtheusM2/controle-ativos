@@ -623,14 +623,13 @@
                     <td>${escapeHtml(asset.data_entrada)}</td>
                     <td>${escapeHtml(asset.data_saida)}</td>
                     <!-- Removido em Fase 3 Round 2: coluna de anexos — indicador agora junto às ações -->
-                    <!-- Redesenhado em Fase 3 Round 2 Correction: remover sticky, redesenhar com btn-icon -->
-                    <!-- Nova rodada: botão Visualizar abre modal resumido em vez de página completa -->
+                    <!-- Fase 4.3: Garantia removida da tabela, agora só aparece no detalhe -->
+                    <!-- Botão Visualizar abre modal resumido com informações de garantia -->
                     <td class="action-cell">
                         <div class="row-actions">
-                            ${renderGarantiaBadge(asset.garantia_resumo, asset.garantia_info)}
                             <button type="button" class="btn btn-secondary btn-mini view-asset-btn" data-asset-id="${asset.id}">Visualizar</button>
                             <a href="${editUrl}" class="btn btn-secondary btn-mini">Editar</a>
-                            <button type="button" class="btn-icon open-attachment-modal-btn" title="Ver anexos" data-asset-id="${asset.id}">Anexos</button>
+                            <button type="button" class="btn-icon open-attachment-modal-btn" title="Ver anexos" data-asset-id="${asset.id}">📎</button>
                         </div>
                     </td>
                 </tr>

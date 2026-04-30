@@ -3098,6 +3098,31 @@ body.app-body {
 }
 
 /* =============================== */
+/* Selects da Importação — Dark Mode (Fase 4.3) */
+/* =============================== */
+
+/* Corrigir dropdown branco de mapeamento: aplicar tema escuro */
+.mapping-select,
+.import-mapping-select {
+    background-color: var(--bg-2) !important;
+    color: var(--text-0) !important;
+}
+
+/* Opções dentro do select com fundo escuro */
+.mapping-select option,
+.import-mapping-select option {
+    background-color: var(--bg-2) !important;
+    color: var(--text-0) !important;
+}
+
+/* Opções desabilitadas com cor mais suave */
+.mapping-select option:disabled,
+.import-mapping-select option:disabled {
+    color: var(--text-2) !important;
+    background-color: var(--bg-1) !important;
+}
+
+/* =============================== */
 /* Modal de Edição de Linha */
 /* =============================== */
 

@@ -398,14 +398,14 @@
     // Campos críticos que costumam bloquear importação; aparecem primeiro no modal.
     const CAMPOS_CRITICOS_IMPORTACAO = [
         "tipo_ativo",
+        "marca",
+        "modelo",
         "status",
         "setor",
         "localizacao",
+        "data_entrada",
         "usuario_responsavel",
         "email_responsavel",
-        "marca",
-        "modelo",
-        "data_entrada",
     ];
 
     // Campos que permanecem livres como texto por natureza do domínio.
@@ -416,7 +416,48 @@
         "serial",
         "codigo_interno",
         "descricao",
+        "detalhes_tecnicos",
     ]);
+
+    // Mapeamento de campos técnicos por tipo de ativo (Fase 4.3)
+    const CAMPOS_TECNICOS_POR_TIPO = {
+        "Notebook": [
+            "mac_address",
+            "processador",
+            "ram",
+            "armazenamento",
+            "sistema_operacional",
+            "anydesk_id",
+            "teamviewer_id"
+        ],
+        "Desktop": [
+            "mac_address",
+            "processador",
+            "ram",
+            "armazenamento",
+            "sistema_operacional",
+            "anydesk_id",
+            "teamviewer_id"
+        ],
+        "Celular": [
+            "numero_linha",
+            "operadora",
+            "conta_vinculada",
+            "armazenamento",
+            "carregador"
+        ],
+        "Monitor": [
+            "polegadas",
+            "resolucao",
+            "entrada_video",
+            "tipo_conexao"
+        ],
+        "Impressora": [
+            "modelo_impressora",
+            "resolucao",
+            "velocidade"
+        ]
+    };
 
     // Estado centralizado da revisão — único ponto de verdade
     let estadoRevisao = {
@@ -1156,23 +1197,57 @@
         editLineFields.innerHTML = '';
 
         const dados = obterDadosRevisadosLinha(linha);
+        const tipoAtivo = dados.tipo_ativo || dados.tipo || '';
         const mapaErros = construirMapaErrosPorCampo(linha);
-        const camposOrdenados = ordenarCamposParaEdicao(dados, mapaErros);
-        const camposPrioritarios = camposOrdenados.filter((campo) => mapaErros[campo] || CAMPOS_CRITICOS_IMPORTACAO.includes(campo));
-        const camposSecundarios = camposOrdenados.filter((campo) => !camposPrioritarios.includes(campo));
         const inferenciaLinha = linha.inferencia_email || {};
         const sugestoesPendentes = inferenciaLinha.sugestoes_pendentes || {};
         const aplicadasAutomaticamente = inferenciaLinha.aplicadas || {};
 
-        // O bloco principal foca nos campos que realmente bloqueiam a importação.
-        let html = '<div class="field-group"><strong>Campos críticos para correção</strong></div>';
-        for (const campo of camposPrioritarios) {
-            html += renderCampoEdicao(numeroLinha, campo, dados[campo], mapaErros[campo], sugestoesPendentes[campo], aplicadasAutomaticamente[campo]);
+        let html = '';
+
+        // SEÇÃO 1: Campos críticos sempre visíveis
+        html += '<div class="field-group"><strong>Campos críticos (sempre visíveis)</strong></div>';
+        for (const campo of CAMPOS_CRITICOS_IMPORTACAO) {
+            if (campo in dados) {
+                html += renderCampoEdicao(numeroLinha, campo, dados[campo], mapaErros[campo], sugestoesPendentes[campo], aplicadasAutomaticamente[campo]);
+            }
         }
 
-        if (camposSecundarios.length) {
-            html += '<div class="field-group"><strong>Campos opcionais</strong></div>';
-            for (const campo of camposSecundarios) {
+        // SEÇÃO 2: Campos de identificação importantes
+        const camposIdentificacao = ["serial", "codigo_interno", "usuario_responsavel", "email_responsavel"];
+        const temIdentificacao = camposIdentificacao.some(c => c in dados && dados[c]);
+        if (temIdentificacao) {
+            html += '<div class="field-group" style="margin-top: 16px;"><strong>Identificação e responsabilidade</strong></div>';
+            for (const campo of camposIdentificacao) {
+                if (campo in dados) {
+                    html += renderCampoEdicao(numeroLinha, campo, dados[campo], mapaErros[campo], sugestoesPendentes[campo], aplicadasAutomaticamente[campo]);
+                }
+            }
+        }
+
+        // SEÇÃO 3: Campos técnicos por tipo de ativo
+        const camposTecnicos = CAMPOS_TECNICOS_POR_TIPO[tipoAtivo] || [];
+        const temCamposTecnicos = camposTecnicos.some(c => c in dados && dados[c]);
+        if (temCamposTecnicos || camposTecnicos.length > 0) {
+            html += `<div class="field-group" style="margin-top: 16px;"><strong>Especificações técnicas (${tipoAtivo})</strong></div>`;
+            for (const campo of camposTecnicos) {
+                if (campo in dados) {
+                    html += renderCampoEdicao(numeroLinha, campo, dados[campo], mapaErros[campo], sugestoesPendentes[campo], aplicadasAutomaticamente[campo]);
+                }
+            }
+        }
+
+        // SEÇÃO 4: Campos genéricos opcionais não listados acima
+        const camposExcluir = new Set([
+            ...CAMPOS_CRITICOS_IMPORTACAO,
+            ...camposIdentificacao,
+            ...camposTecnicos,
+            'garantia'  // Garantia agora é por anexo, não por campo textual
+        ]);
+        const camposGenericosOtros = Object.keys(dados).filter(c => !camposExcluir.has(c) && dados[c]);
+        if (camposGenericosOtros.length) {
+            html += '<div class="field-group" style="margin-top: 16px;"><strong>Outros campos opcionais</strong></div>';
+            for (const campo of camposGenericosOtros) {
                 html += renderCampoEdicao(numeroLinha, campo, dados[campo], null, sugestoesPendentes[campo], aplicadasAutomaticamente[campo]);
             }
         }
