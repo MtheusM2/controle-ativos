@@ -69,6 +69,7 @@ class TestRoundTripExportacaoImportacao:
                 teamviewer_id=None,
                 anydesk_id=None,
                 nome_equipamento=None,
+                mac_address="AA:BB:CC:DD:EE:FF",
                 hostname=None,
                 imei_1=None,
                 imei_2=None,
@@ -118,6 +119,7 @@ class TestRoundTripExportacaoImportacao:
                 teamviewer_id=None,
                 anydesk_id=None,
                 nome_equipamento=None,
+                mac_address="11:22:33:44:55:66",
                 hostname=None,
                 imei_1=None,
                 imei_2=None,
@@ -145,6 +147,8 @@ class TestRoundTripExportacaoImportacao:
             "Exportação deve conter campo 'tipo_ativo' (canônico, não alias 'tipo')"
         assert all("setor" in linha for linha in linhas_exportadas), \
             "Exportação deve conter campo 'setor' (canônico, não alias 'departamento')"
+        assert all("mac_address" in linha for linha in linhas_exportadas), \
+            "Exportação deve conter campo 'mac_address' quando o domínio o suporta"
         assert all("tipo" not in linha for linha in linhas_exportadas), \
             "Exportação NÃO deve conter campo alias 'tipo'"
         assert all("departamento" not in linha for linha in linhas_exportadas), \
@@ -154,7 +158,7 @@ class TestRoundTripExportacaoImportacao:
         output = io.StringIO()
         fieldnames = [
             "id", "tipo_ativo", "marca", "modelo", "usuario_responsavel",
-            "setor", "status", "data_entrada", "data_saida",
+            "setor", "mac_address", "status", "data_entrada", "data_saida",
             "nota_fiscal", "garantia"
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)

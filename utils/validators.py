@@ -78,6 +78,7 @@ PERFIS_VALIDOS = [
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 CODIGO_INTERNO_REGEX = re.compile(r"^[A-Z0-9._/-]+$")
 SERIAL_REGEX = re.compile(r"^[A-Z0-9._/-]+$")
+MAC_ADDRESS_HEX_REGEX = re.compile(r"^[0-9A-F]{12}$")
 
 
 def _somente_digitos(valor: str | None) -> str:
@@ -118,6 +119,40 @@ def validar_numero_linha(numero_linha: str | None) -> tuple[bool, str]:
         "O campo numero_linha deve conter 10 ou 11 dígitos "
         "(ou 12/13 com DDI 55)."
     )
+
+
+def normalizar_mac_address(valor: str | None) -> str | None:
+    """
+    Normaliza MAC Address para o formato AA:BB:CC:DD:EE:FF.
+
+    Aceita:
+    - AA:BB:CC:DD:EE:FF
+    - AA-BB-CC-DD-EE-FF
+    - AABBCCDDEEFF
+    """
+    bruto = (valor or "").strip()
+    if not bruto:
+        return None
+
+    hex_only = re.sub(r"[^0-9A-Fa-f]", "", bruto).upper()
+    if not MAC_ADDRESS_HEX_REGEX.match(hex_only):
+        raise ValueError(
+            "O campo mac_address deve conter 12 caracteres hexadecimais "
+            "nos formatos AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF ou AABBCCDDEEFF."
+        )
+
+    return ":".join(hex_only[index:index + 2] for index in range(0, 12, 2))
+
+
+def validar_mac_address(valor: str | None) -> tuple[bool, str]:
+    """
+    Valida MAC Address opcional.
+    """
+    try:
+        normalizar_mac_address(valor)
+    except ValueError as erro:
+        return False, str(erro)
+    return True, ""
 
 
 # Removido em Fase 3 Round 3: funções de normalização e validação de IMEI
@@ -691,6 +726,10 @@ def validar_ativo(ativo, *, validar_id: bool = True) -> None:
         raise ValueError(msg)
 
     # IMEI removido em Fase 3 Round 3 — não mais validado no fluxo de celular
+
+    ok, msg = validar_mac_address(getattr(ativo, "mac_address", None))
+    if not ok:
+        raise ValueError(msg)
 
     ok, msg = validar_texto_opcional(getattr(ativo, "detalhes_tecnicos", None), "detalhes_tecnicos", tamanho_maximo=255)
     if not ok:

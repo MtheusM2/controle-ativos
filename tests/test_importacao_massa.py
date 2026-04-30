@@ -224,6 +224,36 @@ def test_confirmar_importacao_rejeita_coluna_imei_sem_reintroduzir_no_dominio():
     assert ativos_capturados[0].imei_2 is None
 
 
+def test_confirmar_importacao_aceita_alias_mac_address():
+    """
+    Alias de MAC deve mapear para mac_address e chegar normalizado ao domínio.
+    """
+    service = _service_admin()
+    ativos_capturados = []
+
+    def _criar_ativo_fake(ativo, _user_id):
+        ativos_capturados.append(ativo)
+        return "OPU-000010"
+
+    service.criar_ativo = _criar_ativo_fake  # type: ignore[method-assign]
+
+    conteudo_csv = (
+        "tipo_ativo,marca,modelo,setor,status,data_entrada,MAC Address\n"
+        "Notebook,Dell,XPS,T.I,Disponível,2026-04-17,aa-bb-cc-dd-ee-ff\n"
+    ).encode("utf-8")
+
+    resultado = service.confirmar_importacao_csv(
+        conteudo_csv,
+        sugestoes_confirmadas={},
+        user_id=1,
+        modo_tudo_ou_nada=True,
+    )
+
+    assert resultado["ok_importacao"] is True
+    assert len(ativos_capturados) == 1
+    assert ativos_capturados[0].mac_address == "AA:BB:CC:DD:EE:FF"
+
+
 def test_preview_importacao_rejeita_csv_vazio():
     """
     CSV vazio deve falhar cedo com erro objetivo para o usuário.

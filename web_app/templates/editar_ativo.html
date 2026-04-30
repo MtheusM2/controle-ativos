@@ -170,11 +170,6 @@
                     </div>
 
                     <div class="field-group">
-                        <label for="garantia">Garantia</label>
-                        <input type="text" id="garantia" name="garantia" class="input-control" {% if read_only %}disabled{% endif %}>
-                    </div>
-
-                    <div class="field-group">
                         <label for="valor">Valor</label>
                         <input type="number" id="valor" name="valor" class="input-control" step="0.01" min="0" {% if read_only %}disabled{% endif %}>
                     </div>
@@ -210,25 +205,15 @@
 
             <section class="asset-section" id="specs-section-complete" hidden>
                 <h4 class="asset-section-title">Especificações por tipo</h4>
-                <div id="specs-notebook" class="asset-section-grid" hidden>
+                <div id="specs-computador" class="asset-section-grid" hidden>
                     <div class="field-group"><label for="processador">Processador</label><input type="text" id="processador" name="processador" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="ram">RAM</label><input type="text" id="ram" name="ram" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="armazenamento">Armazenamento</label><input type="text" id="armazenamento" name="armazenamento" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="sistema_operacional">Sistema operacional</label><input type="text" id="sistema_operacional" name="sistema_operacional" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="carregador">Carregador</label><input type="text" id="carregador" name="carregador" class="input-control" {% if read_only %}disabled{% endif %}></div>
+                    <div class="field-group"><label for="mac_address">MAC Address</label><input type="text" id="mac_address" name="mac_address" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="teamviewer_id">TeamViewer ID</label><input type="text" id="teamviewer_id" name="teamviewer_id" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="anydesk_id">AnyDesk ID</label><input type="text" id="anydesk_id" name="anydesk_id" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="nome_equipamento">Nome do equipamento</label><input type="text" id="nome_equipamento" name="nome_equipamento" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                </div>
-
-                <div id="specs-desktop" class="asset-section-grid" hidden>
-                    <div class="field-group"><label for="desktop_processador">Processador</label><input type="text" id="desktop_processador" data-field-alias="processador" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="desktop_ram">RAM</label><input type="text" id="desktop_ram" data-field-alias="ram" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="desktop_armazenamento">Armazenamento</label><input type="text" id="desktop_armazenamento" data-field-alias="armazenamento" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="desktop_sistema_operacional">Sistema operacional</label><input type="text" id="desktop_sistema_operacional" data-field-alias="sistema_operacional" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="hostname">Hostname / Nome equipamento</label><input type="text" id="hostname" name="hostname" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="desktop_teamviewer_id">TeamViewer ID</label><input type="text" id="desktop_teamviewer_id" data-field-alias="teamviewer_id" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="desktop_anydesk_id">AnyDesk ID</label><input type="text" id="desktop_anydesk_id" data-field-alias="anydesk_id" class="input-control" {% if read_only %}disabled{% endif %}></div>
+                    <div class="field-group" data-computador-notebook-only hidden><label for="carregador">Carregador</label><input type="text" id="carregador" name="carregador" class="input-control" {% if read_only %}disabled{% endif %}></div>
                 </div>
 
                 <div id="specs-celular" class="asset-section-grid" hidden>
@@ -236,12 +221,14 @@
                     <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control" {% if read_only %}disabled{% endif %}></div>
                     <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control" {% if read_only %}disabled{% endif %}></div>
-                    <div class="field-group"><label for="celular_armazenamento">Armazenamento</label><input type="text" id="celular_armazenamento" data-field-alias="armazenamento" class="input-control" {% if read_only %}disabled{% endif %}></div>
+                    <div class="field-group"><label for="celular_armazenamento">Armazenamento</label><input type="text" id="celular_armazenamento" name="armazenamento" class="input-control" {% if read_only %}disabled{% endif %}></div>
+                    <div class="field-group"><label for="carregador_celular">Carregador</label><input type="text" id="carregador_celular" name="carregador" class="input-control" {% if read_only %}disabled{% endif %}></div>
                 </div>
 
                 <div id="specs-monitor" class="asset-section-grid" hidden>
-                    <!-- Monitor simplificado nesta etapa: manter apenas medida principal. -->
                     <div class="field-group"><label for="polegadas">Polegadas</label><input type="text" id="polegadas" name="polegadas" class="input-control" {% if read_only %}disabled{% endif %}></div>
+                    <div class="field-group"><label for="resolucao">Resolução</label><input type="text" id="resolucao" name="resolucao" class="input-control" {% if read_only %}disabled{% endif %}></div>
+                    <div class="field-group"><label for="entrada_video">Tipo de conexão</label><input type="text" id="entrada_video" name="entrada_video" class="input-control" {% if read_only %}disabled{% endif %}></div>
                 </div>
 
                 <div id="specs-simples" class="asset-section-grid" hidden>
@@ -387,6 +374,27 @@
             {% endif %}
         </div>
 
+        {% if not read_only %}
+        <div id="garantia-metadata-fields" class="form-grid" hidden>
+            <div class="field-group">
+                <label for="data_inicio_garantia">Início da garantia</label>
+                <input type="date" id="data_inicio_garantia" class="input-control">
+            </div>
+            <div class="field-group">
+                <label for="data_fim_garantia">Fim da garantia</label>
+                <input type="date" id="data_fim_garantia" class="input-control">
+            </div>
+            <div class="field-group">
+                <label for="prazo_garantia_meses">Prazo em meses</label>
+                <input type="number" id="prazo_garantia_meses" class="input-control" min="0" step="1">
+            </div>
+            <div class="field-group" style="grid-column: 1 / -1;">
+                <label for="observacao_garantia">Observação da garantia</label>
+                <input type="text" id="observacao_garantia" class="input-control" maxlength="255">
+            </div>
+        </div>
+        {% endif %}
+
         <div id="attachment-list" class="table-wrapper"></div>
     </div>
 </section>
@@ -400,6 +408,11 @@
     const attachmentFileInput = document.getElementById("attachment-file");
     const attachmentTypeSelect = document.getElementById("attachment-type");
     const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
+    const garantiaMetadataFields = document.getElementById("garantia-metadata-fields");
+    const dataInicioGarantiaInput = document.getElementById("data_inicio_garantia");
+    const dataFimGarantiaInput = document.getElementById("data_fim_garantia");
+    const prazoGarantiaMesesInput = document.getElementById("prazo_garantia_meses");
+    const observacaoGarantiaInput = document.getElementById("observacao_garantia");
     const movementPreviewPanel = document.getElementById("movement-preview-panel");
     const movementSummaryContent = document.getElementById("movement-summary-content");
     const movementModal = document.getElementById("movement-confirmation-modal");
@@ -426,15 +439,17 @@
     const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
     const attachmentUrlTemplates = {
-        listByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
+        listByAsset: "{{ url_for('listar_anexos', id_ativo='__ASSET_ID__') }}",
+        uploadByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
         downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
+        previewByFile: "{{ url_for('visualizar_anexo', arquivo_id=0) }}",
         deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
     };
 
     // Tipos com ficha técnica dedicada no formulário.
     const TYPE_GROUPS = {
-        notebook: ["notebook"],
-        desktop: ["desktop"],
+        notebook: ["computador"],
+        desktop: ["computador"],
         celular: ["celular"],
         monitor: ["monitor"],
     };
@@ -487,7 +502,7 @@
         if (specsCompleteSection) specsCompleteSection.hidden = false;
         if (specsReadonlySection) specsReadonlySection.hidden = true;
 
-        ["notebook", "desktop", "celular", "monitor", "simples"].forEach((groupKey) => {
+        ["computador", "celular", "monitor", "simples"].forEach((groupKey) => {
             const group = document.getElementById(`specs-${groupKey}`);
             if (!group) return;
             const shouldShow = activeGroups.includes(groupKey) || (groupKey === "simples" && showSimple);
@@ -498,14 +513,25 @@
                 field.disabled = readOnlyMode || !shouldShow;
             });
         });
+
+        document.querySelectorAll("[data-computador-notebook-only]").forEach((el) => {
+            const shouldShow = normalizedType === "notebook";
+            el.hidden = !shouldShow;
+            el.querySelectorAll("input, select").forEach((field) => {
+                field.disabled = readOnlyMode || !shouldShow;
+                if (!shouldShow) field.value = "";
+            });
+        });
     }
 
-    function syncAliasedSpecFieldsToBody(body) {
-        // Consolida aliases (desktop/celular) em chaves canônicas antes do PUT.
-        document.querySelectorAll("[data-field-alias]").forEach((input) => {
-            const alias = input.getAttribute("data-field-alias");
-            const value = String(input.value || "").trim();
-            if (value) body[alias] = value;
+    function atualizarCamposGarantiaPorTipoDocumento() {
+        if (!garantiaMetadataFields || !attachmentTypeSelect) return;
+        const exibir = attachmentTypeSelect.value === "garantia";
+        garantiaMetadataFields.hidden = !exibir;
+        [dataInicioGarantiaInput, dataFimGarantiaInput, prazoGarantiaMesesInput, observacaoGarantiaInput].forEach((field) => {
+            if (!field) return;
+            field.disabled = !exibir;
+            if (!exibir) field.value = "";
         });
     }
 
@@ -699,6 +725,12 @@
         return attachmentUrlTemplates.listByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
     }
 
+    function buildAssetAttachmentsUploadUrl(rawId) {
+        const value = String(rawId ?? "").trim();
+        if (!value) return null;
+        return attachmentUrlTemplates.uploadByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
+    }
+
     function buildAttachmentDownloadUrl(rawId) {
         return buildIntRoute(attachmentUrlTemplates.downloadByFile, rawId);
     }
@@ -726,7 +758,6 @@
         document.getElementById("created_at").value = asset.created_at || asset.criado_em || "";
         document.getElementById("updated_at").value = asset.updated_at || asset.atualizado_em || "";
         document.getElementById("data_ultima_movimentacao").value = asset.data_ultima_movimentacao || "";
-        document.getElementById("garantia").value = asset.garantia || "";
         document.getElementById("valor").value = asset.valor || "";
         document.getElementById("observacoes").value = asset.observacoes || "";
         document.getElementById("detalhes_tecnicos").value = asset.detalhes_tecnicos || "";
@@ -735,23 +766,17 @@
         document.getElementById("armazenamento").value = asset.armazenamento || "";
         document.getElementById("sistema_operacional").value = asset.sistema_operacional || "";
         document.getElementById("carregador").value = asset.carregador || "";
+        document.getElementById("carregador_celular").value = asset.carregador || "";
         document.getElementById("teamviewer_id").value = asset.teamviewer_id || "";
         document.getElementById("anydesk_id").value = asset.anydesk_id || "";
-        document.getElementById("nome_equipamento").value = asset.nome_equipamento || "";
-        document.getElementById("hostname").value = asset.hostname || "";
+        document.getElementById("mac_address").value = asset.mac_address || "";
         // IMEI removido em Fase 3 Round 3 — não mais preenchido em edição
         document.getElementById("numero_linha").value = asset.numero_linha || "";
         document.getElementById("operadora").value = asset.operadora || "";
         document.getElementById("conta_vinculada").value = asset.conta_vinculada || "";
         document.getElementById("polegadas").value = asset.polegadas || "";
-
-        // Preenche aliases visuais para desktop/celular sem duplicar persistência.
-        document.getElementById("desktop_processador").value = asset.processador || "";
-        document.getElementById("desktop_ram").value = asset.ram || "";
-        document.getElementById("desktop_armazenamento").value = asset.armazenamento || "";
-        document.getElementById("desktop_sistema_operacional").value = asset.sistema_operacional || "";
-        document.getElementById("desktop_teamviewer_id").value = asset.teamviewer_id || "";
-        document.getElementById("desktop_anydesk_id").value = asset.anydesk_id || "";
+        document.getElementById("resolucao").value = asset.resolucao || "";
+        document.getElementById("entrada_video").value = asset.entrada_video || "";
         document.getElementById("celular_armazenamento").value = asset.armazenamento || "";
 
         setSpecsVisibility();
@@ -792,6 +817,7 @@
                     <tr>
                         <th>Tipo</th>
                         <th>Nome</th>
+                        <th>Status</th>
                         <th>Tamanho</th>
                         ${actionHeader}
                     </tr>
@@ -801,8 +827,10 @@
                         <tr>
                             <td>${att.tipo_documento}</td>
                             <td>${att.nome_original}</td>
+                            <td>${att.tipo_documento === "garantia" ? (att.garantia_info?.status_garantia || "sem_garantia") : "-"}</td>
                             <td>${(att.tamanho_bytes / 1024).toFixed(2)} KB</td>
                             <td>
+                                ${att.preview_suportado ? `<button type="button" class="btn btn-secondary btn-mini" data-preview="${att.id}">Visualizar</button>` : ""}
                                 <button type="button" class="btn btn-secondary btn-mini" data-download="${att.id}">Baixar</button>
                                 ${readOnlyMode ? "" : `<button type=\"button\" class=\"btn btn-danger btn-mini\" data-delete=\"${att.id}\">Excluir</button>`}
                             </td>
@@ -821,7 +849,6 @@
         editAssetForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             const body = Object.fromEntries(new FormData(editAssetForm).entries());
-            syncAliasedSpecFieldsToBody(body);
 
             // Mantém compatibilidade com chaves legadas usadas no backend atual.
             body.tipo = body.tipo_ativo || body.tipo;
@@ -844,12 +871,18 @@
             const file = event.target.files[0];
             if (!file) return;
 
-            const uploadUrl = buildAssetAttachmentsUrl(assetId);
+            const uploadUrl = buildAssetAttachmentsUploadUrl(assetId);
             if (!uploadUrl) return;
 
             const formData = new FormData();
             formData.append("file", file);
             formData.append("type", attachmentTypeSelect.value);
+            if (attachmentTypeSelect.value === "garantia") {
+                formData.append("data_inicio_garantia", dataInicioGarantiaInput?.value || "");
+                formData.append("data_fim_garantia", dataFimGarantiaInput?.value || "");
+                formData.append("prazo_garantia_meses", prazoGarantiaMesesInput?.value || "");
+                formData.append("observacao_garantia", observacaoGarantiaInput?.value || "");
+            }
 
             try {
                 attachmentUploadTrigger.classList.add("is-loading");
@@ -976,8 +1009,15 @@
     }
 
     attachmentList.addEventListener("click", async (event) => {
+        const previewButton = event.target.closest("[data-preview]");
         const downloadButton = event.target.closest("[data-download]");
         const deleteButton = event.target.closest("[data-delete]");
+
+        if (previewButton) {
+            const previewUrl = buildIntRoute(attachmentUrlTemplates.previewByFile, previewButton.getAttribute("data-preview"));
+            if (previewUrl) window.open(previewUrl, "_blank", "noopener");
+            return;
+        }
 
         if (downloadButton) {
             const downloadUrl = buildAttachmentDownloadUrl(downloadButton.getAttribute("data-download"));
@@ -1005,6 +1045,8 @@
     if (!readOnlyMode) {
         document.getElementById("tipo_ativo").addEventListener("change", setSpecsVisibility);
         document.getElementById("status").addEventListener("change", setSpecsVisibility);
+        attachmentTypeSelect.addEventListener("change", atualizarCamposGarantiaPorTipoDocumento);
+        atualizarCamposGarantiaPorTipoDocumento();
     }
     loadAsset();
     loadAttachments();

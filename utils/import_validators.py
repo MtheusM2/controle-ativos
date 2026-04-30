@@ -69,6 +69,7 @@ CAMPOS_CANONICOS_IMPORTACAO = {
     'teamviewer_id',           # Opcional
     'anydesk_id',              # Opcional
     'nome_equipamento',        # Opcional (para computadores)
+    'mac_address',             # Opcional (identificador técnico principal)
     'hostname',                # Opcional (para computadores)
 }
 
@@ -101,6 +102,16 @@ ALIASES_CAMPOS_IMPORTACAO = {
 
     # Aliases para "tipo_ativo" (com prioridade ao canônico se ambos presentes)
     'tipo': 'tipo_ativo',
+    'tipo ativo': 'tipo_ativo',
+    'tipo do ativo': 'tipo_ativo',
+    'tipo de ativo': 'tipo_ativo',
+
+    # Aliases para "mac_address"
+    'mac': 'mac_address',
+    'mac address': 'mac_address',
+    'mac_address': 'mac_address',
+    'endereco mac': 'mac_address',
+    'endereço mac': 'mac_address',
 }
 
 
@@ -259,6 +270,7 @@ class ValidadorCampos:
         'setor': 100,
         'usuario_responsavel': 100,
         'email_responsavel': 255,
+        'mac_address': 17,
         'nota_fiscal': 100,
         'garantia': 100,
         'status': 50,

@@ -781,8 +781,20 @@ body.app-body {
     margin-top: 0;
 }
 
+/* CRÍTICO (Fase 4.3): Regra global para [hidden] — impede CSS de display:grid/flex sobrescrever hidden */
+[hidden] {
+    display: none !important;
+}
+
 /* NOVO (Fase 4.2): Garantir que form-block-title hidden desaparece — previne flash visual */
 .form-block-title[hidden] {
+    display: none !important;
+}
+
+/* Regra específica para form-section com hidden — mitiga sobrescrita de display:grid */
+.form-section[hidden],
+.asset-specs-group[hidden],
+[data-spec-group][hidden] {
     display: none !important;
 }
 

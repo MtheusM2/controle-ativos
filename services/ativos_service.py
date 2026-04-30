@@ -10,6 +10,7 @@ import csv
 import io
 import logging
 import re
+import threading
 import unicodedata
 from difflib import get_close_matches
 
@@ -31,12 +32,79 @@ from utils.validators import (
     padronizar_texto,
     validar_data_iso_opcional,
     normalizar_numero_linha,
+    normalizar_mac_address,
     # normalizar_imei removido em Fase 3 Round 3 — não mais necessário
     normalizar_valor_monetario,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+ATIVOS_COLUNAS_RETORNO = [
+    "id",
+    "codigo_interno",
+    "tipo",
+    "marca",
+    "modelo",
+    "serial",
+    "descricao",
+    "categoria",
+    "tipo_ativo",
+    "condicao",
+    "localizacao",
+    "setor",
+    "usuario_responsavel",
+    "email_responsavel",
+    "departamento",
+    "nota_fiscal",
+    "garantia",
+    "status",
+    "data_entrada",
+    "data_saida",
+    "data_compra",
+    "valor",
+    "observacoes",
+    "detalhes_tecnicos",
+    "processador",
+    "ram",
+    "armazenamento",
+    "sistema_operacional",
+    "carregador",
+    "teamviewer_id",
+    "anydesk_id",
+    "nome_equipamento",
+    "mac_address",
+    "hostname",
+    "imei_1",
+    "imei_2",
+    "numero_linha",
+    "operadora",
+    "conta_vinculada",
+    "polegadas",
+    "resolucao",
+    "tipo_painel",
+    "entrada_video",
+    "fonte_ou_cabo",
+    "criado_por",
+    "created_at",
+    "updated_at",
+    "data_ultima_movimentacao",
+]
+
+ATIVOS_COLUNAS_RETORNO_OBRIGATORIAS = {
+    "id",
+    "tipo",
+    "marca",
+    "modelo",
+    "usuario_responsavel",
+    "departamento",
+    "status",
+    "data_entrada",
+    "criado_por",
+}
+
+ATIVOS_COLUNAS_ESCRITA_OPCIONAIS = {"mac_address"}
 
 
 class AtivoErro(Exception):
@@ -105,6 +173,7 @@ def _row_para_ativo(row: dict) -> Ativo:
         teamviewer_id=row.get("teamviewer_id"),
         anydesk_id=row.get("anydesk_id"),
         nome_equipamento=row.get("nome_equipamento"),
+        mac_address=row.get("mac_address"),
         hostname=row.get("hostname"),
         imei_1=row.get("imei_1"),
         imei_2=row.get("imei_2"),
@@ -165,15 +234,13 @@ def _aplicar_politica_especificacoes_por_tipo(ativo: Ativo) -> Ativo:
     Aplica regras de serialização por tipo para manter cadastro coerente.
 
     Nesta etapa:
-    - Monitor mantém apenas `polegadas` na ficha técnica.
+    - Monitor mantém `polegadas`, `resolucao` e `entrada_video`.
     - Campos legados de monitor são limpos para evitar persistência residual.
     """
     tipo_normalizado = padronizar_texto(ativo.tipo_ativo or ativo.tipo, "lower")
 
     if tipo_normalizado == "monitor":
-        ativo.resolucao = None
         ativo.tipo_painel = None
-        ativo.entrada_video = None
         ativo.fonte_ou_cabo = None
 
     return ativo
@@ -189,6 +256,7 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
     codigo_interno_normalizado = padronizar_texto(_normalizar_documento(ativo.codigo_interno), "upper")
     valor_normalizado = normalizar_valor_monetario(_normalizar_documento(ativo.valor))
     numero_linha_normalizado = normalizar_numero_linha(_normalizar_documento(ativo.numero_linha))
+    mac_address_normalizado = normalizar_mac_address(_normalizar_documento(getattr(ativo, "mac_address", None)))
     # IMEI removido em Fase 3 Round 3 — não mais normalizado no serviço
 
     # `descricao` pode receber fallback técnico apenas para fluxos legados/importações antigas.
@@ -235,6 +303,7 @@ def _padronizar_ativo(ativo: Ativo) -> Ativo:
         teamviewer_id=_normalizar_documento(ativo.teamviewer_id),
         anydesk_id=_normalizar_documento(ativo.anydesk_id),
         nome_equipamento=_normalizar_documento(ativo.nome_equipamento),
+        mac_address=mac_address_normalizado,
         hostname=_normalizar_documento(ativo.hostname),
         # IMEI removido em Fase 3 Round 3
         imei_1=None,
@@ -285,7 +354,8 @@ CAMPO_ROTULOS_MOVIMENTACAO = {
     "teamviewer_id": "TeamViewer ID",
     "anydesk_id": "AnyDesk ID",
     "nome_equipamento": "Nome do equipamento",
-    "hostname": "Hostname",
+    "mac_address": "MAC Address",
+    "hostname": "Hostname legado",
     # IMEI removido em Fase 3 Round 3
     "numero_linha": "Número da linha",
     "operadora": "Operadora",
@@ -356,6 +426,7 @@ CAMPOS_IMPORTACAO_SCHEMA = {
     "teamviewer_id",
     "anydesk_id",
     "nome_equipamento",
+    "mac_address",
     "hostname",
     "numero_linha",
     "operadora",
@@ -442,6 +513,10 @@ ALIASES_IMPORTACAO_SUGERIDOS = {
     "id anydesk": "anydesk_id",
     "anydesk id": "anydesk_id",
     "nome equipamento": "nome_equipamento",
+    "mac": "mac_address",
+    "mac address": "mac_address",
+    "endereco mac": "mac_address",
+    "endereço mac": "mac_address",
     "conta vinculada": "conta_vinculada",
     "tipo painel": "tipo_painel",
     "entrada de video": "entrada_video",
@@ -570,6 +645,9 @@ def _classificar_colunas_importacao(headers: list[str]) -> dict:
         coluna = (header or "").strip()
         coluna_norm = _normalizar_nome_coluna_importacao(coluna)
         coluna_sem_espaco = coluna_norm.replace(" ", "")
+        campo_exato_alias = None
+        if coluna_norm in {"mac", "mac address", "endereco mac", "endereço mac", "mac_address"}:
+            campo_exato_alias = "mac_address"
 
         if not coluna_norm:
             ignoradas.append({"coluna_origem": coluna, "motivo": "Cabeçalho vazio."})
@@ -594,19 +672,20 @@ def _classificar_colunas_importacao(headers: list[str]) -> dict:
             continue
 
         # Correspondência exata é aplicada automaticamente.
-        if coluna_norm in CAMPOS_IMPORTACAO_SCHEMA:
-            if coluna_norm in campos_ja_mapeados:
+        campo_exato = campo_exato_alias or (coluna_norm if coluna_norm in CAMPOS_IMPORTACAO_SCHEMA else None)
+        if campo_exato:
+            if campo_exato in campos_ja_mapeados:
                 ignoradas.append(
                     {
                         "coluna_origem": coluna,
-                        "motivo": f"Campo duplicado para '{coluna_norm}'.",
+                        "motivo": f"Campo duplicado para '{campo_exato}'.",
                     }
                 )
                 continue
 
-            mapeamento_exato[coluna] = coluna_norm
-            campos_ja_mapeados.add(coluna_norm)
-            exatas.append({"coluna_origem": coluna, "campo_destino": coluna_norm})
+            mapeamento_exato[coluna] = campo_exato
+            campos_ja_mapeados.add(campo_exato)
+            exatas.append({"coluna_origem": coluna, "campo_destino": campo_exato})
             continue
 
         # Alias explícito: entra apenas como sugestão e exige confirmação.
@@ -823,6 +902,112 @@ class AtivosService:
         self._servico_importacao = ServicoImportacao()
         # Reutiliza o mesmo validador de lote do preview seguro para evitar regra divergente.
         self._validador_lote_importacao = ValidadorLote()
+        # Cache do schema real para tolerar rollout onde código chega antes da migration.
+        self._ativos_columns_cache: set[str] | None = None
+        self._schema_cache_lock = threading.Lock()
+        self._avisos_schema_emitidos: set[tuple[str, tuple[str, ...]]] = set()
+
+    def _carregar_colunas_ativos(self, cur) -> set[str]:
+        """
+        Lê as colunas reais da tabela ativos para permitir retrocompatibilidade de schema.
+        """
+        cur.execute(
+            """
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'ativos'
+            """
+        )
+        rows = cur.fetchall() or []
+        colunas = {
+            (row.get("COLUMN_NAME") if isinstance(row, dict) else row[0])
+            for row in rows
+        }
+        if not colunas:
+            # Fallback defensivo para ambientes de teste/mocks sem INFORMATION_SCHEMA.
+            colunas = set(ATIVOS_COLUNAS_RETORNO) | {"empresa_id"}
+        self._ativos_columns_cache = {str(coluna) for coluna in colunas if coluna}
+        return self._ativos_columns_cache
+
+    def _obter_colunas_ativos(self, cur) -> set[str]:
+        """
+        Retorna o schema cacheado de ativos com inicialização thread-safe.
+        """
+        if self._ativos_columns_cache is None:
+            with self._schema_cache_lock:
+                if self._ativos_columns_cache is None:
+                    self._carregar_colunas_ativos(cur)
+        return self._ativos_columns_cache or set()
+
+    def _registrar_aviso_schema_ativos(self, operacao: str, colunas_ausentes: list[str]) -> None:
+        """
+        Emite aviso único quando colunas opcionais do código ainda não existem no banco.
+        """
+        if not colunas_ausentes:
+            return
+
+        chave = (operacao, tuple(sorted(colunas_ausentes)))
+        if chave in self._avisos_schema_emitidos:
+            return
+
+        self._avisos_schema_emitidos.add(chave)
+        logger.warning(
+            "Schema legado detectado em ativos durante %s. Colunas opcionais ausentes: %s. "
+            "A migration correspondente ainda precisa ser aplicada.",
+            operacao,
+            ", ".join(sorted(colunas_ausentes)),
+        )
+
+    def _montar_select_colunas_ativos(self, cur, *, incluir_empresa_id: bool = False) -> str:
+        """
+        Monta SELECT compatível com schema antigo sem derrubar leitura por coluna opcional ausente.
+        """
+        colunas_disponiveis = self._obter_colunas_ativos(cur)
+        colunas = list(ATIVOS_COLUNAS_RETORNO)
+        if incluir_empresa_id:
+            colunas.append("empresa_id")
+
+        colunas_sql: list[str] = []
+        colunas_ausentes: list[str] = []
+
+        for coluna in colunas:
+            if coluna in colunas_disponiveis:
+                colunas_sql.append(coluna)
+                continue
+
+            if coluna in ATIVOS_COLUNAS_RETORNO_OBRIGATORIAS or coluna == "empresa_id":
+                raise AtivoErro(
+                    f"Schema incompatível na tabela ativos: coluna obrigatória ausente ({coluna})."
+                )
+
+            colunas_sql.append(f"NULL AS {coluna}")
+            colunas_ausentes.append(coluna)
+
+        self._registrar_aviso_schema_ativos("leitura", colunas_ausentes)
+        return ",\n                           ".join(colunas_sql)
+
+    def _filtrar_campos_persistencia_ativos(self, cur, campos: list[tuple[str, object]]) -> list[tuple[str, object]]:
+        """
+        Remove apenas campos opcionais ainda não migrados, preservando o contrato principal.
+        """
+        colunas_disponiveis = self._obter_colunas_ativos(cur)
+        obrigatorias_ausentes = [
+            campo for campo, _valor in campos
+            if campo not in colunas_disponiveis and campo not in ATIVOS_COLUNAS_ESCRITA_OPCIONAIS
+        ]
+        if obrigatorias_ausentes:
+            raise AtivoErro(
+                "Schema incompatível na tabela ativos. Colunas obrigatórias ausentes: "
+                + ", ".join(sorted(obrigatorias_ausentes))
+            )
+
+        opcionais_ausentes = [
+            campo for campo, _valor in campos
+            if campo not in colunas_disponiveis and campo in ATIVOS_COLUNAS_ESCRITA_OPCIONAIS
+        ]
+        self._registrar_aviso_schema_ativos("persistência", opcionais_ausentes)
+        return [(campo, valor) for campo, valor in campos if campo in colunas_disponiveis]
 
     def _construir_ativo_para_atualizacao(self, atual: Ativo, dados: dict) -> Ativo:
         """
@@ -861,6 +1046,7 @@ class AtivosService:
             teamviewer_id=dados.get("teamviewer_id", atual.teamviewer_id),
             anydesk_id=dados.get("anydesk_id", atual.anydesk_id),
             nome_equipamento=dados.get("nome_equipamento", atual.nome_equipamento),
+            mac_address=dados.get("mac_address", getattr(atual, "mac_address", None)),
             hostname=dados.get("hostname", atual.hostname),
             imei_1=dados.get("imei_1", atual.imei_1),
             imei_2=dados.get("imei_2", atual.imei_2),
@@ -950,6 +1136,7 @@ class AtivosService:
             teamviewer_id=dados.get("teamviewer_id"),
             anydesk_id=dados.get("anydesk_id"),
             nome_equipamento=dados.get("nome_equipamento"),
+            mac_address=dados.get("mac_address"),
             hostname=dados.get("hostname"),
             # IMEI não integra mais o domínio ativo para importação em massa.
             imei_1=None,
@@ -1083,6 +1270,7 @@ class AtivosService:
 
             mapeamentos_altos_exatos = []
             mapeamentos_altos_sugeridos = []
+            alias_mac_address = {"mac", "mac address", "endereco mac", "endereço mac", "mac_address"}
             for match in resultado.mapeamentos_altos:
                 coluna_norm = _normalizar_nome_coluna_importacao(match.coluna_origem)
                 coluna_sem_espaco = coluna_norm.replace(" ", "")
@@ -1093,11 +1281,15 @@ class AtivosService:
                     or coluna_sem_espaco in ALIASES_IMPORTACAO_SUGERIDOS
                 )
                 origem_eh_schema_canonica = origem_original_norm in CAMPOS_IMPORTACAO_SCHEMA
+                origem_eh_mac_exato = (
+                    match.campo_destino == "mac_address"
+                    and (coluna_norm in alias_mac_address or coluna_sem_espaco in alias_mac_address)
+                )
                 # Apenas cabeçalho exatamente igual ao campo do schema vira auto-mapeamento.
                 if (
-                    (origem_eh_schema_canonica or not origem_eh_alias)
+                    (origem_eh_schema_canonica or not origem_eh_alias or origem_eh_mac_exato)
                     and match.campo_destino in CAMPOS_IMPORTACAO_SCHEMA
-                    and coluna_norm.replace(" ", "_") == match.campo_destino
+                    and (coluna_norm.replace(" ", "_") == match.campo_destino or origem_eh_mac_exato)
                 ):
                     mapeamentos_altos_exatos.append(match)
                 else:
@@ -2059,112 +2251,67 @@ class AtivosService:
             # Se o INSERT falhar, o rollback automático desfaz também o incremento.
             id_gerado = self._gerar_id_sequencial(empresa_id, conn, cur)
             ativo_norm.id_ativo = id_gerado
+            campos_insert = [
+                ("id", ativo_norm.id_ativo),
+                ("codigo_interno", ativo_norm.codigo_interno),
+                ("tipo", ativo_norm.tipo),
+                ("marca", ativo_norm.marca),
+                ("modelo", ativo_norm.modelo),
+                ("serial", ativo_norm.serial),
+                ("descricao", ativo_norm.descricao),
+                ("categoria", ativo_norm.categoria),
+                ("tipo_ativo", ativo_norm.tipo_ativo),
+                ("condicao", ativo_norm.condicao),
+                ("localizacao", ativo_norm.localizacao),
+                ("setor", ativo_norm.setor),
+                ("usuario_responsavel", ativo_norm.usuario_responsavel),
+                ("email_responsavel", ativo_norm.email_responsavel),
+                ("departamento", ativo_norm.departamento),
+                ("nota_fiscal", ativo_norm.nota_fiscal),
+                ("garantia", ativo_norm.garantia),
+                ("status", ativo_norm.status),
+                ("data_entrada", ativo_norm.data_entrada),
+                ("data_saida", ativo_norm.data_saida),
+                ("data_compra", ativo_norm.data_compra),
+                ("valor", ativo_norm.valor),
+                ("observacoes", ativo_norm.observacoes),
+                ("detalhes_tecnicos", ativo_norm.detalhes_tecnicos),
+                ("processador", ativo_norm.processador),
+                ("ram", ativo_norm.ram),
+                ("armazenamento", ativo_norm.armazenamento),
+                ("sistema_operacional", ativo_norm.sistema_operacional),
+                ("carregador", ativo_norm.carregador),
+                ("teamviewer_id", ativo_norm.teamviewer_id),
+                ("anydesk_id", ativo_norm.anydesk_id),
+                ("nome_equipamento", ativo_norm.nome_equipamento),
+                ("mac_address", ativo_norm.mac_address),
+                ("hostname", ativo_norm.hostname),
+                ("imei_1", ativo_norm.imei_1),
+                ("imei_2", ativo_norm.imei_2),
+                ("numero_linha", ativo_norm.numero_linha),
+                ("operadora", ativo_norm.operadora),
+                ("conta_vinculada", ativo_norm.conta_vinculada),
+                ("polegadas", ativo_norm.polegadas),
+                ("resolucao", ativo_norm.resolucao),
+                ("tipo_painel", ativo_norm.tipo_painel),
+                ("entrada_video", ativo_norm.entrada_video),
+                ("fonte_ou_cabo", ativo_norm.fonte_ou_cabo),
+                ("criado_por", user_id),
+                ("empresa_id", empresa_id),
+            ]
+            campos_insert = self._filtrar_campos_persistencia_ativos(cur, campos_insert)
+            colunas_sql = ",\n                    ".join(campo for campo, _valor in campos_insert)
+            placeholders_sql = ", ".join(["%s"] * len(campos_insert))
+            valores_insert = tuple(valor for _campo, valor in campos_insert)
 
             cur.execute(
-                """
+                f"""
                 INSERT INTO ativos (
-                    id,
-                    codigo_interno,
-                    tipo,
-                    marca,
-                    modelo,
-                    serial,
-                    descricao,
-                    categoria,
-                    tipo_ativo,
-                    condicao,
-                    localizacao,
-                    setor,
-                    usuario_responsavel,
-                    email_responsavel,
-                    departamento,
-                    nota_fiscal,
-                    garantia,
-                    status,
-                    data_entrada,
-                    data_saida,
-                    data_compra,
-                    valor,
-                    observacoes,
-                    detalhes_tecnicos,
-                    processador,
-                    ram,
-                    armazenamento,
-                    sistema_operacional,
-                    carregador,
-                    teamviewer_id,
-                    anydesk_id,
-                    nome_equipamento,
-                    hostname,
-                    imei_1,
-                    imei_2,
-                    numero_linha,
-                    operadora,
-                    conta_vinculada,
-                    polegadas,
-                    resolucao,
-                    tipo_painel,
-                    entrada_video,
-                    fonte_ou_cabo,
-                    criado_por,
-                    empresa_id
+                    {colunas_sql}
                 )
-                VALUES (
-                    # A lista de placeholders precisa manter 1:1 com as colunas acima.
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s
-                )
+                VALUES ({placeholders_sql})
                 """,
-                (
-                    ativo_norm.id_ativo,
-                    ativo_norm.codigo_interno,
-                    ativo_norm.tipo,
-                    ativo_norm.marca,
-                    ativo_norm.modelo,
-                    ativo_norm.serial,
-                    ativo_norm.descricao,
-                    ativo_norm.categoria,
-                    ativo_norm.tipo_ativo,
-                    ativo_norm.condicao,
-                    ativo_norm.localizacao,
-                    ativo_norm.setor,
-                    ativo_norm.usuario_responsavel,
-                    ativo_norm.email_responsavel,
-                    ativo_norm.departamento,
-                    ativo_norm.nota_fiscal,
-                    ativo_norm.garantia,
-                    ativo_norm.status,
-                    ativo_norm.data_entrada,
-                    ativo_norm.data_saida,
-                    ativo_norm.data_compra,
-                    ativo_norm.valor,
-                    ativo_norm.observacoes,
-                    ativo_norm.detalhes_tecnicos,
-                    ativo_norm.processador,
-                    ativo_norm.ram,
-                    ativo_norm.armazenamento,
-                    ativo_norm.sistema_operacional,
-                    ativo_norm.carregador,
-                    ativo_norm.teamviewer_id,
-                    ativo_norm.anydesk_id,
-                    ativo_norm.nome_equipamento,
-                    ativo_norm.hostname,
-                    ativo_norm.imei_1,
-                    ativo_norm.imei_2,
-                    ativo_norm.numero_linha,
-                    ativo_norm.operadora,
-                    ativo_norm.conta_vinculada,
-                    ativo_norm.polegadas,
-                    ativo_norm.resolucao,
-                    ativo_norm.tipo_painel,
-                    ativo_norm.entrada_video,
-                    ativo_norm.fonte_ou_cabo,
-                    user_id,
-                    empresa_id,
-                )
+                valores_insert,
             )
 
         return id_gerado
@@ -2178,38 +2325,19 @@ class AtivosService:
         contexto = self._obter_contexto_acesso(user_id)
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            select_colunas = self._montar_select_colunas_ativos(cur)
             if self._usuario_eh_admin(contexto):
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                           conta_vinculada, polegadas, resolucao, tipo_painel,
-                           entrada_video, fonte_ou_cabo, criado_por,
-                           created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                    SELECT {select_colunas}
                     FROM ativos
                     ORDER BY id
                     """
                 )
             else:
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                              conta_vinculada, polegadas, resolucao, tipo_painel,
-                              entrada_video, fonte_ou_cabo, criado_por,
-                              created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                    SELECT {select_colunas}
                     FROM ativos
                     WHERE empresa_id = %s
                     ORDER BY id
@@ -2237,21 +2365,12 @@ class AtivosService:
         contexto = self._obter_contexto_acesso(user_id)
 
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            select_colunas = self._montar_select_colunas_ativos(cur, incluir_empresa_id=True)
             if self._usuario_eh_admin(contexto):
                 # Admin: busca sem restrição de empresa.
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                              conta_vinculada, polegadas, resolucao, tipo_painel,
-                              entrada_video, fonte_ou_cabo, criado_por, empresa_id,
-                              created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                    SELECT {select_colunas}
                     FROM ativos
                     WHERE id = %s
                     """,
@@ -2262,18 +2381,8 @@ class AtivosService:
                 # Não diferencia "inexistente" de "pertence a outra empresa" para
                 # evitar enumeração de IDs entre unidades.
                 cur.execute(
-                    """
-                          SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                           categoria, tipo_ativo, condicao, localizacao, setor,
-                           usuario_responsavel, email_responsavel, departamento,
-                           nota_fiscal, garantia, status, data_entrada, data_saida,
-                           data_compra, valor, observacoes, detalhes_tecnicos,
-                           processador, ram, armazenamento, sistema_operacional,
-                           carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                           hostname, imei_1, imei_2, numero_linha, operadora,
-                              conta_vinculada, polegadas, resolucao, tipo_painel,
-                              entrada_video, fonte_ou_cabo, criado_por, empresa_id,
-                              created_at, updated_at, data_ultima_movimentacao
+                    f"""
+                    SELECT {select_colunas}
                     FROM ativos
                     WHERE id = %s AND empresa_id = %s
                     """,
@@ -2414,24 +2523,14 @@ class AtivosService:
             where.append("data_saida <= %s")
             params.append(filtros["data_saida_final"].strip())
 
-        sql = f"""
-                             SELECT id, codigo_interno, tipo, marca, modelo, serial, descricao,
-                                     categoria, tipo_ativo, condicao, localizacao, setor,
-                                     usuario_responsavel, email_responsavel, departamento,
-                                     nota_fiscal, garantia, status, data_entrada, data_saida,
-                                     data_compra, valor, observacoes, detalhes_tecnicos,
-                                     processador, ram, armazenamento, sistema_operacional,
-                                     carregador, teamviewer_id, anydesk_id, nome_equipamento,
-                                     hostname, imei_1, imei_2, numero_linha, operadora,
-                                     conta_vinculada, polegadas, resolucao, tipo_painel,
-                                     entrada_video, fonte_ou_cabo, criado_por,
-                                     created_at, updated_at, data_ultima_movimentacao
-            FROM ativos
-            WHERE {" AND ".join(where)}
-            ORDER BY {campos_ordenacao[ordenar_por]} {ordem_sql}
-        """
-
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            select_colunas = self._montar_select_colunas_ativos(cur)
+            sql = f"""
+                SELECT {select_colunas}
+                FROM ativos
+                WHERE {" AND ".join(where)}
+                ORDER BY {campos_ordenacao[ordenar_por]} {ordem_sql}
+            """
             cur.execute(sql, tuple(params))
             rows = cur.fetchall()
 
@@ -2487,6 +2586,7 @@ class AtivosService:
             ("teamviewer_id", novo_norm.teamviewer_id),
             ("anydesk_id", novo_norm.anydesk_id),
             ("nome_equipamento", novo_norm.nome_equipamento),
+            ("mac_address", novo_norm.mac_address),
             ("hostname", novo_norm.hostname),
             ("imei_1", novo_norm.imei_1),
             ("imei_2", novo_norm.imei_2),
@@ -2500,23 +2600,24 @@ class AtivosService:
             ("fonte_ou_cabo", novo_norm.fonte_ou_cabo),
         ]
 
-        set_clausulas = [f"{campo} = %s" for campo, _valor in campos_update]
-        params_update = [valor for _campo, valor in campos_update]
-
-        if resumo_movimentacao["atualizar_data_ultima_movimentacao"]:
-            set_clausulas.append("data_ultima_movimentacao = NOW()")
-
-        where_clause = "WHERE id = %s"
-        if not self._usuario_eh_admin(contexto):
-            where_clause = "WHERE id = %s AND empresa_id = %s"
-
-        sql = f"UPDATE ativos SET {', '.join(set_clausulas)} {where_clause}"
-        params_execucao = list(params_update)
-        params_execucao.append(novo_norm.id_ativo)
-        if not self._usuario_eh_admin(contexto):
-            params_execucao.append(int(contexto["empresa_id"]))
-
         with cursor_mysql(dictionary=True) as (_conn, cur):
+            campos_update = self._filtrar_campos_persistencia_ativos(cur, campos_update)
+            set_clausulas = [f"{campo} = %s" for campo, _valor in campos_update]
+            params_update = [valor for _campo, valor in campos_update]
+
+            if resumo_movimentacao["atualizar_data_ultima_movimentacao"]:
+                set_clausulas.append("data_ultima_movimentacao = NOW()")
+
+            where_clause = "WHERE id = %s"
+            if not self._usuario_eh_admin(contexto):
+                where_clause = "WHERE id = %s AND empresa_id = %s"
+
+            sql = f"UPDATE ativos SET {', '.join(set_clausulas)} {where_clause}"
+            params_execucao = list(params_update)
+            params_execucao.append(novo_norm.id_ativo)
+            if not self._usuario_eh_admin(contexto):
+                params_execucao.append(int(contexto["empresa_id"]))
+
             cur.execute(sql, tuple(params_execucao))
 
             if cur.rowcount == 0:

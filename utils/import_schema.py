@@ -60,6 +60,7 @@ CRITICIDADE_CAMPOS = {
     "teamviewer_id": CriticalidadeCampo.OPCIONAL,
     "anydesk_id": CriticalidadeCampo.OPCIONAL,
     "nome_equipamento": CriticalidadeCampo.OPCIONAL,
+    "mac_address": CriticalidadeCampo.OPCIONAL,
     "hostname": CriticalidadeCampo.OPCIONAL,
     "numero_linha": CriticalidadeCampo.OPCIONAL,
     "operadora": CriticalidadeCampo.OPCIONAL,

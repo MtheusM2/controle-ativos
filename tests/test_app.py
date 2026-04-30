@@ -60,6 +60,28 @@ def test_asset_import_template_starts_with_confirm_button_disabled(authenticated
     assert 'id="confirm-import-btn" disabled' in html
 
 
+def test_asset_import_template_keeps_review_panel_scroll_and_validation_report_actions(authenticated_client):
+    """
+    Painel de revisão deve manter scroll interno e ações de detalhe/relatório
+    para evitar poluição visual com muitos avisos.
+    """
+    response = authenticated_client.get("/ativos/importacao")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert 'class="review-table-wrapper"' in html
+    assert 'class="validation-details-panel"' in html
+    assert "Ver detalhes" in html
+    assert "Baixar relatório de validação" in html
+
+    with open("web_app/static/css/style.css", "r", encoding="utf-8") as css_file:
+        css = css_file.read()
+
+    assert ".review-table-wrapper" in css
+    assert "max-height: 420px;" in css
+    assert "overflow-y: auto;" in css
+
+
 def test_asset_import_template_requires_suggestion_decisions_before_enabling(authenticated_client):
     """
     Contrato de UI: sugestões pendentes devem bloquear habilitação do botão.
@@ -635,17 +657,22 @@ def test_asset_create_template_keeps_core_specs_and_simplifies_monitor(authentic
     assert response.status_code == 200
     html = response.get_data(as_text=True)
 
-    # Blocos unificados para tipos estratégicos.
-    # Fase 4.3: Notebook e Desktop unificados em bloco "specs-computador" com campos condicionais
     assert 'id="specs-computador"' in html
     assert 'id="specs-celular"' in html
-    # Fase 4.3: IMEI restaurado para celular
-    assert 'id="imei_1"' in html
-
-    # Monitor com especificações completas no formulário.
     assert 'id="specs-monitor"' in html
+    assert 'id="specs-notebook"' not in html
+    assert 'id="specs-desktop"' not in html
+    assert 'id="specs-computador" class="form-section" hidden' in html
+    assert 'id="specs-celular" class="form-section" hidden' in html
+    assert 'id="specs-monitor" class="form-section" hidden' in html
+    assert 'id="imei_1"' not in html
+    assert 'id="garantia"' not in html
+    assert 'for="hostname"' not in html
+    assert "function atualizarEspecificacoesPorTipo()" in html
+    assert "syncAliasedSpecFieldsToBody" not in html
+    assert "MAC Address" in html
+
     assert 'id="polegadas"' in html
-    # Fase 4.3: Monitor agora inclui resolucao e entrada_video
     assert 'id="resolucao"' in html
     assert 'id="entrada_video"' in html
 
@@ -661,8 +688,9 @@ def test_asset_create_template_confirmation_reflects_type_specs(authenticated_cl
 
     assert "function collectTypeSpecificSpecificationRows(data)" in html
     assert '"Especificações por tipo": typeSpecificationRows' in html
-    assert "function pruneDeprecatedSpecsByType(body)" in html
-    # Fase 4.3: Função simplificada, validators do backend controlam campos permitidos
+    assert "function atualizarEspecificacoesPorTipo()" in html
+    assert "function pruneDeprecatedSpecsByType(body)" not in html
+    assert '["MAC Address", data.mac_address]' in html
 
 
 def test_asset_edit_page_authenticated(authenticated_client):
@@ -684,24 +712,28 @@ def test_asset_edit_page_contains_movement_modal_flow_elements(authenticated_cli
 
 def test_asset_edit_template_simplifies_monitor_specs_and_keeps_core_types(authenticated_client):
     """
-    Regressão da edição: monitor deve manter apenas polegadas no bloco técnico,
-    sem campos extras; celular/notebook/desktop permanecem com blocos completos.
+    Regressão da edição: o formulário deve seguir o mesmo contrato do cadastro novo,
+    com bloco único de computador, sem IMEI e com monitor aderente ao domínio atual.
     """
     response = authenticated_client.get("/ativos/editar/A-001")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
 
-    assert 'id="specs-notebook"' in html
-    assert 'id="specs-desktop"' in html
+    assert 'id="specs-computador"' in html
+    assert 'id="specs-notebook"' not in html
+    assert 'id="specs-desktop"' not in html
     assert 'id="specs-celular"' in html
-    # Fase 3 Round 3: IMEI removido do fluxo de celular
+    assert 'id="imei_1"' not in html
+    assert 'for="hostname"' not in html
+    assert 'id="mac_address"' in html
 
     assert 'id="specs-monitor"' in html
     assert 'id="polegadas"' in html
-    assert 'id="resolucao"' not in html
+    assert 'id="resolucao"' in html
     assert 'id="tipo_painel"' not in html
-    assert 'id="entrada_video"' not in html
+    assert 'id="entrada_video"' in html
     assert 'id="fonte_ou_cabo"' not in html
+    assert 'id="garantia"' not in html
 
 
 def test_asset_edit_template_does_not_reference_removed_descricao_categoria_fields(authenticated_client):
@@ -1271,6 +1303,9 @@ def test_asset_details_page_shows_garantia_and_complementar_from_attachments():
                     "tamanho_bytes": 1024,
                     "mime_type": "application/pdf",
                     "criado_em": "2026-04-06",
+                    "data_inicio_garantia": "2026-04-01",
+                    "data_fim_garantia": "2026-05-15",
+                    "observacao_garantia": "Cobertura balcão",
                 },
                 {
                     "id": 12,
@@ -1321,6 +1356,9 @@ def test_asset_details_page_shows_garantia_and_complementar_from_attachments():
     html = response.get_data(as_text=True)
     assert "garantia_produto.pdf" in html
     assert "manual_tecnico.pdf" in html
+    assert "Status da garantia" in html
+    assert "Cobertura balcão" in html
+    assert "Visualizar" in html
 
 
 def test_asset_edit_alias_route_authenticated(authenticated_client):
@@ -1647,6 +1685,88 @@ def test_attachment_route_authenticated(authenticated_client):
     payload = response.get_json()
     assert payload["ok"] is True
     assert payload["anexos"]
+    assert "caminho_arquivo" not in payload["anexos"][0]
+    assert "download_url" in payload["anexos"][0]
+    assert "preview_url" in payload["anexos"][0]
+
+
+def test_attachment_json_route_returns_empty_list_without_exposing_storage():
+    class FakeArquivosSemAnexos:
+        upload_base_dir = "."
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            return []
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": FakeArquivosSemAnexos(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.get("/ativos/A-001/anexos/json")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["anexos"] == []
+
+
+def test_attachment_json_route_returns_403_for_asset_from_other_company():
+    class FakeArquivosSemPermissao:
+        upload_base_dir = "."
+
+        def listar_arquivos(self, _id_ativo, _user_id):
+            from services.ativos_service import PermissaoNegada
+
+            raise PermissaoNegada("Acesso negado ao ativo.")
+
+        def salvar_arquivo(self, **_kwargs):
+            return 1
+
+        def obter_arquivo(self, _arquivo_id, _user_id):
+            return {"caminho_arquivo": "", "nome_original": "", "mime_type": ""}
+
+        def remover_arquivo(self, _arquivo_id, _user_id):
+            return None
+
+    from tests.conftest import FakeAtivosService, FakeAuthService, FakeEmpresaService
+
+    app = create_app(
+        {"TESTING": True, "DEBUG": True},
+        {
+            "auth_service": FakeAuthService(),
+            "empresa_service": FakeEmpresaService(),
+            "ativos_service": FakeAtivosService(),
+            "ativos_arquivo_service": FakeArquivosSemPermissao(),
+        },
+    )
+    client = app.test_client()
+    with client.session_transaction() as session_data:
+        session_data["user_id"] = 1
+        session_data["user_email"] = "user@example.com"
+
+    response = client.get("/ativos/A-001/anexos/json")
+    assert response.status_code == 403
+    payload = response.get_json()
+    assert payload["ok"] is False
 
 
 def test_attachment_upload_without_file_returns_400(authenticated_client):
@@ -1985,13 +2105,17 @@ def test_export_xlsx_uses_linked_documents_for_columns():
     headers = [cell.value for cell in worksheet[1]]
     values = [cell.value for cell in worksheet[2]]
     row = dict(zip(headers, values))
+    indice_nota_fiscal = headers.index("Nota Fiscal") + 1
+    indice_garantia = headers.index("Garantia") + 1
+    celula_nota_fiscal = worksheet.cell(row=2, column=indice_nota_fiscal)
+    celula_garantia = worksheet.cell(row=2, column=indice_garantia)
 
     assert row["Nota Fiscal"] == "Vinculada"
     assert row["Garantia"] == "Vinculada"
-    assert worksheet["J2"].comment is not None
-    assert worksheet["K2"].comment is not None
-    assert "nf_servidor.pdf" in worksheet["J2"].comment.text
-    assert "garantia_servidor.pdf" in worksheet["K2"].comment.text
+    assert celula_nota_fiscal.comment is not None
+    assert celula_garantia.comment is not None
+    assert "nf_servidor.pdf" in celula_nota_fiscal.comment.text
+    assert "garantia_servidor.pdf" in celula_garantia.comment.text
 
 
 def test_export_json_fallbacks_to_legacy_fields_without_attachments():
@@ -2752,7 +2876,7 @@ def test_asset_summary_endpoint_returns_structured_resumo(authenticated_client):
 def test_asset_summary_hides_technical_fields_from_common_user(authenticated_client):
     """
     Valida que o resumo NÃO inclui campos técnicos restritos
-    (AnyDesk, TeamViewer, hostname, serial, código_interno)
+    (AnyDesk, TeamViewer, serial, código_interno)
     quando o usuário é um usuário comum (perfil != admin).
 
     Seção 'secao_tecnica_restrita' deveria estar vazia ou ausente.
@@ -2773,7 +2897,7 @@ def test_asset_summary_hides_technical_fields_from_common_user(authenticated_cli
             "usuario_responsavel": "Maria",
             "teamviewer_id": "SECRET123",
             "anydesk_id": "ANOTHER-SECRET",
-            "hostname": "FIN-DESK-01",
+            "mac_address": "AA-BB-CC-DD-EE-FF",
             "serial": "SN12345",
             "codigo_interno": "INT-001",
         },
@@ -2800,7 +2924,7 @@ def test_asset_summary_hides_technical_fields_from_common_user(authenticated_cli
 def test_asset_summary_shows_technical_fields_to_admin(authenticated_client):
     """
     Valida que o resumo INCLUI campos técnicos restritos
-    (AnyDesk, TeamViewer, hostname, serial, código_interno)
+    (AnyDesk, TeamViewer, serial, código_interno)
     quando o usuário é admin (perfil == 'adm' ou 'admin').
 
     Seção 'secao_tecnica_restrita' deveria conter todos os campos restritos.
@@ -2833,9 +2957,9 @@ def test_asset_summary_shows_technical_fields_to_admin(authenticated_client):
         "ram": "16GB",
         "armazenamento": "512GB SSD",
         "sistema_operacional": "Windows 11",
+        "mac_address": "AA:BB:CC:DD:EE:FF",
         "teamviewer_id": "SECRET123",
         "anydesk_id": "ANOTHER-SECRET",
-        "hostname": "IT-NB-01",
         "serial": "SN67890",
         "codigo_interno": "INT-002",
     }
@@ -2847,13 +2971,15 @@ def test_asset_summary_shows_technical_fields_to_admin(authenticated_client):
     assert "secao_tecnica_restrita" in resumo, \
         "Admin deveria ver secao_tecnica_restrita"
 
+    tecnica = resumo.get("secao_tecnica", {}).get("campos", {})
+    assert tecnica.get("mac_address") == "AA:BB:CC:DD:EE:FF", \
+        "Resumo técnico deveria exibir MAC Address"
+
     tecnica_restrita = resumo.get("secao_tecnica_restrita", {})
     assert tecnica_restrita.get("teamviewer_id") == "SECRET123", \
         "Admin deveria ver teamviewer_id"
     assert tecnica_restrita.get("anydesk_id") == "ANOTHER-SECRET", \
         "Admin deveria ver anydesk_id"
-    assert tecnica_restrita.get("hostname") == "IT-NB-01", \
-        "Admin deveria ver hostname"
     assert tecnica_restrita.get("serial") == "SN67890", \
         "Admin deveria ver serial"
     assert tecnica_restrita.get("codigo_interno") == "INT-002", \

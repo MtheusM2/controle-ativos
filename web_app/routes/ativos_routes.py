@@ -6,7 +6,7 @@ import io
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import date, datetime
 
 from flask import flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from services.storage_backend import S3StorageBackend, StorageBackendError
@@ -17,6 +17,7 @@ from models.ativos import Ativo
 from services.ativos_arquivo_service import (
     ArquivoInvalido,
     ArquivoNaoEncontrado,
+    calcular_status_garantia,
     TipoDocumentoInvalido,
 )
 from services.ativos_service import AtivoErro, AtivoNaoEncontrado, AtivosService, PermissaoNegada
@@ -191,6 +192,7 @@ def _serializar_ativo(ativo: Ativo) -> dict:
         "teamviewer_id": getattr(ativo, "teamviewer_id", "") or "",
         "anydesk_id": getattr(ativo, "anydesk_id", "") or "",
         "nome_equipamento": getattr(ativo, "nome_equipamento", "") or "",
+        "mac_address": getattr(ativo, "mac_address", "") or "",
         "hostname": getattr(ativo, "hostname", "") or "",
         # Fase 3 Round 3: Removido IMEI da serialização — escopo de celular simplificado
         "numero_linha": getattr(ativo, "numero_linha", "") or "",
@@ -215,15 +217,55 @@ def _serializar_arquivo(arquivo: dict) -> dict:
     """
     Serializa um registro de arquivo para o frontend.
     """
+    arquivo_id = int(arquivo["id"])
+    garantia_info = calcular_status_garantia(arquivo.get("data_fim_garantia"))
+    criado_em = arquivo.get("criado_em")
+    if isinstance(criado_em, (datetime, date)):
+        criado_em = criado_em.isoformat()
+
     return {
-        "id": arquivo["id"],
+        "id": arquivo_id,
         "ativo_id": arquivo["ativo_id"],
         "tipo_documento": arquivo["tipo_documento"],
         "nome_original": arquivo["nome_original"],
         "tamanho_bytes": arquivo["tamanho_bytes"],
         "mime_type": arquivo["mime_type"],
-        "criado_em": arquivo["criado_em"],
+        "criado_em": criado_em,
+        "data_inicio_garantia": (
+            arquivo["data_inicio_garantia"].isoformat()
+            if arquivo.get("data_inicio_garantia")
+            else None
+        ),
+        "data_fim_garantia": (
+            arquivo["data_fim_garantia"].isoformat()
+            if arquivo.get("data_fim_garantia")
+            else None
+        ),
+        "prazo_garantia_meses": arquivo.get("prazo_garantia_meses"),
+        "observacao_garantia": arquivo.get("observacao_garantia"),
+        "download_url": url_for("download_anexo", arquivo_id=arquivo_id),
+        "preview_url": url_for("visualizar_anexo", arquivo_id=arquivo_id),
+        "preview_suportado": (arquivo.get("mime_type") or "") in {
+            "application/pdf",
+            "image/png",
+            "image/jpg",
+            "image/jpeg",
+            "image/webp",
+        },
+        "garantia_info": garantia_info,
     }
+
+
+def _rotulo_status_garantia(status_garantia: str | None) -> str:
+    """
+    Converte o status interno da garantia em rótulo amigável.
+    """
+    return {
+        "ativa": "Garantia ativa",
+        "vencendo_em_breve": "Vencendo",
+        "vencida": "Vencida",
+        "sem_garantia": "Sem garantia",
+    }.get((status_garantia or "").strip(), "Sem garantia")
 
 
 def _eh_admin(perfil: str | None) -> bool:
@@ -247,11 +289,11 @@ def _resumo_ativo_para_modal(ativo: dict, eh_admin: bool) -> dict:
 
     Campos específicos por tipo (quando aplicável):
     - Notebook/Desktop: processador, RAM, armazenamento, sistema operacional
-    - Monitor: polegadas, resolução, tipo de painel, entradas de vídeo
-    - Celular: IMEI principal, número da linha, operadora
+    - Monitor: polegadas, resolução e entradas de vídeo
+    - Celular: número da linha, operadora, conta vinculada
 
     Campos técnicos restritos (visíveis apenas para admin):
-    - AnyDesk ID, TeamViewer ID, hostname, serial, código interno
+    - AnyDesk ID, TeamViewer ID, serial, código interno
     """
     tipo = (ativo.get("tipo") or "").strip().lower()
 
@@ -288,6 +330,8 @@ def _resumo_ativo_para_modal(ativo: dict, eh_admin: bool) -> dict:
             "ram": ativo.get("ram", ""),
             "armazenamento": ativo.get("armazenamento", ""),
             "sistema_operacional": ativo.get("sistema_operacional", ""),
+            "mac_address": ativo.get("mac_address", ""),
+            "carregador": ativo.get("carregador", "") if tipo == "notebook" else "",
         }
     elif tipo == "monitor":
         resumo["secao_tecnica"]["label"] = "Especificações de Monitor"
@@ -312,7 +356,6 @@ def _resumo_ativo_para_modal(ativo: dict, eh_admin: bool) -> dict:
         resumo["secao_tecnica_restrita"] = {
             "anydesk_id": ativo.get("anydesk_id", ""),
             "teamviewer_id": ativo.get("teamviewer_id", ""),
-            "hostname": ativo.get("hostname", ""),
             "serial": ativo.get("serial", ""),
             "codigo_interno": ativo.get("codigo_interno", ""),
         }
@@ -361,6 +404,7 @@ def _mapa_campos_ativo(dados: dict) -> dict:
         "teamviewer_id": dados.get("teamviewer_id", "") or None,
         "anydesk_id": dados.get("anydesk_id", "") or None,
         "nome_equipamento": dados.get("nome_equipamento", "") or None,
+        "mac_address": dados.get("mac_address", "") or None,
         "hostname": dados.get("hostname", "") or None,
         # Fase 3 Round 3: Removido IMEI — escopo de celular simplificado
         "numero_linha": dados.get("numero_linha", "") or None,
@@ -419,6 +463,7 @@ def _ativo_do_payload(dados: dict) -> Ativo:
         teamviewer_id=mapa["teamviewer_id"],
         anydesk_id=mapa["anydesk_id"],
         nome_equipamento=mapa["nome_equipamento"],
+        mac_address=mapa["mac_address"],
         hostname=mapa["hostname"],
         # Fase 3 Round 3: Removido IMEI da construção de Ativo
         numero_linha=mapa["numero_linha"],
@@ -505,6 +550,7 @@ def _linhas_exportacao(ativos: list[Ativo]) -> list[dict]:
             "usuario_responsavel": ativo.usuario_responsavel or "",
             # Priorizar canônico setor, fallback para departamento (compatibilidade com mocks em testes)
             "setor": getattr(ativo, "setor", None) or getattr(ativo, "departamento", ""),
+            "mac_address": getattr(ativo, "mac_address", "") or "",
             "status": ativo.status or "",
             "data_entrada": ativo.data_entrada or "",
             "data_saida": ativo.data_saida or "",
@@ -563,6 +609,7 @@ def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
         ("modelo", "Modelo"),
         ("usuario_responsavel", "Responsavel"),
         ("setor", "Setor"),
+        ("mac_address", "MAC Address"),
         ("status", "Status"),
         ("data_entrada", "Data Entrada"),
         ("data_saida", "Data Saida"),
@@ -585,6 +632,7 @@ def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
                 linha["modelo"],
                 linha["usuario_responsavel"],
                 linha["setor"],  # Corrigido: usar canônico
+                linha["mac_address"],
                 linha["status"],
                 linha["data_entrada"],
                 linha["data_saida"],
@@ -601,28 +649,29 @@ def _gerar_xlsx_em_memoria(linhas: list[dict]) -> io.BytesIO:
         "D": 16,
         "E": 20,
         "F": 16,
-        "G": 12,
-        "H": 14,
+        "G": 18,
+        "H": 12,
         "I": 14,
-        "J": 12,
+        "J": 14,
         "K": 12,
+        "L": 12,
     }
     for coluna, largura in larguras.items():
         worksheet.column_dimensions[coluna].width = largura
 
-    for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=1, max_col=11):
+    for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=1, max_col=12):
         for cell in row:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
 
     # Guarda o nome completo do arquivo em comentario sem poluir a coluna principal.
     for row_index, linha in enumerate(linhas, start=2):
         if (linha.get("nota_fiscal") or "").strip():
-            worksheet.cell(row=row_index, column=10).comment = Comment(
+            worksheet.cell(row=row_index, column=11).comment = Comment(
                 f"Arquivo vinculado: {linha['nota_fiscal']}",
                 "Sistema"
             )
         if (linha.get("garantia") or "").strip():
-            worksheet.cell(row=row_index, column=11).comment = Comment(
+            worksheet.cell(row=row_index, column=12).comment = Comment(
                 f"Arquivo vinculado: {linha['garantia']}",
                 "Sistema"
             )
@@ -674,6 +723,7 @@ def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
         "Modelo",
         "Responsavel",
         "Setor",
+        "MAC Address",
         "Status",
         "Entrada",
         "Saida",
@@ -691,6 +741,7 @@ def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
                 _texto_curto_pdf(str(linha["modelo"]), limite=16),
                 _texto_curto_pdf(str(linha["usuario_responsavel"]), limite=20),
                 _texto_curto_pdf(str(linha["setor"]), limite=16),  # Corrigido: usar canônico
+                _texto_curto_pdf(str(linha["mac_address"]), limite=18),
                 _texto_curto_pdf(str(linha["status"]), limite=12),
                 str(linha["data_entrada"]),
                 str(linha["data_saida"]),
@@ -702,7 +753,7 @@ def _gerar_pdf_em_memoria(linhas: list[dict]) -> io.BytesIO:
     tabela = Table(
         dados_tabela,
         repeatRows=1,
-        colWidths=[56, 60, 60, 64, 78, 70, 52, 58, 58, 62, 62],
+        colWidths=[56, 60, 60, 64, 78, 70, 84, 52, 58, 58, 62, 62],
     )
     tabela.setStyle(
         TableStyle(
@@ -965,6 +1016,27 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             tem_nota_fiscal=tem_nota_fiscal,
         )
 
+    def _enriquecer_ativos_com_status_garantia(ativos: list[Ativo], user_id: int) -> list[dict]:
+        """
+        Anexa status resumido de garantia ao payload da listagem sem expor storage interno.
+        """
+        ativos_serializados = [_serializar_ativo(ativo) for ativo in ativos]
+        ativo_ids = [ativo.id_ativo for ativo in ativos if getattr(ativo, "id_ativo", None)]
+
+        if not ativo_ids or not hasattr(arquivo_service, "mapear_status_garantia"):
+            for ativo in ativos_serializados:
+                ativo["garantia_info"] = calcular_status_garantia(None)
+                ativo["garantia_resumo"] = _rotulo_status_garantia("sem_garantia")
+            return ativos_serializados
+
+        garantia_por_ativo = arquivo_service.mapear_status_garantia(ativo_ids, user_id)
+        for ativo in ativos_serializados:
+            garantia_info = garantia_por_ativo.get(ativo["id"], calcular_status_garantia(None))
+            ativo["garantia_info"] = garantia_info
+            ativo["garantia_resumo"] = _rotulo_status_garantia(garantia_info.get("status_garantia"))
+
+        return ativos_serializados
+
     @app.get("/dashboard")
     def dashboard():
         """
@@ -1024,7 +1096,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
             return _json_success(
                 "Ativos carregados com sucesso.",
-                ativos=[_serializar_ativo(ativo) for ativo in ativos],
+                ativos=_enriquecer_ativos_com_status_garantia(ativos, user_id),
             )
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
@@ -1351,6 +1423,10 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             anexos_nota_fiscal = [a for a in anexos if a.get("tipo_documento") == "nota_fiscal"]
             anexos_garantia = [a for a in anexos if a.get("tipo_documento") == "garantia"]
             anexos_complementares = [a for a in anexos if a.get("tipo_documento") == "outro"]
+            anexo_garantia_principal = anexos_garantia[0] if anexos_garantia else None
+            garantia_info = calcular_status_garantia(
+                anexo_garantia_principal.get("data_fim_garantia") if anexo_garantia_principal else None
+            )
 
             # Prioriza documentos realmente vinculados na tabela de anexos.
             # Mantem fallback para os campos legados do ativo, quando existirem.
@@ -1372,6 +1448,9 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 anexos_nota_fiscal=anexos_nota_fiscal,
                 anexos_garantia=anexos_garantia,
                 anexos_complementares=anexos_complementares,
+                garantia_info=garantia_info,
+                garantia_status_label=_rotulo_status_garantia(garantia_info.get("status_garantia")),
+                anexo_garantia_principal=anexo_garantia_principal,
                 show_chrome=True,
             )
         except AtivoNaoEncontrado as erro:
@@ -1399,7 +1478,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         Inclui informações principais e campos específicos conforme o tipo.
 
         Controle de visibilidade por perfil:
-        - Campos técnicos restritos (AnyDesk, TeamViewer, hostname, serial, código interno)
+        - Campos técnicos restritos (AnyDesk, TeamViewer, serial, código interno)
           são retornados apenas se o usuário for admin.
 
         Resposta em caso de sucesso:
@@ -1491,6 +1570,12 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
         """
         tipo_documento = request.form.get("type", "").strip()
         arquivo = request.files.get("file")
+        metadata_garantia = {
+            "data_inicio_garantia": request.form.get("data_inicio_garantia"),
+            "data_fim_garantia": request.form.get("data_fim_garantia"),
+            "prazo_garantia_meses": request.form.get("prazo_garantia_meses"),
+            "observacao_garantia": request.form.get("observacao_garantia"),
+        }
 
         # Primeira linha de defesa: validar presença de arquivo
         if not arquivo or not arquivo.filename:
@@ -1510,7 +1595,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 ativo_id=id_ativo,
                 tipo_documento=tipo_documento,
                 arquivo=arquivo,
-                user_id=user_id
+                user_id=user_id,
+                metadata_garantia=metadata_garantia,
             )
             return _json_success(
                 "Anexo enviado com sucesso.",
@@ -1521,12 +1607,15 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
             return _json_error(str(erro), status=400)
         except ArquivoNaoEncontrado as erro:
             return _json_error(str(erro), status=404)
+        except PermissaoNegada as erro:
+            return _json_error(str(erro), status=403)
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
         except (StorageBackendError, OSError, ValueError, TypeError) as erro:
             return _json_error(str(erro), status=500)
 
     @app.get("/ativos/<id_ativo>/anexos")
+    @app.get("/ativos/<id_ativo>/anexos/json")
     def listar_anexos(id_ativo):
         """
         Lista os anexos de um ativo.
@@ -1541,6 +1630,8 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 "Anexos carregados com sucesso.",
                 anexos=[_serializar_arquivo(arquivo) for arquivo in arquivos]
             )
+        except PermissaoNegada as erro:
+            return _json_error(str(erro), status=403)
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
         except (OSError, ValueError, TypeError, KeyError):
@@ -1581,6 +1672,42 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
 
         except ArquivoNaoEncontrado as erro:
             return _json_error(str(erro), status=404)
+        except PermissaoNegada as erro:
+            return _json_error(str(erro), status=403)
+        except AtivoErro as erro:
+            return _json_error(str(erro), status=400)
+        except (StorageBackendError, OSError, ValueError, TypeError, KeyError) as erro:
+            return _json_error(str(erro), status=500)
+
+    @app.get("/anexos/<int:arquivo_id>/preview")
+    def visualizar_anexo(arquivo_id):
+        """
+        Exibe o anexo inline quando o formato suporta preview.
+        """
+        user_id = _obter_user_id_logado()
+        if user_id is None:
+            return _json_error("Sessão expirada. Faça login novamente.", status=401)
+
+        try:
+            arquivo = arquivo_service.obter_arquivo(arquivo_id, user_id)
+            storage_backend = arquivo_service.storage_backend
+            caminho_relativo = arquivo["caminho_arquivo"]
+
+            if isinstance(storage_backend, S3StorageBackend):
+                url_assinada = storage_backend.get_download_url(caminho_relativo)
+                return redirect(url_assinada)
+
+            arquivo_bytes = storage_backend.load(caminho_relativo)
+            return send_file(
+                arquivo_bytes,
+                as_attachment=False,
+                download_name=arquivo["nome_original"],
+                mimetype=arquivo["mime_type"] or "application/octet-stream"
+            )
+        except ArquivoNaoEncontrado as erro:
+            return _json_error(str(erro), status=404)
+        except PermissaoNegada as erro:
+            return _json_error(str(erro), status=403)
         except AtivoErro as erro:
             return _json_error(str(erro), status=400)
         except (StorageBackendError, OSError, ValueError, TypeError, KeyError) as erro:
@@ -1633,7 +1760,7 @@ def registrar_rotas_ativos(app, *, ativos_service: AtivosService, ativos_arquivo
                 output,
                 fieldnames=[
                     "id", "tipo_ativo", "marca", "modelo", "usuario_responsavel",
-                    "setor", "status", "data_entrada", "data_saida",
+                    "setor", "mac_address", "status", "data_entrada", "data_saida",
                     "nota_fiscal", "garantia"
                 ]
             )

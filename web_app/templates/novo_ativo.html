@@ -146,18 +146,13 @@
                 </div>
             </div>
 
-            <!-- SEÇÃO 5: Valor e Documentação -->
+            <!-- SEÇÃO 5: Valor -->
             <div class="form-section">
-                <h3 class="form-section-title">Valor e documentação</h3>
+                <h3 class="form-section-title">Valor</h3>
 
                 <div class="field-group">
                     <label for="valor">Valor</label>
                     <input type="text" id="valor" name="valor" class="input-control" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off">
-                </div>
-
-                <div class="field-group">
-                    <label for="garantia">Garantia</label>
-                    <input type="text" id="garantia" name="garantia" class="input-control" placeholder="Ex.: 12 meses">
                 </div>
             </div>
 
@@ -179,20 +174,11 @@
                 <div class="field-group"><label for="ram">RAM</label><input type="text" id="ram" name="ram" class="input-control"></div>
                 <div class="field-group"><label for="armazenamento">Armazenamento</label><input type="text" id="armazenamento" name="armazenamento" class="input-control"></div>
                 <div class="field-group"><label for="sistema_operacional">Sistema operacional</label><input type="text" id="sistema_operacional" name="sistema_operacional" class="input-control"></div>
-                <!-- Hostname: visível apenas para Desktop -->
-                <div class="field-group" data-desktop-only hidden>
-                    <label for="hostname">Hostname</label>
-                    <input type="text" id="hostname" name="hostname" class="input-control">
-                </div>
-                <!-- Nome do equipamento: visível apenas para Notebook -->
-                <div class="field-group" data-notebook-only hidden>
-                    <label for="nome_equipamento">Nome do equipamento</label>
-                    <input type="text" id="nome_equipamento" name="nome_equipamento" class="input-control">
-                </div>
+                <div class="field-group"><label for="mac_address">MAC Address</label><input type="text" id="mac_address" name="mac_address" class="input-control" placeholder="AA:BB:CC:DD:EE:FF"></div>
                 <div class="field-group"><label for="teamviewer_id">TeamViewer ID</label><input type="text" id="teamviewer_id" name="teamviewer_id" class="input-control"></div>
                 <div class="field-group"><label for="anydesk_id">AnyDesk ID</label><input type="text" id="anydesk_id" name="anydesk_id" class="input-control"></div>
                 <!-- Carregador: visível apenas para Notebook -->
-                <div class="field-group" data-notebook-only hidden>
+                <div class="field-group" data-computador-notebook-only hidden>
                     <label for="carregador">Carregador</label>
                     <input type="text" id="carregador" name="carregador" class="input-control">
                 </div>
@@ -200,7 +186,6 @@
 
             <!-- Celular -->
             <div id="specs-celular" class="form-section" hidden>
-                <div class="field-group"><label for="imei_1">IMEI</label><input type="text" id="imei_1" name="imei_1" class="input-control" maxlength="15" inputmode="numeric" placeholder="15 dígitos"></div>
                 <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" inputmode="tel" maxlength="19" autocomplete="off" placeholder="(11) 98765-4321"></div>
                 <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
                 <div class="field-group"><label for="armazenamento_celular">Armazenamento</label><input type="text" id="armazenamento_celular" name="armazenamento" class="input-control"></div>
@@ -278,6 +263,25 @@
             </select>
         </div>
 
+        <div id="garantia-metadata-fields" class="form-grid" hidden>
+            <div class="field-group">
+                <label for="data_inicio_garantia">Início da garantia</label>
+                <input type="date" id="data_inicio_garantia" class="input-control">
+            </div>
+            <div class="field-group">
+                <label for="data_fim_garantia">Fim da garantia</label>
+                <input type="date" id="data_fim_garantia" class="input-control">
+            </div>
+            <div class="field-group">
+                <label for="prazo_garantia_meses">Prazo em meses</label>
+                <input type="number" id="prazo_garantia_meses" class="input-control" min="0" step="1">
+            </div>
+            <div class="field-group" style="grid-column: 1 / -1;">
+                <label for="observacao_garantia">Observação da garantia</label>
+                <input type="text" id="observacao_garantia" class="input-control" maxlength="255">
+            </div>
+        </div>
+
         <div id="attachment-list" class="table-wrapper"></div>
     </div>
 </section>
@@ -293,6 +297,11 @@
     const attachmentFileInput = document.getElementById("attachment-file");
     const attachmentTypeSelect = document.getElementById("attachment-type");
     const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
+    const garantiaMetadataFields = document.getElementById("garantia-metadata-fields");
+    const dataInicioGarantiaInput = document.getElementById("data_inicio_garantia");
+    const dataFimGarantiaInput = document.getElementById("data_fim_garantia");
+    const prazoGarantiaMesesInput = document.getElementById("prazo_garantia_meses");
+    const observacaoGarantiaInput = document.getElementById("observacao_garantia");
 
     let currentAssetId = null;
 
@@ -310,8 +319,10 @@
     const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
     const attachmentUrlTemplates = {
-        listByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
+        listByAsset: "{{ url_for('listar_anexos', id_ativo='__ASSET_ID__') }}",
+        uploadByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
         downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
+        previewByFile: "{{ url_for('visualizar_anexo', arquivo_id=0) }}",
         deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
     };
 
@@ -319,55 +330,52 @@
         return String(value || "").trim().toLowerCase();
     }
 
-    function syncAliasedSpecFieldsToBody(body) {
-        // MELHORADO (Fase 4.2): Sincroniza campos compartilhados entre tipos
-        // Campos com data-shared-with indicam que devem ser sincronizados com outro tipo
-        // Ex: processador em specs-desktop usa o mesmo name "processador" do specs-notebook
-
-        // Os campos agora estão com mesmo name, então FormData já coleta corretamente
-        // Esta função fica para compatibilidade, mas agora apenas garante que
-        // valores dos campos ativos sejam propagados se houver duplicação
-
-        // Sincronizar campos compartilhados (se existirem)
-        document.querySelectorAll("[data-shared-with]").forEach((input) => {
-            const fieldName = input.getAttribute("name");
-            const sharedWith = input.getAttribute("data-shared-with");
-            const value = String(input.value || "").trim();
-
-            // Se o campo está visível e tem valor, usá-lo no payload
-            const parentSection = input.closest('.form-section');
-            if (parentSection && !parentSection.hidden && value) {
-                body[fieldName] = value;
-            }
-        });
-    }
-
-    function setSpecsVisibility() {
+    /**
+     * Atualiza visibilidade dos blocos de especificações técnicas baseado no tipo de ativo selecionado.
+     *
+     * Comportamento esperado:
+     * - Antes de selecionar tipo: nenhuma especificação aparece
+     * - Após selecionar: apenas bloco correspondente aparece
+     * - Notebook/Desktop: bloco único "specs-computador" com campos condicionais
+     * - Celular, Monitor: blocos próprios
+     * - Mouse/Teclado/Adaptador/Cabo/Carregador/Outro: apenas textarea simples
+     *
+     * Mecanismo:
+     * - Controla atributo HTML hidden (não depende de CSS)
+     * - Desabilita inputs dos blocos ocultos (evita envio de lixo)
+     * - Limpa valores de campos ocultos (garante FormData limpo)
+     * - CSS [hidden] { display: none !important } garante que hidden sempre vence
+     */
+    function atualizarEspecificacoesPorTipo() {
         const rawType = document.getElementById("tipo_ativo").value;
         const normalizedType = normalizeType(rawType);
         const activeGroups = TYPE_GROUPS[normalizedType] || [];
         const showSimple = SIMPLE_TYPES.has(normalizedType);
         const shouldShowAnySpecs = activeGroups.length > 0 || showSimple;
 
-        // Ocultar/mostrar cada bloco de specs principal
+        // 1. Controlar visibilidade dos blocos principais de specs
         ["computador", "celular", "monitor", "simples"].forEach((groupKey) => {
             const group = document.getElementById(`specs-${groupKey}`);
             if (!group) return;
+
             const shouldShow = activeGroups.includes(groupKey) || (groupKey === "simples" && showSimple);
+
+            // Usar hidden do HTML (não depende de CSS)
             group.hidden = !shouldShow;
+
+            // Desabilitar campos ocultos — impede envio via FormData
             group.querySelectorAll("input, textarea, select").forEach((field) => {
                 field.disabled = !shouldShow;
+                // Limpar valores para garantir que FormData não inclua lixo
                 if (!shouldShow) field.value = "";
             });
         });
 
-        // Controle de campos condicionais dentro de specs-computador
-        // Campos com data-notebook-only são visíveis apenas para Notebook
-        // Campos com data-desktop-only são visíveis apenas para Desktop
+        // 2. Controlar campos condicionais dentro de specs-computador
+        // Apenas notebook mantém campo de carregador.
         const isNotebook = normalizedType === "notebook";
-        const isDesktop = normalizedType === "desktop";
 
-        document.querySelectorAll("[data-notebook-only]").forEach((el) => {
+        document.querySelectorAll("[data-computador-notebook-only]").forEach((el) => {
             el.hidden = !isNotebook;
             el.querySelectorAll("input, select").forEach((f) => {
                 f.disabled = !isNotebook;
@@ -375,24 +383,21 @@
             });
         });
 
-        document.querySelectorAll("[data-desktop-only]").forEach((el) => {
-            el.hidden = !isDesktop;
-            el.querySelectorAll("input, select").forEach((f) => {
-                f.disabled = !isDesktop;
-                if (!isDesktop) f.value = "";
-            });
-        });
-
-        // Mostrar/ocultar o título de especificações técnicas conforme necessário
+        // 3. Mostrar/ocultar título "Especificações técnicas por tipo de ativo"
         const specsTitle = document.querySelector('.form-grid > .form-block-title');
         if (specsTitle) {
             specsTitle.hidden = !shouldShowAnySpecs;
         }
     }
 
-    function pruneDeprecatedSpecsByType(body) {
-        // Nenhuma remoção necessária — o backend suporta todos os campos esperados por tipo.
-        // Os campos condicionais são controlados pela visibilidade e desabilitação no JS.
+    function atualizarCamposGarantiaPorTipoDocumento() {
+        const exibir = attachmentTypeSelect.value === "garantia";
+        garantiaMetadataFields.hidden = !exibir;
+
+        [dataInicioGarantiaInput, dataFimGarantiaInput, prazoGarantiaMesesInput, observacaoGarantiaInput].forEach((field) => {
+            field.disabled = !exibir;
+            if (!exibir) field.value = "";
+        });
     }
 
     function showMessage(type, message) {
@@ -413,6 +418,13 @@
 
     function normalizeIdentifier(value) {
         return String(value || "").trim().toUpperCase();
+    }
+
+    function normalizarMacAddressParaBackend(value) {
+        const digits = String(value || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
+        if (!digits) return "";
+        if (digits.length !== 12) return null;
+        return digits.match(/.{1,2}/g).join(":");
     }
 
     function isValidPhoneDigits(value) {
@@ -482,6 +494,10 @@
             return "Número da linha inválido. Informe 10 ou 11 dígitos (ou 12/13 com DDI 55).";
         }
 
+        if (String(body.mac_address || "").trim() && normalizarMacAddressParaBackend(body.mac_address) === null) {
+            return "MAC Address inválido. Use AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF ou AABBCCDDEEFF.";
+        }
+
         // IMEI é validado no backend; frontend mantém checagens essenciais de UX.
 
         if (body.email_responsavel && !emailRegex.test(body.email_responsavel)) {
@@ -512,6 +528,7 @@
         body.serial = normalizeIdentifier(body.serial);
         body.email_responsavel = String(body.email_responsavel || "").trim().toLowerCase();
         body.numero_linha = onlyDigits(body.numero_linha);
+        body.mac_address = normalizarMacAddressParaBackend(body.mac_address) ?? body.mac_address;
         // IMEI removido em Fase 3 Round 3 — não mais normalizado no payload
 
         const normalizedMoney = normalizeMoneyToBackend(body.valor);
@@ -527,7 +544,7 @@
                 ["RAM", data.ram],
                 ["Armazenamento", data.armazenamento],
                 ["Sistema operacional", data.sistema_operacional],
-                ["Nome do equipamento", data.nome_equipamento],
+                ["MAC Address", data.mac_address],
                 ["Carregador", data.carregador],
                 ["TeamViewer ID", data.teamviewer_id],
                 ["AnyDesk ID", data.anydesk_id],
@@ -537,12 +554,11 @@
                 ["RAM", data.ram],
                 ["Armazenamento", data.armazenamento],
                 ["Sistema operacional", data.sistema_operacional],
-                ["Hostname", data.hostname],
+                ["MAC Address", data.mac_address],
                 ["TeamViewer ID", data.teamviewer_id],
                 ["AnyDesk ID", data.anydesk_id],
             ],
             celular: [
-                ["IMEI", data.imei_1],
                 ["Número da linha", data.numero_linha],
                 ["Operadora", data.operadora],
                 ["Armazenamento", data.armazenamento],
@@ -639,8 +655,18 @@
         return attachmentUrlTemplates.listByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
     }
 
+    function buildAssetAttachmentsUploadUrl(assetId) {
+        const value = String(assetId ?? "").trim();
+        if (!value) return null;
+        return attachmentUrlTemplates.uploadByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
+    }
+
     function buildAttachmentDownloadUrl(attachmentId) {
         return buildIntRoute(attachmentUrlTemplates.downloadByFile, attachmentId);
+    }
+
+    function buildAttachmentPreviewUrl(attachmentId) {
+        return buildIntRoute(attachmentUrlTemplates.previewByFile, attachmentId);
     }
 
     function buildAttachmentDeleteUrl(attachmentId) {
@@ -690,6 +716,7 @@
                     <tr>
                         <th>Tipo</th>
                         <th>Nome</th>
+                        <th>Status</th>
                         <th>Tamanho</th>
                         <th>Ações</th>
                     </tr>
@@ -699,6 +726,7 @@
                         <tr>
                             <td>${att.tipo_documento}</td>
                             <td>${att.nome_original}</td>
+                            <td>${att.tipo_documento === "garantia" ? (att.garantia_info?.status_garantia || "sem_garantia") : "-"}</td>
                             <td>${(att.tamanho_bytes / 1024).toFixed(2)} KB</td>
                             <td>
                                 <button type="button" class="btn btn-secondary btn-mini" data-download="${att.id}">Baixar</button>
@@ -735,15 +763,11 @@
         try {
             // Coleta dados do formulário sem enviar ainda.
             const body = Object.fromEntries(new FormData(createAssetForm).entries());
-            syncAliasedSpecFieldsToBody(body);
 
             // Normaliza campos (compatibilidade com backend).
             body.tipo = body.tipo_ativo || body.tipo;
             body.departamento = body.setor || body.departamento;
             body.nota_fiscal = body.nota_fiscal || null;
-
-            // Remove campos descontinuados por tipo para evitar serialização residual.
-            pruneDeprecatedSpecsByType(body);
 
             normalizePayloadForBackend(body);
 
@@ -805,11 +829,9 @@
                 { label: "Data de Entrada", value: data.data_entrada },
                 { label: "Data de Saída", value: data.data_saida }
             ],
-            "Valor e Documentação": [
+            "Valor": [
                 { label: "Data de Compra", value: data.data_compra },
-                { label: "Valor", value: data.valor ? formatMoneyForDisplay(data.valor) : "" },
-                { label: "Garantia", value: data.garantia },
-                { label: "Nota Fiscal", value: data.nota_fiscal }
+                { label: "Valor", value: data.valor ? formatMoneyForDisplay(data.valor) : "" }
             ],
             "Detalhes Técnicos": [
                 { label: "Observações", value: data.observacoes },
@@ -974,12 +996,18 @@
         const file = event.target.files[0];
         if (!file || !currentAssetId) return;
 
-        const uploadUrl = buildAssetAttachmentsUrl(currentAssetId);
+        const uploadUrl = buildAssetAttachmentsUploadUrl(currentAssetId);
         if (!uploadUrl) return;
 
         const formData = new FormData();
         formData.append("file", file);
         formData.append("type", attachmentTypeSelect.value);
+        if (attachmentTypeSelect.value === "garantia") {
+            formData.append("data_inicio_garantia", dataInicioGarantiaInput.value);
+            formData.append("data_fim_garantia", dataFimGarantiaInput.value);
+            formData.append("prazo_garantia_meses", prazoGarantiaMesesInput.value);
+            formData.append("observacao_garantia", observacaoGarantiaInput.value);
+        }
 
         try {
             attachmentUploadTrigger.classList.add("is-loading");
@@ -1012,8 +1040,12 @@
         }
     });
 
-    document.getElementById("tipo_ativo").addEventListener("change", setSpecsVisibility);
-    setupInputMasks();
-    setSpecsVisibility();
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("tipo_ativo").addEventListener("change", atualizarEspecificacoesPorTipo);
+        attachmentTypeSelect.addEventListener("change", atualizarCamposGarantiaPorTipoDocumento);
+        setupInputMasks();
+        atualizarEspecificacoesPorTipo();
+        atualizarCamposGarantiaPorTipoDocumento();
+    });
 </script>
 {% endblock %}

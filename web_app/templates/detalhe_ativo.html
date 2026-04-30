@@ -85,6 +85,31 @@
         </article>
 
         <article class="detail-card">
+            <h4 class="detail-card-title">Identificação técnica</h4>
+            <div class="detail-grid">
+                <div class="field-group">
+                    <label class="field-label">Serial</label>
+                    <div class="field-display detail-value">{{ ativo.serial or '-' }}</div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">MAC Address</label>
+                    <div class="field-display detail-value">{{ ativo.mac_address or '-' }}</div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">TeamViewer ID</label>
+                    <div class="field-display detail-value">{{ ativo.teamviewer_id or '-' }}</div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">AnyDesk ID</label>
+                    <div class="field-display detail-value">{{ ativo.anydesk_id or '-' }}</div>
+                </div>
+            </div>
+        </article>
+
+        <article class="detail-card">
             <h4 class="detail-card-title">Ciclo e vinculos documentais</h4>
             <div class="detail-grid">
                 <div class="field-group">
@@ -103,9 +128,55 @@
                 </div>
 
                 <div class="field-group">
-                    <label class="field-label">Garantia vinculada</label>
-                    <div class="field-display detail-value">{{ ativo.garantia or '-' }}</div>
+                    <label class="field-label">Status da garantia</label>
+                    <div class="field-display detail-value">{{ garantia_status_label }}</div>
                 </div>
+            </div>
+        </article>
+
+        <article class="detail-card">
+            <h4 class="detail-card-title">Garantia</h4>
+            <div class="detail-grid">
+                {% if anexo_garantia_principal %}
+                <div class="field-group">
+                    <label class="field-label">Arquivo</label>
+                    <div class="field-display detail-value">{{ anexo_garantia_principal.nome_original }}</div>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Início</label>
+                    <div class="field-display detail-value">{{ anexo_garantia_principal.data_inicio_garantia or '-' }}</div>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Fim</label>
+                    <div class="field-display detail-value">{{ anexo_garantia_principal.data_fim_garantia or '-' }}</div>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Dias restantes</label>
+                    <div class="field-display detail-value">{{ garantia_info.dias_restantes if garantia_info.dias_restantes is not none else '-' }}</div>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Status</label>
+                    <div class="field-display detail-value">{{ garantia_status_label }}</div>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Ações</label>
+                    <div class="field-display detail-value" style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <a class="btn btn-secondary btn-mini" href="{{ url_for('visualizar_anexo', arquivo_id=anexo_garantia_principal.id) }}" target="_blank" rel="noopener">Visualizar</a>
+                        <a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=anexo_garantia_principal.id) }}">Baixar</a>
+                    </div>
+                </div>
+                {% if anexo_garantia_principal.observacao_garantia %}
+                <div class="field-group" style="grid-column: 1 / -1;">
+                    <label class="field-label">Observação</label>
+                    <div class="field-display detail-value">{{ anexo_garantia_principal.observacao_garantia }}</div>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="field-group" style="grid-column: 1 / -1;">
+                    <label class="field-label">Garantia</label>
+                    <div class="field-display detail-value">Nenhuma garantia cadastrada</div>
+                </div>
+                {% endif %}
             </div>
         </article>
     </div>
@@ -148,7 +219,10 @@
                         <td>Garantia</td>
                         <td>{{ arquivo.nome_original }}</td>
                         <td>{{ "%.1f KB" | format(arquivo.tamanho_bytes / 1024) }}</td>
-                        <td><a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a></td>
+                        <td style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <a class="btn btn-secondary btn-mini" href="{{ url_for('visualizar_anexo', arquivo_id=arquivo.id) }}" target="_blank" rel="noopener">Visualizar</a>
+                            <a class="btn btn-secondary btn-mini" href="{{ url_for('download_anexo', arquivo_id=arquivo.id) }}">Baixar</a>
+                        </td>
                     </tr>
                     {% endfor %}
 

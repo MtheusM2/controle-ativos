@@ -9,7 +9,7 @@ import pytest
 import services.ativos_service as ativos_service_module
 from models.ativos import Ativo
 from services.ativos_service import AtivosService
-from utils.validators import validar_ativo
+from utils.validators import normalizar_mac_address, validar_ativo, validar_mac_address
 
 
 # Monta um ativo-base válido para reaproveitar nas variações de teste.
@@ -54,6 +54,7 @@ class FakeCursor:
         self.statements = []
         self.rowcount = 0
         self.fetchone_queue = []
+        self.fetchall_queue = []
 
     def execute(self, sql, params=None):
         self.statements.append((sql, params))
@@ -66,6 +67,8 @@ class FakeCursor:
         return None
 
     def fetchall(self):
+        if self.fetchall_queue:
+            return self.fetchall_queue.pop(0)
         return []
 
 
@@ -133,6 +136,7 @@ def _row_db_from_ativo(ativo: Ativo, **overrides) -> dict:
         "teamviewer_id": ativo.teamviewer_id,
         "anydesk_id": ativo.anydesk_id,
         "nome_equipamento": ativo.nome_equipamento,
+        "mac_address": ativo.mac_address,
         "hostname": ativo.hostname,
         "imei_1": ativo.imei_1,
         "imei_2": ativo.imei_2,
@@ -276,10 +280,42 @@ def test_padronizar_ativo_monitor_limpa_campos_legados_de_spec():
     ativo_norm = getattr(ativos_service_module, "_padronizar_ativo")(ativo)
 
     assert ativo_norm.polegadas == "27"
-    assert ativo_norm.resolucao is None
+    assert ativo_norm.resolucao == "1920x1080"
     assert ativo_norm.tipo_painel is None
-    assert ativo_norm.entrada_video is None
+    assert ativo_norm.entrada_video == "HDMI"
     assert ativo_norm.fonte_ou_cabo is None
+
+
+@pytest.mark.parametrize(
+    ("valor", "esperado"),
+    [
+        ("AA:BB:CC:DD:EE:FF", "AA:BB:CC:DD:EE:FF"),
+        ("AA-BB-CC-DD-EE-FF", "AA:BB:CC:DD:EE:FF"),
+        ("AABBCCDDEEFF", "AA:BB:CC:DD:EE:FF"),
+    ],
+)
+def test_validar_mac_address_aceita_formatos_validos(valor, esperado):
+    ok, _mensagem = validar_mac_address(valor)
+    assert ok is True
+    assert normalizar_mac_address(valor) == esperado
+
+
+def test_validar_mac_address_rejeita_valor_invalido():
+    ok, mensagem = validar_mac_address("AA:BB:CC:DD:EE")
+    assert ok is False
+    assert "12 caracteres hexadecimais" in mensagem
+
+
+def test_padronizar_ativo_normaliza_mac_address():
+    ativo = make_valid_ativo(
+        tipo="Desktop",
+        tipo_ativo="Desktop",
+        mac_address="aa-bb-cc-dd-ee-ff",
+    )
+
+    ativo_norm = getattr(ativos_service_module, "_padronizar_ativo")(ativo)
+
+    assert ativo_norm.mac_address == "AA:BB:CC:DD:EE:FF"
 
 
 def test_validar_ativo_rejeita_serial_com_caracter_invalido():
@@ -341,7 +377,50 @@ def test_criar_ativo_aceita_payload_legado_com_tipo_e_departamento(monkeypatch):
     # Garante que o INSERT continua com a mesma quantidade de colunas e valores.
     insert_statements = [item for item in cursor.statements if "INSERT INTO ativos" in item[0]]
     assert insert_statements
-    assert len(insert_statements[0][1]) == 45
+    assert len(insert_statements[0][1]) == 46
+
+
+def test_listar_ativos_tolera_schema_legado_sem_mac_address(monkeypatch):
+    """
+    Leitura não deve quebrar quando o código novo for implantado antes da migration opcional.
+    """
+    service = AtivosService()
+    cursor = FakeCursor()
+    cursor.fetchall_queue = [
+        [{"COLUMN_NAME": "id"}, {"COLUMN_NAME": "tipo"}, {"COLUMN_NAME": "marca"}, {"COLUMN_NAME": "modelo"},
+         {"COLUMN_NAME": "usuario_responsavel"}, {"COLUMN_NAME": "departamento"}, {"COLUMN_NAME": "status"},
+         {"COLUMN_NAME": "data_entrada"}, {"COLUMN_NAME": "criado_por"}],
+        [{
+            "id": "OPU-000001",
+            "tipo": "Notebook",
+            "marca": "Dell",
+            "modelo": "XPS",
+            "usuario_responsavel": None,
+            "departamento": "T.I",
+            "status": "Disponível",
+            "data_entrada": "2026-04-30",
+            "data_saida": None,
+            "data_compra": None,
+            "valor": None,
+            "mac_address": None,
+            "criado_por": 1,
+        }],
+    ]
+
+    monkeypatch.setattr(
+        service,
+        "_obter_contexto_acesso",
+        lambda _user_id: {"empresa_id": 1, "perfil": "usuario"},
+    )
+    monkeypatch.setattr(ativos_service_module, "cursor_mysql", lambda dictionary=True: FakeCursorContext(cursor))
+
+    ativos = service.listar_ativos(user_id=1)
+
+    assert len(ativos) == 1
+    assert ativos[0].id_ativo == "OPU-000001"
+    assert ativos[0].mac_address is None
+    select_sql = next(sql for sql, _params in cursor.statements if "FROM ativos" in sql)
+    assert "NULL AS mac_address" in select_sql
 
 
 @pytest.mark.parametrize(

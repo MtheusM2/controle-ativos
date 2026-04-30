@@ -45,6 +45,7 @@ class Ativo:
         teamviewer_id=None,
         anydesk_id=None,
         nome_equipamento=None,
+        mac_address=None,
         hostname=None,
         imei_1=None,
         imei_2=None,
@@ -154,6 +155,7 @@ class Ativo:
         self.teamviewer_id = teamviewer_id
         self.anydesk_id = anydesk_id
         self.nome_equipamento = nome_equipamento
+        self.mac_address = mac_address
         self.hostname = hostname
         self.imei_1 = imei_1
         self.imei_2 = imei_2
@@ -204,6 +206,7 @@ class Ativo:
             "teamviewer_id": self.teamviewer_id or "",
             "anydesk_id": self.anydesk_id or "",
             "nome_equipamento": self.nome_equipamento or "",
+            "mac_address": self.mac_address or "",
             "hostname": self.hostname or "",
             "imei_1": self.imei_1 or "",
             "imei_2": self.imei_2 or "",

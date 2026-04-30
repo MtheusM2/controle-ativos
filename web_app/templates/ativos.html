@@ -281,13 +281,6 @@
 <script>
     const assetTableBody = document.getElementById("asset-table-body");
     const assetsFeedback = document.getElementById("assets-feedback");
-    // Removido em Fase 3 Round 2: attachment modal desativado
-    // const attachmentModal = document.getElementById("attachment-modal");
-    // const attachmentList = document.getElementById("attachment-list");
-    // const attachmentFileInput = document.getElementById("attachment-file");
-    // const attachmentTypeSelect = document.getElementById("attachment-type");
-    // const attachmentUploadTrigger = document.getElementById("attachment-upload-trigger");
-
     let currentFilters = {};
 
     // Flag de rollout seguro: mantém base técnica disponível sem ativar a UX no cabeçalho.
@@ -316,17 +309,12 @@
         data_saida: { label: "Data saída", quickFilter: false }
     };
 
-    // let currentAttachmentAssetId = null;
-
     // Usa placeholder textual para preservar IDs de ativo como string (ex.: 001, A-001).
     const ASSET_URL_PLACEHOLDER = "__ASSET_ID__";
     const INT_URL_PLACEHOLDER = 0;
-    // Removido em Fase 3 Round 2: attachment modal desativado
-    // const attachmentUrlTemplates = {
-    //     listByAsset: "{{ url_for('upload_anexo', id_ativo='__ASSET_ID__') }}",
-    //     downloadByFile: "{{ url_for('download_anexo', arquivo_id=0) }}",
-    //     deleteByFile: "{{ url_for('remover_anexo', arquivo_id=0) }}"
-    // };
+    const attachmentUrlTemplates = {
+        listByAsset: "{{ url_for('listar_anexos', id_ativo='__ASSET_ID__') }}",
+    };
 
     function showMessage(type, message) {
         assetsFeedback.hidden = false;
@@ -337,18 +325,6 @@
         assetsFeedback.hidden = true;
         assetsFeedback.innerHTML = "";
     }
-
-    // Removido em Fase 3 Round 2: attachment modal desativado
-    // function setAttachmentLoading(message = "Carregando anexos...") {
-    //     attachmentList.innerHTML = `<p>${message}</p>`;
-    // }
-    //
-    // function resetAttachmentModalState() {
-    //     currentAttachmentAssetId = null;
-    //     attachmentFileInput.value = "";
-    //     attachmentTypeSelect.value = "nota_fiscal";
-    //     setAttachmentLoading("Selecione um ativo para visualizar anexos.");
-    // }
 
     function parsePositiveIntId(rawValue) {
         const value = String(rawValue ?? "").trim();
@@ -370,15 +346,6 @@
         if (!value) return null;
         return attachmentUrlTemplates.listByAsset.replace(ASSET_URL_PLACEHOLDER, encodeURIComponent(value));
     }
-
-    // Removido em Fase 3 Round 2: attachment modal desativado
-    // function buildAttachmentDownloadUrl(attachmentId) {
-    //     return buildIntRoute(attachmentUrlTemplates.downloadByFile, attachmentId);
-    // }
-    //
-    // function buildAttachmentDeleteUrl(attachmentId) {
-    //     return buildIntRoute(attachmentUrlTemplates.deleteByFile, attachmentId);
-    // }
 
     async function parseJsonSafely(response) {
         const contentType = response.headers.get("content-type") || "";
@@ -538,6 +505,17 @@
         return `<span class="status-badge ${cssClass}">${status || ""}</span>`;
     }
 
+    function renderGarantiaBadge(garantiaResumo, garantiaInfo) {
+        const statusGarantia = garantiaInfo?.status_garantia || "sem_garantia";
+        const cssMap = {
+            ativa: "badge badge-ok",
+            vencendo_em_breve: "badge badge-warning",
+            vencida: "badge badge-danger",
+            sem_garantia: "badge",
+        };
+        return `<span class="${cssMap[statusGarantia] || "badge"}">${escapeHtml(garantiaResumo || "Sem garantia")}</span>`;
+    }
+
     // Sanitiza texto simples para exibição segura como texto em células da tabela.
     function escapeHtml(text) {
         const div = document.createElement("div");
@@ -649,9 +627,10 @@
                     <!-- Nova rodada: botão Visualizar abre modal resumido em vez de página completa -->
                     <td class="action-cell">
                         <div class="row-actions">
+                            ${renderGarantiaBadge(asset.garantia_resumo, asset.garantia_info)}
                             <button type="button" class="btn btn-secondary btn-mini view-asset-btn" data-asset-id="${asset.id}">Visualizar</button>
                             <a href="${editUrl}" class="btn btn-secondary btn-mini">Editar</a>
-                            <button type="button" class="btn-icon open-attachment-modal-btn" title="Ver anexos" data-asset-id="${asset.id}">📎</button>
+                            <button type="button" class="btn-icon open-attachment-modal-btn" title="Ver anexos" data-asset-id="${asset.id}">Anexos</button>
                         </div>
                     </td>
                 </tr>
@@ -1147,9 +1126,16 @@
 
             let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
             attachments.forEach((att) => {
-                const downloadUrl = "{{ url_for('download_anexo', arquivo_id=0) }}".replace("/0", `/${att.id}`);
                 const tipoLabel = tiposDocumentoLabel[att.tipo_documento] || "Documento";
                 const tamanhoKb = (att.tamanho_bytes / 1024).toFixed(2);
+                const garantiaInfo = att.garantia_info || {};
+                const statusGarantia = garantiaInfo.status_garantia || "sem_garantia";
+                const statusGarantiaLabel = {
+                    ativa: "Ativa",
+                    vencendo_em_breve: "Vencendo em breve",
+                    vencida: "Vencida",
+                    sem_garantia: "Sem garantia",
+                }[statusGarantia] || "Sem garantia";
 
                 html += `<div style="border: 1px solid var(--line-soft); border-radius: var(--radius-md); padding: 12px; background: rgba(255,255,255,0.02);">`;
                 html += `<div style="margin-bottom: 8px; font-weight: 600;">${escapeHtml(att.nome_original)}</div>`;
@@ -1160,17 +1146,34 @@
                 }
                 html += `</div>`;
 
+                if (att.tipo_documento === "garantia") {
+                    html += `<div style="display:grid; gap:4px; margin-bottom: 12px; font-size: 0.85rem;">`;
+                    html += `<div><strong>Status:</strong> ${statusGarantiaLabel}</div>`;
+                    html += `<div><strong>Início:</strong> ${att.data_inicio_garantia || "-"}</div>`;
+                    html += `<div><strong>Fim:</strong> ${att.data_fim_garantia || "-"}</div>`;
+                    html += `<div><strong>Dias restantes:</strong> ${garantiaInfo.dias_restantes ?? "-"}</div>`;
+                    if (att.observacao_garantia) {
+                        html += `<div><strong>Observação:</strong> ${escapeHtml(att.observacao_garantia)}</div>`;
+                    }
+                    html += `</div>`;
+                }
+
                 // Preview para imagens
-                if (att.mime_type && att.mime_type.startsWith("image/")) {
-                    html += `<img src="${downloadUrl}" style="max-width: 100%; max-height: 300px; border-radius: 6px; margin-bottom: 8px;">`;
+                if (att.mime_type && att.mime_type.startsWith("image/") && att.preview_url) {
+                    html += `<img src="${att.preview_url}" style="max-width: 100%; max-height: 300px; border-radius: 6px; margin-bottom: 8px;">`;
                 }
                 // Preview para PDF
-                else if (att.mime_type === "application/pdf") {
-                    html += `<iframe src="${downloadUrl}" style="width: 100%; height: 350px; border: none; border-radius: 6px; margin-bottom: 8px;"></iframe>`;
+                else if (att.mime_type === "application/pdf" && att.preview_url) {
+                    html += `<iframe src="${att.preview_url}" style="width: 100%; height: 350px; border: none; border-radius: 6px; margin-bottom: 8px;"></iframe>`;
                 }
 
                 // Botão de download
-                html += `<a href="${downloadUrl}" class="btn btn-secondary btn-mini" download="${att.nome_original}">📥 Baixar</a>`;
+                html += `<div style="display:flex; gap:8px; flex-wrap:wrap;">`;
+                if (att.preview_suportado && att.preview_url) {
+                    html += `<a href="${att.preview_url}" target="_blank" rel="noopener" class="btn btn-secondary btn-mini">Visualizar</a>`;
+                }
+                html += `<a href="${att.download_url}" class="btn btn-secondary btn-mini">Baixar</a>`;
+                html += `</div>`;
                 html += `</div>`;
             });
             html += '</div>';
