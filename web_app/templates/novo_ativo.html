@@ -173,40 +173,45 @@
 
             <div class="form-block-title" hidden>Especificações técnicas por tipo de ativo</div>
 
-            <!-- Notebook: campos de especificação técnica -->
-            <div id="specs-notebook" class="form-section" hidden style="margin-top: 0;">
+            <!-- Notebook e Desktop: bloco unificado com campos condicionais -->
+            <div id="specs-computador" class="form-section" hidden style="margin-top: 0;">
                 <div class="field-group"><label for="processador">Processador</label><input type="text" id="processador" name="processador" class="input-control"></div>
                 <div class="field-group"><label for="ram">RAM</label><input type="text" id="ram" name="ram" class="input-control"></div>
                 <div class="field-group"><label for="armazenamento">Armazenamento</label><input type="text" id="armazenamento" name="armazenamento" class="input-control"></div>
                 <div class="field-group"><label for="sistema_operacional">Sistema operacional</label><input type="text" id="sistema_operacional" name="sistema_operacional" class="input-control"></div>
-                <div class="field-group"><label for="carregador">Carregador</label><input type="text" id="carregador" name="carregador" class="input-control"></div>
+                <!-- Hostname: visível apenas para Desktop -->
+                <div class="field-group" data-desktop-only hidden>
+                    <label for="hostname">Hostname</label>
+                    <input type="text" id="hostname" name="hostname" class="input-control">
+                </div>
+                <!-- Nome do equipamento: visível apenas para Notebook -->
+                <div class="field-group" data-notebook-only hidden>
+                    <label for="nome_equipamento">Nome do equipamento</label>
+                    <input type="text" id="nome_equipamento" name="nome_equipamento" class="input-control">
+                </div>
                 <div class="field-group"><label for="teamviewer_id">TeamViewer ID</label><input type="text" id="teamviewer_id" name="teamviewer_id" class="input-control"></div>
                 <div class="field-group"><label for="anydesk_id">AnyDesk ID</label><input type="text" id="anydesk_id" name="anydesk_id" class="input-control"></div>
-                <div class="field-group"><label for="nome_equipamento">Nome do equipamento</label><input type="text" id="nome_equipamento" name="nome_equipamento" class="input-control"></div>
+                <!-- Carregador: visível apenas para Notebook -->
+                <div class="field-group" data-notebook-only hidden>
+                    <label for="carregador">Carregador</label>
+                    <input type="text" id="carregador" name="carregador" class="input-control">
+                </div>
             </div>
 
-            <!-- Desktop: campos de especificação técnica (fields divididos por tipo para melhor UX, mas mesmo backend) -->
-            <div id="specs-desktop" class="form-section" hidden>
-                <div class="field-group"><label>Processador</label><input type="text" name="processador" class="input-control" data-shared-with="notebook"></div>
-                <div class="field-group"><label>RAM</label><input type="text" name="ram" class="input-control" data-shared-with="notebook"></div>
-                <div class="field-group"><label>Armazenamento</label><input type="text" name="armazenamento" class="input-control" data-shared-with="notebook"></div>
-                <div class="field-group"><label>Sistema operacional</label><input type="text" name="sistema_operacional" class="input-control" data-shared-with="notebook"></div>
-                <div class="field-group"><label for="hostname">Hostname / Nome equipamento</label><input type="text" id="hostname" name="hostname" class="input-control"></div>
-                <div class="field-group"><label>TeamViewer ID</label><input type="text" name="teamviewer_id" class="input-control" data-shared-with="notebook"></div>
-                <div class="field-group"><label>AnyDesk ID</label><input type="text" name="anydesk_id" class="input-control" data-shared-with="notebook"></div>
-            </div>
-
-            <!-- Celular: campos simplificados (removido IMEI em Fase 3 Round 3) -->
+            <!-- Celular -->
             <div id="specs-celular" class="form-section" hidden>
+                <div class="field-group"><label for="imei_1">IMEI</label><input type="text" id="imei_1" name="imei_1" class="input-control" maxlength="15" inputmode="numeric" placeholder="15 dígitos"></div>
                 <div class="field-group"><label for="numero_linha">Número da linha</label><input type="text" id="numero_linha" name="numero_linha" class="input-control" inputmode="tel" maxlength="19" autocomplete="off" placeholder="(11) 98765-4321"></div>
                 <div class="field-group"><label for="operadora">Operadora</label><input type="text" id="operadora" name="operadora" class="input-control"></div>
+                <div class="field-group"><label for="armazenamento_celular">Armazenamento</label><input type="text" id="armazenamento_celular" name="armazenamento" class="input-control"></div>
                 <div class="field-group"><label for="conta_vinculada">Conta vinculada</label><input type="text" id="conta_vinculada" name="conta_vinculada" class="input-control"></div>
-                <div class="field-group"><label>Armazenamento</label><input type="text" name="armazenamento" class="input-control" data-shared-with="notebook"></div>
+                <div class="field-group"><label for="carregador_celular">Carregador</label><input type="text" id="carregador_celular" name="carregador" class="input-control"></div>
             </div>
 
             <div id="specs-monitor" class="form-section" hidden>
-                <!-- Monitor simplificado: manter apenas medida principal usada no dia a dia. -->
-                <div class="field-group"><label for="polegadas">Polegadas</label><input type="text" id="polegadas" name="polegadas" class="input-control"></div>
+                <div class="field-group"><label for="polegadas">Polegadas</label><input type="text" id="polegadas" name="polegadas" class="input-control" placeholder="Ex: 24"></div>
+                <div class="field-group"><label for="resolucao">Resolução</label><input type="text" id="resolucao" name="resolucao" class="input-control" placeholder="Ex: 1920x1080"></div>
+                <div class="field-group"><label for="entrada_video">Tipo de conexão</label><input type="text" id="entrada_video" name="entrada_video" class="input-control" placeholder="Ex: HDMI, DisplayPort"></div>
             </div>
 
             <div id="specs-simples" class="form-section" hidden>
@@ -292,9 +297,10 @@
     let currentAssetId = null;
 
     // Define grupos de tipo com blocos de especificação reutilizáveis.
+    // Notebook e Desktop compartilham o bloco "computador" com campos condicionais internos
     const TYPE_GROUPS = {
-        notebook: ["notebook"],
-        desktop: ["desktop"],
+        notebook: ["computador"],
+        desktop: ["computador"],
         celular: ["celular"],
         monitor: ["monitor"],
     };
@@ -337,27 +343,43 @@
     }
 
     function setSpecsVisibility() {
-        const normalizedType = normalizeType(document.getElementById("tipo_ativo").value);
+        const rawType = document.getElementById("tipo_ativo").value;
+        const normalizedType = normalizeType(rawType);
         const activeGroups = TYPE_GROUPS[normalizedType] || [];
         const showSimple = SIMPLE_TYPES.has(normalizedType);
-
-        // MELHORADO (Fase 4.2): Determinar se alguma seção de especificações deve ser mostrada
         const shouldShowAnySpecs = activeGroups.length > 0 || showSimple;
 
-        ["notebook", "desktop", "celular", "monitor", "simples"].forEach((groupKey) => {
+        // Ocultar/mostrar cada bloco de specs principal
+        ["computador", "celular", "monitor", "simples"].forEach((groupKey) => {
             const group = document.getElementById(`specs-${groupKey}`);
             if (!group) return;
             const shouldShow = activeGroups.includes(groupKey) || (groupKey === "simples" && showSimple);
             group.hidden = !shouldShow;
-
-            // Desabilita campos de grupos ocultos para evitar envio de lixo técnico.
-            // MELHORADO (Fase 4.2): Sincronizar dados antes de limpar campos ocultos
             group.querySelectorAll("input, textarea, select").forEach((field) => {
                 field.disabled = !shouldShow;
-                // Limpar valor apenas se o grupo está oculto
-                if (!shouldShow) {
-                    field.value = "";
-                }
+                if (!shouldShow) field.value = "";
+            });
+        });
+
+        // Controle de campos condicionais dentro de specs-computador
+        // Campos com data-notebook-only são visíveis apenas para Notebook
+        // Campos com data-desktop-only são visíveis apenas para Desktop
+        const isNotebook = normalizedType === "notebook";
+        const isDesktop = normalizedType === "desktop";
+
+        document.querySelectorAll("[data-notebook-only]").forEach((el) => {
+            el.hidden = !isNotebook;
+            el.querySelectorAll("input, select").forEach((f) => {
+                f.disabled = !isNotebook;
+                if (!isNotebook) f.value = "";
+            });
+        });
+
+        document.querySelectorAll("[data-desktop-only]").forEach((el) => {
+            el.hidden = !isDesktop;
+            el.querySelectorAll("input, select").forEach((f) => {
+                f.disabled = !isDesktop;
+                if (!isDesktop) f.value = "";
             });
         });
 
@@ -366,42 +388,11 @@
         if (specsTitle) {
             specsTitle.hidden = !shouldShowAnySpecs;
         }
-
-        // NOVO (Fase 4.2): Sincronizar campos compartilhados após mudar visibilidade
-        // Se houver campos compartilhados entre types (mesmo name), sincronizá-los
-        const visibleGroup = activeGroups[0] || (showSimple ? 'simples' : null);
-        if (visibleGroup) {
-            const visibleGroupElement = document.getElementById(`specs-${visibleGroup}`);
-            if (visibleGroupElement && !visibleGroupElement.hidden) {
-                // Coletar valores visíveis e aplicá-los a campos ocultos com mesmo name
-                const visibleInputs = visibleGroupElement.querySelectorAll('input, textarea, select');
-                visibleInputs.forEach((visibleField) => {
-                    const fieldName = visibleField.getAttribute('name');
-                    if (!fieldName) return;
-
-                    // Encontrar campos ocultos com mesmo name
-                    document.querySelectorAll(`[name="${fieldName}"]`).forEach((hiddenField) => {
-                        const hiddenGroupKey = hiddenField.closest('.form-section')?.id?.replace('specs-', '');
-                        if (hiddenGroupKey && hiddenGroupKey !== visibleGroup) {
-                            // Sincronizar valor do campo visível para oculto (para futura submissão)
-                            // Mas manter o campo oculto desabilitado
-                            hiddenField.value = visibleField.value;
-                        }
-                    });
-                });
-            }
-        }
     }
 
     function pruneDeprecatedSpecsByType(body) {
-        const normalizedType = normalizeType(body.tipo_ativo || body.tipo);
-
-        // Monitor foi simplificado: mantém apenas polegadas no fluxo atual.
-        if (normalizedType === "monitor") {
-            ["resolucao", "tipo_painel", "entrada_video", "fonte_ou_cabo"].forEach((fieldName) => {
-                delete body[fieldName];
-            });
-        }
+        // Nenhuma remoção necessária — o backend suporta todos os campos esperados por tipo.
+        // Os campos condicionais são controlados pela visibilidade e desabilitação no JS.
     }
 
     function showMessage(type, message) {
@@ -530,21 +521,18 @@
     function collectTypeSpecificSpecificationRows(data) {
         const normalizedType = normalizeType(data.tipo_ativo || data.tipo);
 
-        // MELHORADO (Fase 4.2): Agora os campos compartilhados (processador, ram, etc)
-        // estão unificados no DOM, então usamos os mesmos dados para todos os tipos
         const fieldsByType = {
             notebook: [
                 ["Processador", data.processador],
                 ["RAM", data.ram],
                 ["Armazenamento", data.armazenamento],
                 ["Sistema operacional", data.sistema_operacional],
+                ["Nome do equipamento", data.nome_equipamento],
                 ["Carregador", data.carregador],
                 ["TeamViewer ID", data.teamviewer_id],
                 ["AnyDesk ID", data.anydesk_id],
-                ["Nome do equipamento", data.nome_equipamento],
             ],
             desktop: [
-                // Desktop agora usa os MESMOS campos compartilhados: processador, ram, armazenamento, etc.
                 ["Processador", data.processador],
                 ["RAM", data.ram],
                 ["Armazenamento", data.armazenamento],
@@ -554,14 +542,17 @@
                 ["AnyDesk ID", data.anydesk_id],
             ],
             celular: [
+                ["IMEI", data.imei_1],
                 ["Número da linha", data.numero_linha],
                 ["Operadora", data.operadora],
-                ["Conta vinculada", data.conta_vinculada],
-                // Celular também usa o campo compartilhado "armazenamento"
                 ["Armazenamento", data.armazenamento],
+                ["Conta vinculada", data.conta_vinculada],
+                ["Carregador", data.carregador],
             ],
             monitor: [
                 ["Polegadas", data.polegadas],
+                ["Resolução", data.resolucao],
+                ["Tipo de conexão", data.entrada_video],
             ],
         };
 

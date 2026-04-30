@@ -259,34 +259,22 @@
     </div>
 </div>
 
-<!-- Removido em Fase 3 Round 2: Modal de anexos da listagem — gestão centralizada em detalhe_ativo.html
+<!-- Modal de anexos da listagem — visualizar documentos e previews -->
 <div id="attachment-modal" class="modal" hidden>
-    <div class="modal-content">
+    <div class="modal-content modal-content-medium">
         <div class="modal-header">
-            <h3 id="attachment-modal-title">Anexos do ativo</h3>
+            <div>
+                <h3>Anexos do ativo</h3>
+                <p id="attachment-modal-asset-id" class="filter-modal-desc"></p>
+            </div>
             <button type="button" class="btn btn-close" data-close-modal="attachment-modal">&times;</button>
         </div>
 
-        <div class="modal-body">
-            <div id="attachment-list" class="attachment-list">
-                <p>Carregando anexos...</p>
-            </div>
-        </div>
-
-        <div class="modal-footer attachment-footer">
-            <div class="attachment-toolbar">
-                <label class="btn btn-secondary" for="attachment-file" id="attachment-upload-trigger">Anexar documento</label>
-                <input type="file" id="attachment-file" hidden accept=".pdf,.png,.jpg,.jpeg,.webp">
-                <select id="attachment-type" class="select-control attachment-type-select">
-                    <option value="nota_fiscal">Nota fiscal</option>
-                    <option value="garantia">Garantia</option>
-                    <option value="outro">Documento complementar</option>
-                </select>
-            </div>
+        <div class="modal-body" id="attachment-modal-body">
+            <p>Carregando anexos...</p>
         </div>
     </div>
 </div>
--->
 {% endblock %}
 
 {% block scripts %}
@@ -663,7 +651,7 @@
                         <div class="row-actions">
                             <button type="button" class="btn btn-secondary btn-mini view-asset-btn" data-asset-id="${asset.id}">Visualizar</button>
                             <a href="${editUrl}" class="btn btn-secondary btn-mini">Editar</a>
-                            <a href="${detailUrl}" class="btn-icon" title="Ver documentos e detalhes">📋</a>
+                            <button type="button" class="btn-icon open-attachment-modal-btn" title="Ver anexos" data-asset-id="${asset.id}">📎</button>
                         </div>
                     </td>
                 </tr>
@@ -1122,44 +1110,107 @@
         });
     });
 
-    // Removido em Fase 3 Round 2: attachment modal desativado
-    // async function loadAttachments(assetId) { ... }
+    // ========== MODAL DE ANEXOS ==========
+    // Restaurado na Fase 4.3: visualizar documentos de um ativo diretamente da listagem
 
-    // Removido em Fase 3 Round 2: Excluir e Documentos saem da listagem
-    // assetTableBody.addEventListener("click", async (event) => {
-    //     const deleteButton = event.target.closest("[data-delete]");
-    //     const attachmentsButton = event.target.closest("[data-attachments]");
-    //
-    //     if (deleteButton) {
-    //         const assetId = deleteButton.getAttribute("data-delete");
-    //         if (!window.confirm("Confirma a exclusão deste ativo?")) return;
-    //
-    //         const { response, payload } = await requestJson(`{{ url_for('listar_ativos') }}/${encodeURIComponent(assetId)}`, { method: "DELETE" });
-    //         if (!response.ok) {
-    //             showMessage("danger", payload?.erro || "Não foi possível excluir o ativo.");
-    //             return;
-    //         }
-    //
-    //         showMessage("success", payload?.mensagem || "Ativo removido com sucesso.");
-    //         await loadAssets();
-    //         return;
-    //     }
-    //
-    //     if (attachmentsButton) {
-    //         currentAttachmentAssetId = attachmentsButton.getAttribute("data-attachments");
-    //         document.getElementById("attachment-modal-title").textContent = `Documentos do ativo ${currentAttachmentAssetId}`;
-    //         openModal("attachment-modal");
-    //         setAttachmentLoading();
-    //         await loadAttachments(currentAttachmentAssetId);
-    //     }
-    // });
+    async function loadAttachments(assetId) {
+        const modal = document.getElementById("attachment-modal");
+        const modalBody = document.getElementById("attachment-modal-body");
+        const modalAssetId = document.getElementById("attachment-modal-asset-id");
 
-    // Removido em Fase 3 Round 2: Modal de anexos desativado — gestão centralizada em detalhe_ativo.html
-    // attachmentList.addEventListener("click", async (event) => { ... });
-    // attachmentFileInput.addEventListener("change", async (event) => { ... });
+        if (!modal || !modalBody) return;
 
-    // Removido em Fase 3 Round 2: attachment modal desativado
-    // resetAttachmentModalState();
+        modalAssetId.textContent = `Ativo: ${assetId}`;
+        modalBody.innerHTML = '<p>Carregando anexos...</p>';
+
+        try {
+            const url = "{{ url_for('listar_anexos', id_ativo='__ASSET_ID__') }}".replace("__ASSET_ID__", encodeURIComponent(assetId));
+            const { response, payload } = await requestJson(url, { method: "GET" });
+
+            if (!response.ok) {
+                modalBody.innerHTML = `<p>Não foi possível carregar os anexos.</p>`;
+                return;
+            }
+
+            const attachments = Array.isArray(payload?.anexos) ? payload.anexos : [];
+            if (attachments.length === 0) {
+                modalBody.innerHTML = '<p style="color: var(--text-2); font-style: italic;">Nenhum anexo encontrado para este ativo.</p>';
+                return;
+            }
+
+            // Renderizar lista de anexos com previews e downloads
+            const tiposDocumentoLabel = {
+                nota_fiscal: "Nota fiscal",
+                garantia: "Garantia",
+                outro: "Documento"
+            };
+
+            let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
+            attachments.forEach((att) => {
+                const downloadUrl = "{{ url_for('download_anexo', arquivo_id=0) }}".replace("/0", `/${att.id}`);
+                const tipoLabel = tiposDocumentoLabel[att.tipo_documento] || "Documento";
+                const tamanhoKb = (att.tamanho_bytes / 1024).toFixed(2);
+
+                html += `<div style="border: 1px solid var(--line-soft); border-radius: var(--radius-md); padding: 12px; background: rgba(255,255,255,0.02);">`;
+                html += `<div style="margin-bottom: 8px; font-weight: 600;">${escapeHtml(att.nome_original)}</div>`;
+                html += `<div style="font-size: 0.85rem; color: var(--text-2); margin-bottom: 8px;">`;
+                html += `${tipoLabel} • ${tamanhoKb} KB`;
+                if (att.criado_em) {
+                    html += ` • ${att.criado_em}`;
+                }
+                html += `</div>`;
+
+                // Preview para imagens
+                if (att.mime_type && att.mime_type.startsWith("image/")) {
+                    html += `<img src="${downloadUrl}" style="max-width: 100%; max-height: 300px; border-radius: 6px; margin-bottom: 8px;">`;
+                }
+                // Preview para PDF
+                else if (att.mime_type === "application/pdf") {
+                    html += `<iframe src="${downloadUrl}" style="width: 100%; height: 350px; border: none; border-radius: 6px; margin-bottom: 8px;"></iframe>`;
+                }
+
+                // Botão de download
+                html += `<a href="${downloadUrl}" class="btn btn-secondary btn-mini" download="${att.nome_original}">📥 Baixar</a>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+
+            modalBody.innerHTML = html;
+        } catch (error) {
+            console.error("Erro ao carregar anexos:", error);
+            modalBody.innerHTML = '<p>Falha ao carregar anexos. Tente novamente.</p>';
+        }
+    }
+
+    // Handler para botões de abrir modal de anexos
+    document.querySelectorAll(".open-attachment-modal-btn").forEach((btn) => {
+        btn.addEventListener("click", async (event) => {
+            event.preventDefault();
+            const assetId = btn.getAttribute("data-asset-id");
+            if (!assetId) return;
+
+            const modal = document.getElementById("attachment-modal");
+            if (modal) {
+                modal.hidden = false;
+                await loadAttachments(assetId);
+            }
+        });
+    });
+
+    // Também ativar dinamicamente os botões após renderAssets
+    assetTableBody.addEventListener("click", async (event) => {
+        const attachBtn = event.target.closest(".open-attachment-modal-btn");
+        if (!attachBtn) return;
+
+        const assetId = attachBtn.getAttribute("data-asset-id");
+        if (!assetId) return;
+
+        const modal = document.getElementById("attachment-modal");
+        if (modal) {
+            modal.hidden = false;
+            await loadAttachments(assetId);
+        }
+    });
 
     // ========== VISUALIZAÇÃO RESUMIDA DO ATIVO ==========
     // Nova funcionalidade: modal resumido com informações principais e campos específicos por tipo.

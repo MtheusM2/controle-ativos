@@ -635,25 +635,25 @@ def test_asset_create_template_keeps_core_specs_and_simplifies_monitor(authentic
     assert response.status_code == 200
     html = response.get_data(as_text=True)
 
-    # Blocos completos para tipos estratégicos.
-    assert 'id="specs-notebook"' in html
-    assert 'id="specs-desktop"' in html
+    # Blocos unificados para tipos estratégicos.
+    # Fase 4.3: Notebook e Desktop unificados em bloco "specs-computador" com campos condicionais
+    assert 'id="specs-computador"' in html
     assert 'id="specs-celular"' in html
-    # Fase 3 Round 3: IMEI removido do fluxo de celular
+    # Fase 4.3: IMEI restaurado para celular
+    assert 'id="imei_1"' in html
 
-    # Monitor simplificado no formulário.
+    # Monitor com especificações completas no formulário.
     assert 'id="specs-monitor"' in html
     assert 'id="polegadas"' in html
-    assert 'id="resolucao"' not in html
-    assert 'id="tipo_painel"' not in html
-    assert 'id="entrada_video"' not in html
-    assert 'id="fonte_ou_cabo"' not in html
+    # Fase 4.3: Monitor agora inclui resolucao e entrada_video
+    assert 'id="resolucao"' in html
+    assert 'id="entrada_video"' in html
 
 
 def test_asset_create_template_confirmation_reflects_type_specs(authenticated_client):
     """
     Regressão da confirmação: modal deve refletir especificações realmente usadas
-    por tipo e limpar campos descontinuados de monitor no payload.
+    por tipo. Fase 4.3: campos não mais pruned — backend controla via validators.
     """
     response = authenticated_client.get("/ativos/novo")
     assert response.status_code == 200
@@ -662,8 +662,7 @@ def test_asset_create_template_confirmation_reflects_type_specs(authenticated_cl
     assert "function collectTypeSpecificSpecificationRows(data)" in html
     assert '"Especificações por tipo": typeSpecificationRows' in html
     assert "function pruneDeprecatedSpecsByType(body)" in html
-    assert "if (normalizedType === \"monitor\")" in html
-    assert "delete body[fieldName];" in html
+    # Fase 4.3: Função simplificada, validators do backend controlam campos permitidos
 
 
 def test_asset_edit_page_authenticated(authenticated_client):

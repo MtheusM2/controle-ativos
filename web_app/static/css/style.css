@@ -2581,11 +2581,20 @@ body.app-body {
     font-size: 0.78rem;
 }
 
+/* Wrapper com scroll interno para o painel de revisão da importação */
+.review-table-wrapper {
+    max-height: 420px;
+    overflow-y: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line-soft);
+}
+
 .table-review thead {
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--bg-1);
     position: sticky;
     top: 0;
     z-index: 10;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .table-review th {
